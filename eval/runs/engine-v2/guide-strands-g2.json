@@ -1,0 +1,161 @@
+{
+  "item": "guide-strands",
+  "run": "g2",
+  "method": "Judged per eval/JUDGE.md + ARTIFACT_RUBRIC.md. Claims checked against official strandsagents.com pages (agent-loop, hooks, lifecycle-controls, interventions, approve-before-acting, structured-output(-behavior), retry-strategies, session-management, state, quickstart, model-providers, harness pages, Python API ref, changelog), the installed strands-agents 1.64.0 source, the harness-sdk README (gh) and the cited third-party pages. T1: every ```python block run in reading order in one namespace (scratch venv /tmp, strands-agents 1.64.0 + cedar/openai/anthropic/ollama extras + strands-harness) with a scripted fake model patched into BedrockModel/OpenAIModel/AnthropicModel/OllamaModel.stream, stdin fed 'y' for HITL prompts, AWS credentials removed.",
+  "X": {
+    "scores": {
+      "A": {"score": 8.5, "reason": "TL;DR, problem first (L16-36), loop architecture at L38 before install at L331, ends with when-to-choose (L962-980). Clean heading levels, real tables, fenced code. ASCII loop diagram (L46-57) instead of an image."},
+      "B": {"score": 8.0, "reason": "Natural 입니다 register overall. Odd framing '개발 버전 저장소(harness-sdk)' (L30, L34) for the main repo; '반면 Python Agent가 기본으로 쓰는 전략은' (L817) uses 반면 with no contrast; some 'X할 수 있습니다' padding."},
+      "C": {"score": 8.5, "reason": "One running example (ticket triage) threads through; forward/back references ('운영 부분에서', 'Deny 단락 규칙에 따라' L536) are accurate."},
+      "D": {"score": 8.5, "reason": "Good help where it is hard: the 3-cycle history table (L69-75), the soft-limit 9,500 -> 12,000 walk-through (L640), the guide/deny evaluation trace (L315-323), the structured-output attempts table (L201-206)."},
+      "E": {"score": 8.0, "reason": "Tables and code fit the content; diagram only ASCII; no failure-mode table, though the closing section covers failure modes in prose."},
+      "F": {"score": 8.5, "reason": "0 wrong of 30 sampled claims (1 unverifiable: the Medium post returned 403). Deductions are for code the SDK rejects: an InterventionHandler subclass without the required abstract `name` (L301-310), and an integrated example whose Cedar policy default-denies the TicketTriage structured-output tool, which the text never warns about (L907-943)."},
+      "T1": {"score": 7.0, "reason": "26 python blocks: 22 run, 3 fail in reading order, and the final integrated example runs but yields nothing. L296: TypeError, can't instantiate TicketTriagePolicy (abstract 'name'). L726: EventLoopException 'user_id' (idempotency call on the Cedar agent with no invocation_state). L849: handle_request() missing required user_id. L910: Cedar denies TicketTriage/current_customer, so stop_reason=limit_turns and structured_output=None. L597: SDK warns the classifier has no effect with allowed_tools ['*', ...]. Otherwise many sample outputs are shown and they match the runs (L151-156, L380)."},
+      "T2": {"score": 8.5, "reason": "Covers loop, structured output, hooks vs interventions, HITL+Cedar, limits/cancel/stop reasons/concurrency, retry, sessions, evaluation; ordering follows learning flow. Lighter on the tool layer and quickstart credentials."},
+      "T3": {"score": 8.5, "reason": "Explains why the SO-as-tool design (L110), why interventions beat last-write-wins hooks (L269), why the limits are soft (L640), and the per-request agent pattern for scaling (L731). Closes with a writer's choice and eval layer (L962-980). 4 non-official sources (Medium, 2 AWS ML blogs, DEV332)."}
+    },
+    "principles": {
+      "claim_headings": "met (e.g. L613, L800)",
+      "running_example": "met (ticket triage agent L36 -> L936)",
+      "mechanism_design_code_example": "met (structured output L108-214, limits L617-642)",
+      "facts_said_once": "partly met (Cedar+HITL agent constructor repeated in 5 blocks)",
+      "numbers_with_scope_unit": "met (L806-817, L640)",
+      "nothing_invented": "partly met (handler lacks required name; integrated Cedar example silently denies the SO tool)",
+      "own_assessment_at_end": "met (L980 '이 글의 판단으로는')",
+      "length_fitted": "met",
+      "guide_shape_tldr_architecture_first": "met (TL;DR L10, loop L38, install L331, when-to-choose L962)",
+      "korean_style": "partly met (L30 '개발 버전 저장소', L817 '반면')"
+    },
+    "claims": {
+      "checked": 30, "supported": 29, "unsupported": 0, "wrong": 0, "unverifiable": 1, "error_rate": 0.0,
+      "numbers_checked": 12,
+      "examples": [
+        {"line": 224, "claim": "HookOrder SDK_FIRST -100, DEFAULT 0, SDK_LAST 100, MODEL_ROUTING 50", "verdict": "supported", "source": "hooks page; strands/hooks/registry.py MODEL_ROUTING: int = 50"},
+        {"line": 806, "claim": "5 retries / 6 attempts, 4s doubling (4,8,16,32,64)", "verdict": "supported", "source": "retry-strategies; _retry.py initial_delay*2**attempt"},
+        {"line": 817, "claim": "Python default max_delay 240s; params table says 128s; TS baseMs 4000/maxMs 240000", "verdict": "supported", "source": "API ref 'max_delay=240s'; retry-strategies table max_delay float 128; TS ExponentialBackoff"},
+        {"line": 638, "claim": "since v1.57.0 unknown limit keys rejected with TypeError", "verdict": "supported", "source": "changelog v1.57.0 'reject unrecognized limits keys instead of silently applying no cap'; API ref TypeError"},
+        {"line": 642, "claim": "limit priority turns > total > output > structured output attempts", "verdict": "supported", "source": "lifecycle-controls"},
+        {"line": 642, "claim": "Bedrock/Anthropic/OpenAI/Gemini count cache reads+writes in total", "verdict": "supported", "source": "agent-loop"},
+        {"line": 100, "claim": "prompt caching marked for Bedrock, Anthropic, LiteLLM, llama.cpp, Vercel", "verdict": "supported", "source": "model-providers"},
+        {"line": 165, "claim": "due_date 2025-07-22 -> 'must be after 2026-10-12' -> 2026-10-13", "verdict": "supported", "source": "structured-output-behavior"},
+        {"line": 455, "claim": "model prefix aliases bedrock, bedrock-mantle, anthropic, openai, google, ollama, litellm", "verdict": "supported", "source": "harness/configure/model"},
+        {"line": 584, "claim": "aux_model example ids opus-5-20260301 / haiku-4-5-20251001", "verdict": "supported", "source": "model-providers"},
+        {"line": 269, "claim": "deny > confirm > guide > transform > proceed", "verdict": "supported", "source": "interventions"},
+        {"line": 329, "claim": "no retry cap on after_model_call Guide retries", "verdict": "supported", "source": "interventions"},
+        {"line": 594, "claim": "'*' with '!tool' excludes that tool from '*'", "verdict": "supported", "source": "hitl.py allowed_tools docstring"},
+        {"line": 30, "claim": "runs in your process with no hosted control plane", "verdict": "supported", "source": "harness-sdk README"},
+        {"line": 960, "claim": "DEV332: S3SessionManager with bucket, prefix, region for production", "verdict": "supported", "source": "dev.to DEV332"},
+        {"line": 976, "claim": "eval blog: three build-time layers tool usage/reasoning/output quality; dealer stock search", "verdict": "supported", "source": "AWS ML blog"},
+        {"line": 32, "claim": "Medium: Strands follows a model-first approach", "verdict": "unverifiable", "source": "Medium 403"}
+      ]
+    },
+    "checklist": {
+      "repeated": 2, "avoided": 2, "na": 1,
+      "repeated_ids": ["shared-agent-throw-scope", "result-fields-incomplete"],
+      "detail": {
+        "loop-diagram-remote": "avoided: no remote image; ASCII diagram L46-57",
+        "shared-agent-throw-scope": "repeated: L721 states ConcurrencyException generically, without tying it to invoke_async or saying that sync calls in async handlers block",
+        "shared-agent-history-leak": "avoided: L96 says that sharing one instance mixes customers' history; per-request agents L731",
+        "result-fields-incomplete": "repeated (partial): stop_reason shown (L193, L632), no metrics.get_summary()",
+        "multi-agent-subject": "n/a"
+      }
+    },
+    "extras": {
+      "architecture_first_line": 38,
+      "install_line": 335,
+      "sources_total": 21, "non_official_sources": 4,
+      "non_official_share": 0.19,
+      "opens_with_problem": true,
+      "closes_with_when_to_choose_and_failure_modes": "yes (L962-980; failure modes in prose L970-972)"
+    },
+    "t1_run": {"python_blocks": 26, "ran_ok": 22, "failed": 3, "silently_wrong": 1,
+      "failures": ["L296 TypeError abstract 'name'", "L726 EventLoopException 'user_id'", "L849 TypeError handle_request() missing user_id", "L910 Cedar denies TicketTriage -> structured_output None, stop_reason limit_turns"]},
+    "top_issues": [
+      "L301-310: TicketTriagePolicy(InterventionHandler) omits the required abstract `name`, so `Agent(interventions=[TicketTriagePolicy()])` raises TypeError.",
+      "L907-943: the integrated session example puts Cedar first. Cedar's default deny blocks the TicketTriage structured-output tool, and the current_customer permit appears only in a comment (L922). The call ends with limit_turns and structured_output=None, and the text never warns about this.",
+      "L852: handle_request(...) is called without its required user_id (TypeError). L726: the idempotency snippet runs on the Cedar agent with no invocation_state (KeyError 'user_id'). L602: allowed_tools ['*', ...] with classifier=True makes the SDK warn that the classifier has no effect."
+    ]
+  },
+  "Y": {
+    "scores": {
+      "A": {"score": 8.0, "reason": "TL;DR, problem-first section (L16), loop internals at L53 well before install (L612), closes with choice and a failure-mode table (L1019-1065). Deductions: the section 'L49 루프의 경계마다 놓인 제어 지점' is a single sentence (L51); an API signature sits in a ```python fence (L100-109); stray leading space at L244."},
+      "B": {"score": 8.0, "reason": "Natural, precise Korean. Some paragraphs are very dense (L145-147, L1007), and '주목하세요' (L59) breaks the register slightly."},
+      "C": {"score": 8.5, "reason": "Strong back-references ('앞서 본 정지 이벤트 튜플의 일곱 번째 항목' L850, failure paths from L35 reused at L854) and accurate cross-links."},
+      "D": {"score": 8.0, "reason": "Worked examples at the hard points (3,000 tokens x 10 at L26, the 18,500 -> 22,500 soft-limit walk at L714, the 2s+4s=6s retry at L900, the guide-convergence example at L382). Some API catalogue passages (L143-147, L512) are reference dumps rather than explanation."},
+      "E": {"score": 8.5, "reason": "Well-chosen tables (stop reasons L82-92, 7-tuple L129-137, event properties L524-531, cancel checkpoints L726-731, failure modes L1055-1061) and a message-history trace (L65-74)."},
+      "F": {"score": 9.0, "reason": "0 wrong of 32 sampled claims, all checked against docs and installed source. 1 unverifiable: the DynamoDB storage details at L1007; the lesson page renders client-side. ModelRetryStrategy table (L877-879) gives int/240, which matches the code and API reference but not the cited retry page's table (float/128); the discrepancy is not flagged."},
+      "T1": {"score": 8.5, "reason": "26 python blocks: 25 run in reading order, including the harness block with strands-harness installed. The 1 failure is L101, an API signature in a python fence that was never meant to run. Defined functions also work when called: triage v1/v2, handle_ticket, build_ticket_agent, the PiiRedactor transform (redacts the SSN to [REDACTED]) and the Confirm auto-approve. Deductions: few expected outputs are shown, and the main functions are defined but never invoked in the post."},
+      "T2": {"score": 9.0, "reason": "Covers loop/event_loop_cycle, tool layer, structured output, interventions (on_error, Confirm), HITL+Cedar, hooks, quickstart and credentials, providers, lifecycle (limits, cancel checkpoints, concurrency, idempotency, checkpoint), retry, observability/evals, state and sessions, harness; sensible order."},
+      "T3": {"score": 9.0, "reason": "Explains internals: the recursive event_loop_cycle (L123), the 7-tuple stop event (L127), toolUseId pairing and why destructiveHint is untrusted (L145), the before/after semantics of each action (L331), on_error fail-open vs fail-closed (L413), the session lock/race and symlink risks (L1013-1017), and harness vs Agent (L1045). Non-official sources: only 2 (BIG DATA guy, Builder Center)."}
+    },
+    "principles": {
+      "claim_headings": "met (e.g. L16, L852)",
+      "running_example": "met (ticket triage agent throughout)",
+      "mechanism_design_code_example": "met (interventions L301-436, lifecycle L706-850)",
+      "facts_said_once": "partly met (TicketTriage class repeated at L177 and L270; failure-path rules restated L12/L45/L846)",
+      "numbers_with_scope_unit": "met (L714, L858-879)",
+      "nothing_invented": "met (all sampled claims supported)",
+      "own_assessment_at_end": "met (L1065 '이 글의 판단으로는')",
+      "length_fitted": "partly met (long; reference-style catalogues at L143-147, L512)",
+      "guide_shape_tldr_architecture_first": "met (TL;DR L10, loop internals L53, install L612, choice + failure modes L1019)",
+      "korean_style": "met (minor '주목하세요' L59)"
+    },
+    "claims": {
+      "checked": 32, "supported": 31, "unsupported": 0, "wrong": 0, "unverifiable": 1, "error_rate": 0.0,
+      "numbers_checked": 12,
+      "examples": [
+        {"line": 89, "claim": "max_tokens is unrecoverable within the loop", "verdict": "supported", "source": "agent-loop"},
+        {"line": 101, "claim": "event_loop_cycle signature; limits deprecated in favour of invocation_context", "verdict": "supported", "source": "strands/event_loop/event_loop.py docstring"},
+        {"line": 111, "claim": "seven cycle steps", "verdict": "supported", "source": "event_loop.py docstring"},
+        {"line": 145, "claim": "ToolSpec outputSchema / annotations (readOnlyHint, destructiveHint) untrusted", "verdict": "supported", "source": "strands/types/tools.py"},
+        {"line": 512, "claim": "add_callback ValueError in three cases", "verdict": "supported", "source": "hooks/registry.py"},
+        {"line": 518, "claim": "SDK_FIRST -100 / DEFAULT 0 / SDK_LAST 100 on hooks page; MODEL_ROUTING 50 in add_hook API doc", "verdict": "supported", "source": "hooks page; agent.py docstring"},
+        {"line": 331, "claim": "after-event Deny has no effect and warns", "verdict": "supported", "source": "interventions table"},
+        {"line": 386, "claim": "Confirm evaluate default accepts True/'y'/'yes' case-insensitive", "verdict": "supported", "source": "interventions/actions.py"},
+        {"line": 409, "claim": "on_error throw (default)/proceed/deny", "verdict": "supported", "source": "interventions/handler.py"},
+        {"line": 462, "claim": "System One models Jev, Strands Decider", "verdict": "supported", "source": "approve-before-acting"},
+        {"line": 626, "claim": "default Bedrock, Claude Sonnet 4.6 in us-west-2; Python 3.10+", "verdict": "supported", "source": "Python quickstart"},
+        {"line": 646, "claim": "AnthropicModel(model_id='claude-sonnet-5', max_tokens=4096)", "verdict": "supported", "source": "Python quickstart"},
+        {"line": 726, "claim": "four cancel checkpoints incl. during MCP tool execution", "verdict": "supported", "source": "API ref Agent.cancel"},
+        {"line": 858, "claim": "6 attempts, 4/8/16/32/64 s", "verdict": "supported", "source": "retry-strategies"},
+        {"line": 879, "claim": "max_delay default 240 (int)", "verdict": "supported", "source": "API ref/code (cited retry page table says float 128; not flagged)"},
+        {"line": 953, "claim": "Builder Center: in 1.47.0 latencyMs reads 0 for some providers", "verdict": "supported", "source": "builder.aws.com post"},
+        {"line": 1013, "claim": "no distributed lock; default agent_id 'default'; non-atomic session creation", "verdict": "supported", "source": "session-management"},
+        {"line": 1017, "claim": "SDK follows symlinks such as message_0.json", "verdict": "supported", "source": "session-management"},
+        {"line": 1027, "claim": "harness default Claude Opus 5; sessions under ./.agent/sessions; pip install strands-harness", "verdict": "supported", "source": "harness quickstart"},
+        {"line": 1007, "claim": "strands-dynamodb-storage pk/sk keys, native TTL", "verdict": "unverifiable", "source": "Lesson 9 page section renders client-side"}
+      ]
+    },
+    "checklist": {
+      "repeated": 2, "avoided": 2, "na": 1,
+      "repeated_ids": ["shared-agent-throw-scope", "result-fields-incomplete"],
+      "detail": {
+        "loop-diagram-remote": "avoided: no remote image; text history trace L65-74",
+        "shared-agent-throw-scope": "repeated: L755 describes overlap rejection generically, with no invoke_async vs sync-in-async-handler distinction",
+        "shared-agent-history-leak": "avoided (partial): per-request agent 'keeps concurrent calls from sharing history' (L777, L825); session agent_id merge risk L1013",
+        "result-fields-incomplete": "repeated (partial): result.stop_reason used; AgentResult metrics mentioned (L680, L953) but no metrics.get_summary() example",
+        "multi-agent-subject": "n/a"
+      }
+    },
+    "extras": {
+      "architecture_first_line": 53,
+      "install_line": 621,
+      "sources_total": 22, "non_official_sources": 2,
+      "non_official_share": 0.09,
+      "opens_with_problem": true,
+      "closes_with_when_to_choose_and_failure_modes": "yes (L1019-1065 with a failure-mode table)"
+    },
+    "t1_run": {"python_blocks": 26, "ran_ok": 25, "failed": 1, "silently_wrong": 0,
+      "failures": ["L101 SyntaxError: bare function signature in a python fence (reference, not runnable)"]},
+    "top_issues": [
+      "L49-51: the section '루프의 경계마다 놓인 제어 지점' is a single sentence, an orphan section.",
+      "L100-109: an API signature in a ```python fence (it does not run). L875-879: the retry table gives max_delay int 240 although the cited retry page's table says float 128, and the conflict is not flagged.",
+      "Only 2 of 22 sources are non-official (L1090-1091). The key functions (triage L189/L282, handle_ticket L823, build_session_agent L993) are defined but never called and no outputs are shown; metrics.get_summary() is not shown."
+    ]
+  },
+  "preference": {
+    "overall": "Y",
+    "per_criterion": {"A": "X", "B": "tie", "C": "tie", "D": "X", "E": "Y", "F": "Y", "T1": "Y", "T2": "Y", "T3": "Y"},
+    "reason": "Both are factually clean: 0 wrong claims in 30 and 32 samples. Y's code all runs, its integrated pieces compose correctly (Cedar, auth, redaction, HITL), and it goes deeper into internals (event_loop_cycle, tool layer, the semantics of each intervention action, session races) and adds a failure-mode table. X reads a little better, with more worked numbers, shown outputs and non-official design sources. But it has 3 failing blocks, and its final integrated example silently returns no structured output because Cedar's default deny blocks the schema tool."
+  }
+}

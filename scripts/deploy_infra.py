@@ -6,6 +6,7 @@ the CloudFormation template; secrets are written to SSM separately by
 """
 
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,12 @@ from aws_cdk import (
 )
 from aws_cdk import (
     aws_batch as batch,
+)
+from aws_cdk import (
+    aws_bedrock as bedrock,
+)
+from aws_cdk import (
+    aws_bedrockagentcore as agentcore,
 )
 from aws_cdk import (
     aws_cloudwatch as cloudwatch,
@@ -61,23 +68,28 @@ from aws_cdk.aws_ecr_assets import DockerImageAsset, Platform
 from constructs import Construct
 
 sys.path.append(str(Path(__file__).parent.parent))
+from dotenv import load_dotenv
+
+from scholar_lens.adapters.aws.metrics import COST_METRIC_NAME, METRICS_NAMESPACE
+from scholar_lens.adapters.aws.storage import get_account_id
 from scholar_lens.cli import APP_REPORTED_EXIT_CODES
 from scholar_lens.configs import Config
 from scholar_lens.configs.config import CONFIG_PATH
-from scholar_lens.src.aws_helpers import get_account_id
-from scholar_lens.src.constants import (
+from scholar_lens.domain.constants import (
     RUN_SECRETS,
     EmbeddingModelId,
     EnvVars,
     LanguageModelId,
     SSMParams,
 )
-from scholar_lens.src.jobs import ssm_base
-from scholar_lens.src.logger import logger
-from scholar_lens.src.metrics import COST_METRIC_NAME, METRICS_NAMESPACE
+from scholar_lens.domain.cost_allocation import ARTIFACT_KINDS, application_profile_name
+from scholar_lens.domain.jobs import CANCEL_REASON, ssm_base
+from scholar_lens.entrypoints.logs import get_default_logger
+
+logger = get_default_logger()
 
 # The single job definition runs every artifact kind; the CLI serialises a
-# JobRequest into the ``request`` parameter (scholar_lens/src/jobs.py).
+# JobRequest into the ``request`` parameter (scholar_lens/adapters/aws/batch.py).
 JOB_COMMAND = ["python3", "-m", "scholar_lens", "worker", "--request", "Ref::request"]
 
 # Bedrock model vendors the app can invoke ("anthropic", "amazon", "cohere"),
@@ -85,6 +97,15 @@ JOB_COMMAND = ["python3", "-m", "scholar_lens", "worker", "--request", "Ref::req
 BEDROCK_VENDORS = sorted(
     {m.value.split(".")[0] for m in (*LanguageModelId, *EmbeddingModelId)}
 )
+
+
+def interpreter_name(project_name: str, stage: str) -> str:
+    """The code interpreter's name: a letter first, then letters, digits and
+    underscores, at most 48 characters."""
+    name = re.sub(r"[^A-Za-z0-9_]", "_", f"{project_name}_{stage}_guide_code")
+    if not name[0].isalpha():
+        name = f"sl_{name}"
+    return name[:48]
 
 
 class PaperReviewStack(Stack):
@@ -101,7 +122,6 @@ class PaperReviewStack(Stack):
         s3_bucket_name: str | None = None,
         s3_prefix: str = "",
         bedrock_region_name: str | None = None,
-        public_assets: bool = False,
         environment_vars: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> None:
@@ -112,7 +132,6 @@ class PaperReviewStack(Stack):
         self.s3_bucket_name = s3_bucket_name
         self.s3_prefix = s3_prefix
         self.bedrock_region_name = bedrock_region_name
-        self.public_assets = public_assets
         # Keep encryption keys and logs when a prod stack is deleted.
         self.removal_policy = (
             RemovalPolicy.RETAIN if stage == "prod" else RemovalPolicy.DESTROY
@@ -123,6 +142,7 @@ class PaperReviewStack(Stack):
         self.security_group = self._create_security_group()
 
         self.topic = self._create_sns_topic(email_address)
+        self.code_interpreter = self._create_code_interpreter()
         self.instance_role = self._create_instance_role()
         self.job_role = self._create_job_role()
         self.execution_role = self._create_execution_role()
@@ -228,6 +248,11 @@ class PaperReviewStack(Stack):
             bedrock_resources.append(
                 f"arn:{self.partition}:bedrock:{region}:{self.account}:inference-profile/*"
             )
+            # The per-kind profiles of BedrockProfilesStack (cost allocation).
+            bedrock_resources.append(
+                f"arn:{self.partition}:bedrock:{region}:{self.account}"
+                ":application-inference-profile/*"
+            )
         return [
             iam.PolicyStatement(
                 sid="BedrockInvoke",
@@ -261,12 +286,11 @@ class PaperReviewStack(Stack):
         )
         # Posts, figures, the translation guideline and the result
         # manifest (<prefix>/results/<job id>.json) all live under the prefix.
-        object_actions = ["s3:GetObject", "s3:PutObject"]
-        if self.public_assets:
-            object_actions.append("s3:PutObjectAcl")
         return [
             iam.PolicyStatement(
-                sid="S3ObjectAccess", actions=object_actions, resources=[object_arn]
+                sid="S3ObjectAccess",
+                actions=["s3:GetObject", "s3:PutObject"],
+                resources=[object_arn],
             ),
             # ListBucket lets a missing object (the optional translation
             # guideline) read as 404, not 403. A GetObject carries no
@@ -276,6 +300,21 @@ class PaperReviewStack(Stack):
                 sid="S3ListBucket", actions=["s3:ListBucket"], resources=[bucket_arn]
             ),
         ]
+
+    def _create_code_interpreter(self) -> agentcore.CfnCodeInterpreterCustom:
+        """The sandbox a guide's examples run in (tech_guide.run_examples):
+        public network so the docs' packages install from PyPI, and no
+        execution role, so the code gets no AWS credentials. Idle, it costs
+        nothing."""
+        return agentcore.CfnCodeInterpreterCustom(
+            self,
+            "GuideCodeInterpreter",
+            name=interpreter_name(self.project_name, self.stage),
+            description="Runs Scholar Lens guide examples as a reader pastes them",
+            network_configuration=agentcore.CfnCodeInterpreterCustom.CodeInterpreterNetworkConfigurationProperty(
+                network_mode="PUBLIC"
+            ),
+        )
 
     def _create_job_policy_statements(self) -> list[iam.PolicyStatement]:
         """Least-privilege statements for the application running in-container."""
@@ -300,6 +339,15 @@ class PaperReviewStack(Stack):
                 conditions={
                     "StringEquals": {"cloudwatch:namespace": METRICS_NAMESPACE}
                 },
+            ),
+            iam.PolicyStatement(
+                sid="GuideCodeSessions",
+                actions=[
+                    "bedrock-agentcore:StartCodeInterpreterSession",
+                    "bedrock-agentcore:InvokeCodeInterpreter",
+                    "bedrock-agentcore:StopCodeInterpreterSession",
+                ],
+                resources=[self.code_interpreter.attr_code_interpreter_arn],
             ),
             iam.PolicyStatement(
                 sid="SsmReadSecrets",
@@ -418,12 +466,15 @@ class PaperReviewStack(Stack):
             image=ecs.ContainerImage.from_docker_image_asset(image_asset),
             job_role=self.job_role,
             execution_role=self.execution_role,
-            # PDF parsing and FAISS code embeddings are memory-hungry.
+            # PDF parsing and the in-memory code index are memory-hungry.
             cpu=2,
             memory=core.Size.mebibytes(8192),
             command=JOB_COMMAND,
             environment={
                 EnvVars.TOPIC_ARN.value: self.topic.topic_arn,
+                EnvVars.CODE_INTERPRETER_ID.value: (
+                    self.code_interpreter.attr_code_interpreter_id
+                ),
                 EnvVars.LOG_LEVEL.value: "INFO",
                 **env_vars,
             },
@@ -564,6 +615,13 @@ class PaperReviewStack(Stack):
                 detail={
                     "status": ["FAILED"],
                     "jobQueue": [self.job_queue.job_queue_arn],
+                    # A job the user stopped (scholar-lens cancel) is no alarm;
+                    # a FAILED event without a reason still is (the values of
+                    # a field's list are alternatives).
+                    "statusReason": [
+                        {"anything-but": {"prefix": CANCEL_REASON}},
+                        {"exists": False},
+                    ],
                     "$or": [
                         {
                             "container": {
@@ -640,6 +698,68 @@ class PaperReviewStack(Stack):
         cost_alarm.add_alarm_action(sns_action)
 
 
+class BedrockProfilesStack(Stack):
+    """One application inference profile per artifact kind and model, in
+    the Bedrock region, tagged like the main stack plus ``Kind``: Cost
+    Explorer then splits Bedrock spend by kind (the app finds a profile by
+    :func:`application_profile_name`; without one it calls the system
+    profile, untagged)."""
+
+    def __init__(
+        self,
+        scope: Construct,
+        construct_id: str,
+        *,
+        project_name: str,
+        stage: str,
+        system_profile_ids: list[str],
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(scope, construct_id, **kwargs)
+        for key, value in {
+            "ProjectName": project_name,
+            "Stage": stage,
+            "CostCenter": project_name,
+            "ManagedBy": "CDK",
+        }.items():
+            Tags.of(self).add(key, value)
+        for kind in ARTIFACT_KINDS:
+            for system_id in system_profile_ids:
+                name = application_profile_name(project_name, stage, kind, system_id)
+                profile = bedrock.CfnApplicationInferenceProfile(
+                    self,
+                    name,
+                    inference_profile_name=name,
+                    description=f"{project_name} {stage}: {kind} calls to {system_id}",
+                    model_source=bedrock.CfnApplicationInferenceProfile.InferenceProfileModelSourceProperty(
+                        copy_from=(
+                            f"arn:{self.partition}:bedrock:{self.region}:{self.account}"
+                            f":inference-profile/{system_id}"
+                        )
+                    ),
+                )
+                Tags.of(profile).add("Kind", kind)
+
+
+def configured_system_profiles(config: Config) -> list[str]:
+    """The global cross-region profile of every language model the config
+    names (the app resolves a model to its global profile first)."""
+    found: set[str] = set()
+
+    def walk(value: Any) -> None:
+        if isinstance(value, LanguageModelId):
+            found.add(f"global.{value.value}")
+        elif isinstance(value, dict):
+            for item in value.values():
+                walk(item)
+        elif hasattr(value, "__dict__") and hasattr(type(value), "model_fields"):
+            for name in type(value).model_fields:
+                walk(getattr(value, name))
+
+    walk(config)
+    return sorted(found)
+
+
 def deploy_session(config: Config) -> boto3.Session:
     """Session for the target account: the configured profile, else
     ``AWS_PROFILE_NAME``, else the default credential chain."""
@@ -664,7 +784,10 @@ def check_deployable(config_path: Path, config: Config) -> None:
 
 def main() -> None:
     try:
-        config = Config.load()
+        # The file the image bakes, never an evaluation run's override
+        # (SCHOLAR_LENS_CONFIG): the stack's IAM scope must match the jobs'.
+        load_dotenv()
+        config = Config.from_yaml(CONFIG_PATH) if CONFIG_PATH.exists() else Config()
         check_deployable(CONFIG_PATH, config)
         resources = config.resources
         logger.info(
@@ -674,8 +797,11 @@ def main() -> None:
         )
         account_id = get_account_id(deploy_session(config))
         env_vars = {
-            EnvVars.LANGCHAIN_TRACING_V2.value: os.getenv(
-                EnvVars.LANGCHAIN_TRACING_V2.value, "false"
+            # Tracing sends prompts (paper and blog text) to LangSmith: Batch
+            # traces only when the deployer opts in for the stack explicitly,
+            # never because tracing is on in the deploying shell.
+            EnvVars.LANGCHAIN_TRACING_V2.value: (
+                "true" if os.getenv("SCHOLAR_LENS_BATCH_TRACING") == "true" else "false"
             ),
             EnvVars.LANGCHAIN_ENDPOINT.value: os.getenv(
                 EnvVars.LANGCHAIN_ENDPOINT.value, ""
@@ -696,12 +822,22 @@ def main() -> None:
             s3_bucket_name=resources.s3_bucket_name,
             s3_prefix=resources.s3_prefix,
             bedrock_region_name=resources.bedrock_region_name,
-            public_assets=resources.github.public_assets,
             environment_vars=env_vars,
             env=core.Environment(
                 account=account_id, region=resources.default_region_name
             ),
         )
+        if resources.bedrock_region_name:
+            BedrockProfilesStack(
+                app,
+                f"ScholarLensBedrockProfiles{resources.stage.capitalize()}Stack",
+                project_name=resources.project_name,
+                stage=resources.stage,
+                system_profile_ids=configured_system_profiles(config),
+                env=core.Environment(
+                    account=account_id, region=resources.bedrock_region_name
+                ),
+            )
         app.synth()
     except Exception as e:
         logger.error("Error occurred: %s", e, exc_info=True)

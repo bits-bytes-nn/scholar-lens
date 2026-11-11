@@ -1,0 +1,135 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-security.json",
+  "title": "LLM Agent Security: Injection, Jailbreaks, Poisoning, MCP and Defenses",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-security-of-llm-based-ai-agents-prompt-injection-jailbreak-rag-poisoning-tool/2026-11-03-securing-llm-agents-from-prompt-injection-to-mcp-and-defenses.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-03-securing-llm-agents-from-prompt-injection-to-mcp-and-defenses.md",
+  "pr_url": null,
+  "warnings": [
+    "Evidence that misstates its quote was left out: E83 (Quote row is 'Real delim.' (real delimiters), but claim/cell describe similar/near delimiters ('유사 구분자', '근접 구분자').)",
+    "Section '목표 탈취에서 원격 제어와 적응형 공격으로 커진 프롬프트 인젝션' still has: figures given to this section are missing: ['https://arxiv.org/html/2302.12173v2/remote_control.drawio.png', 'https://arxiv.org/html/2302.12173v2/spread.drawio.png', 'https://arxiv.org/html/2302.12173v2/taxonomy.png', 'https://arxiv.org/html/2306.05499v3/prompt-injection-overview.png', 'https://arxiv.org/html/2503.00061v2/tex/figures/asr_defense_adaptive_attack_bar_spaced.png', 'https://arxiv.org/html/2503.00061v2/tex/figures/system.png']",
+    "Section '안전 학습의 두 실패 모드와 자동화된 탈옥' still has: a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence) | figures given to this section are missing: ['https://arxiv.org/html/2307.15043v2/transfer_results.svg', 'https://arxiv.org/html/2310.08419v4/figures/token_vs_prompt.png', 'https://arxiv.org/html/2310.08419v4/model_vulnerability_by_category.png', 'https://arxiv.org/html/2310.08419v4/pair_example.png']",
+    "Section '지시 대신 지식과 트리거를 심는 RAG·메모리·백도어 오염' still has: ['2.7'] already stated in '목표 탈취에서 원격 제어와 적응형 공격으로 커진 프롬프트 인젝션': refer back without repeating: NQ, HotpotQA, MS-MARCO에서 PoisonedRAG와 InstruInject 공격을 대상으로 평가한 결과, 탐지 정확도(DACC)는 97.4%를 넘었고 오탐률(FPR)은 2.7% 미만, 미탐률(FNR)은 3.2% 미만이었습니다 .",
+    "Section '정성 시연에서 상태 기반 측정으로 옮겨 간 에이전트 보안 벤치마크' still has: ['80'] already stated in '지시 대신 지식과 트리거를 심는 RAG·메모리·백도어 오염': refer back without repeating: 같은 방식의 Llama2-70B는 두 설정 모두 80%를 넘었습니다 . | ['3.5', '100'] already stated in '안전 학습의 두 실패 모드와 자동화된 탈옥': refer back without repeating: 파인튜닝된 GPT-3.5와 GPT-4는 전송 단계에서 100%였습니다 . | ['3.5'] already stated in '안전 학습의 두 실패 모드와 자동화된 탈옥': refer back without repeating: 단순한 범용 탈옥 템플릿 하나로 Claude 3.5 Sonnet의 피해 점수가 13.5%에서 68.7%로 올랐고, 거부율은 85.2%에서 16.7%로 떨어졌습니다 . | ['3.5'] already stated in '안전 학습의 두 실패 모드와 자동화된 탈옥': refer back without repeating: 템플릿 공격을 받은 Claude 3.5 Sonnet은 요청의 16%만 거부했고, 비거부 피해 점수는 81.9%였습니다 . | ['3.5'] already stated in '안전 학습의 두 실패 모드와 자동화된 탈옥': refer back without repeating: 오류 분석에서 GPT-3.5 Turbo는 파라미터를 환각하고, 의존 관계가 있는 도구를 병렬로 호출해 점수가 낮았습니다 .",
+    "Section '모델 훈련에서 시스템 설계로 옮겨 간 인젝션 방어': 3 unsupported sentence(s) removed: 아래쪽 StruQ 경로에서는 둘이 분리된 채로 들어갑니다 [[E85]]. (unsupported: E85 only describes existing apps sending prompt and data together; it says nothing about a lower StruQ path that keeps them separate.) | 앞서 탈옥 실험에서 본 Anthropic의 Sonnet 모델을 쓴 비교에서 CaMeL은 유용성 손실을 적당한 수준으로 막으면서 보안에서는 다른 모든 방어를 크게 앞섭니다 [[E241]]. (unsupported: E241 does not say the comparison used Anthropic's Sonnet model; that model appears only in E239's metadata.) | 간격의 크기를 산술로만 가늠해 보면, 앞서 본 두 평균 로그 확률의 차이는 160이고, 이는 확률이 $$e^{-160}$$배로 작아진 셈입니다. (numbers not in its evidence)",
+    "Section '도구 설명과 에이전트 간 메시지로 번지는 공급망형 공격' still has: ['3.5'] already stated in '안전 학습의 두 실패 모드와 자동화된 탈옥': refer back without repeating: 자기복제 감염과 비복제 감염을 비교한 그림 4에서는 GPT-4o와 GPT-3.5 Turbo의 결과가 전역 메시징과 로컬 메시징으로 나뉘어 있습니다 .",
+    "Section '검색 조건과 생성 조건의 분해라는 공통 공격 설계': 3 unsupported sentence(s) removed: PoisonedRAG가 정식화한 두 조건은 이후 오염 공격의 기본 틀이 되었습니다. (unsupported: Claim that PoisonedRAG's conditions became the basic framework for later attacks is uncited.) | PoisonedRAG는 검색 단계는 통과하지만 생성을 겨냥한 문구로는 \"이 도구를 골라라\"는 결정까지 확실하게 끌어내지 못합니다. (unsupported: Gives a causal explanation for PoisonedRAG's weaker selection performance that the evidence does not state.) | 두 부분 모두 지시문이 아니라 자연스러운 도구 문서처럼 보이기 때문에, 앞서 본 탐지·학습 기반 방어가 놓쳤습니다. (unsupported: Claims earlier detection/training-based defenses missed the attack and gives a reason; no evidence is cited for how these defenses performed.)",
+    "Section '능력이 곧 공격 표면이 되는 역스케일링과 남은 과제' still has: evidence ['E82'] was already referred back to twice; do not restate it again: StruQ 저자들은 작업에 특화해 최적화한 인젝션에는 방어가 충분히 일반화되지 않는다고 인정했습니다 . | evidence ['E126'] was already referred back to twice; do not restate it again: 명령 계층 저자들도 강력한 적대적 공격에는 여전히 취약할 가능성이 크다고 적었습니다 . | evidence ['E126'] was already referred back to twice; do not restate it again: **멀티모달 입력.** 명령 계층 저자들은 현재 모델이 텍스트만 다룬다고 밝혔습니다 .",
+    "Section '모델이 아닌 시스템 경계에서 찾는 보안' still has: evidence ['E82'] was already referred back to twice; do not restate it again: 그런데 앞서 본 대로 StruQ 저자들은 최적화된 인젝션 앞에서 이 방어가 갖는 한계를 스스로 인정했습니다 . | evidence ['E126'] was already referred back to twice; do not restate it again: 명령 계층 역시 저자들이 밝힌 적대적 공격에 대한 한계를 안고 있습니다 . | evidence ['E282'] was already referred back to twice; do not restate it again: 앞서 본 ToolHijacker는 StruQ와 SecAlign을 적용한 상태에서도 악성 도구 문서로 공격에 성공했습니다 . | evidence ['E232'] was already referred back to twice; do not restate it again: 앞서 본 구조대로, 계획을 맡는 모델은 도구가 돌려준 메일 본문을 직접 보지 않습니다 . | evidence ['E240', 'E80'] was already referred back to twice; do not restate it again: 앞서 정리한 미해결 과제들은 결국 이 시스템 경계를 어디까지 넓힐 수 있는지 묻는 문제입니다 .",
+    "numbered reference '그림 7' (refer descriptively): 버전 관리와 서명 검증으로 러그풀 공격을 막는 과정을 그림 7로 제시합니다 ([Bhatt et al., 2025](",
+    "numbered reference '그림 1' (refer descriptively): Prompt Infection 논문의 그림 1은 데이터 탈취 상황을 다룹니다. 오염된 외부 문서를",
+    "numbered reference '그림 4' (refer descriptively): 자기복제 감염과 비복제 감염을 비교한 그림 4에서는 GPT-4o와 GPT-3.5 Turbo의 결과가",
+    "numbered reference '그림 6' (refer descriptively): 에이전트 사회 시뮬레이션의 그림 6(a)에서는 중요도 점수를 조작했을 때 감염이 더 빠르",
+    "numbered reference '그림 7' (refer descriptively): 그림 7은 여러 방어 전략의 공격 성공률을 LLM Taggin",
+    "self-reference '이 절': 니다. 검색과 메모리 단계에도 같은 결론이 적용될지는 이 절에서 다룬 실험으로는 확인되지 않은 확장입니다.",
+    "[references] line 646: cited only in a table: https://arxiv.org/abs/2306.05499",
+    "[references] line 650: cited only in a table: https://arxiv.org/abs/2310.08419",
+    "[references] line 662: cited only in a table: https://arxiv.org/abs/2503.00061"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2849.7,
+  "input_tokens": 2945493,
+  "output_tokens": 433294,
+  "estimated_cost_usd": 13.1993,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 231,
+      "failed_calls": 0,
+      "input_tokens": 12012,
+      "output_tokens": 433294,
+      "cache_read_tokens": 1650401,
+      "cache_write_tokens": 1283080,
+      "cost_usd": 13.199333
+    },
+    "by_stage": {
+      "read": {
+        "calls": 144,
+        "failed_calls": 0,
+        "input_tokens": 336,
+        "output_tokens": 137263,
+        "cache_read_tokens": 1468435,
+        "cache_write_tokens": 369260,
+        "cost_usd": 2.590137
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 13275,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 57170,
+        "cost_usd": 0.551366
+      },
+      "verify": {
+        "calls": 38,
+        "failed_calls": 0,
+        "input_tokens": 152,
+        "output_tokens": 64234,
+        "cache_read_tokens": 113593,
+        "cache_write_tokens": 221886,
+        "cost_usd": 2.440156
+      },
+      "draft": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 52,
+        "output_tokens": 65671,
+        "cache_read_tokens": 31236,
+        "cache_write_tokens": 265788,
+        "cost_usd": 2.65506
+      },
+      "review": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 29180,
+        "cache_read_tokens": 14751,
+        "cache_write_tokens": 47766,
+        "cost_usd": 0.828518
+      },
+      "fix": {
+        "calls": 22,
+        "failed_calls": 0,
+        "input_tokens": 88,
+        "output_tokens": 123444,
+        "cache_read_tokens": 22386,
+        "cache_write_tokens": 321210,
+        "cost_usd": 4.084228
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 11332,
+        "output_tokens": 227,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.049868
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 144,
+        "failed_calls": 0,
+        "input_tokens": 336,
+        "output_tokens": 137263,
+        "cache_read_tokens": 1468435,
+        "cache_write_tokens": 369260,
+        "cost_usd": 2.590137
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 87,
+        "failed_calls": 0,
+        "input_tokens": 11676,
+        "output_tokens": 296031,
+        "cache_read_tokens": 181966,
+        "cache_write_tokens": 913820,
+        "cost_usd": 10.609196
+      }
+    }
+  }
+}

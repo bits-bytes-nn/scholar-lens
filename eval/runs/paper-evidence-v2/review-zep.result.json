@@ -1,0 +1,154 @@
+{
+  "kind": "review",
+  "status": "succeeded",
+  "input": "2501.13956",
+  "title": "Zep: A Temporal Knowledge Graph Architecture for Agent Memory",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2501_13956/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Hybrid-Graph-Search' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Agentic-AI' (or its acronym) does not appear in the paper; check it fits.",
+    "Evidence that misstates its quote was left out: E4 (Claim adds an unstated limitation (not verified in experiments, future work) not present in quote.)",
+    "Section '정적 RAG와 통째로 넣는 컨텍스트가 놓치는 '변하는 사실'': check 5 sentence(s) the evidence may not support: 앞의 예에서 Zep은 메시지의 기준 타임스탬프로 '지난주'를 3월 초의 구체적인 날짜로 바꿉니다. (unsupported: The source sections never describe resolving relative dates using a reference timestamp.) | 그래프에 이미 있던 '사용자-거주-부산' 엣지는 새 엣지 '사용자-거주-서울'과 모순되므로 지우지 않고 무효화합니다. (unsupported: The provided sections don't cover the edge invalidation mechanism.) | 기존 엣지의 종료 시점 $$t_{\\text{invalid}}$$를 새 엣지의 시작 시점 $$t_{\\text{valid}}$$로 설정하는 방식입니다. (unsupported: The provided sections never mention t_invalid or t_valid.) | 나중에 같은 질문이 들어오면 검색 단계가 두 엣지를 유효기간과 함께 찾고, 구성기가 이를 컨텍스트로 정리합니다. (unsupported: The provided sections don't describe the retrieval stage or the context constructor.) | Zep이 선행 구조에 더한 것은 시간 축입니다. (unsupported: The sections call the graph 'temporally-aware' but never state that the time axis is Zep's addition to the prior structures.)",
+    "Section '검색, 재순위, 구성 세 단계로 이루어진 메모리 검색 함수': check 1 sentence(s) the evidence may not support: 텍스트 정보를 담는 그래프 객체가 이 세 종류뿐이어서 출력도 이렇게 셋으로 나뉩니다. (unsupported: The paper says these are the three graph types that contain relevant textual information. It never says they are the only ones, and it does not give that as the reason the output is a 3-tuple.)",
+    "Section '검색, 재순위, 구성 세 단계로 이루어진 메모리 검색 함수' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 다룬 이사 예시를 이어 가 보겠습니다. | evidence ['E6'] was already referred back to once; do not restate it again: 사용자가 3월 10일에 \"지난주에 부산에서 서울로 이사했어\"라고 말했고, 이중 시간 모델이 '지난주'를 3월 초의 날짜로 바꿨습니다 . | a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section 'LongMemEval에서 정확도는 오르고 지연은 약 90% 줄어든 결과': check 1 sentence(s) the evidence may not support: 그래서 \"내가 지금 어디 살지?\"라는 질문에 구성기가 넘기는 컨텍스트는 두 엣지와 각각의 유효기간 몇 줄이 전부입니다 [[E16]]. (unsupported: Paper retrieves 20 edges and entity nodes (E19); nothing supports a context made of only two edges.)",
+    "Section 'LongMemEval에서 정확도는 오르고 지연은 약 90% 줄어든 결과' still has: evidence ['E5', 'E6'] was already referred back to once; do not restate it again: 앞서 본 엣지 무효화와 상대 날짜 해석이 이 정리를 맡습니다 . | evidence ['E5'] was already referred back to once; do not restate it again: 엔티티 추출, 중복 판단, 엣지 무효화(edge invalidation)에는 LLM이 쓰이지만 , 표에는 질의 시점의 정확도, 지연, 컨텍스트 크기만 있고 수집 단계의 비용 항목은 없습니다.",
+    "Section '선호·시간 추론 유형에 몰린 개선' still has: evidence ['E5'] was already referred back to once; do not restate it again: 앞서 본 엣지 무효화로 부산 엣지가 무효화되고 서울 엣지가 유효기간과 함께 남아 있으면 답이 거의 정해집니다 . | evidence ['E16'] was already referred back to once; do not restate it again: 그래프는 이런 단서를 앞서 본 엔티티 요약과 엣지로 미리 모아 둡니다 . | evidence ['E19'] was already referred back to once; do not restate it again: 짐작해 보면, 관련 엣지와 엔티티 노드 20개로 컨텍스트를 압축하는 평가 방식에서  그런 세부가 빠졌을 가능성이 있지만, 이를 확인한 실험은 없습니다. | ['20'] already stated in '상위 20개 엣지·노드만 넣는 평가 프로토콜': refer back without repeating: 짐작해 보면, 관련 엣지와 엔티티 노드 20개로 컨텍스트를 압축하는 평가 방식에서  그런 세부가 빠졌을 가능성이 있지만, 이를 확인한 실험은 없습니다.",
+    "Section '한계와 시사점': check 1 sentence(s) the evidence may not support: 논문은 응답 지연을 보고하지만, 그 지연이 어느 단계까지 포함하는지는 밝히지 않습니다. (unsupported: The paper does not discuss what its latency measurement covers, so this claim can't be verified from the evidence.)",
+    "Section '한계와 시사점' still has: says what a paper does not state or report; that is rarely evidence (the reader saw only part of it): leave it out or state what the paper does say: 논문은 응답 지연을 보고하지만, 그 지연이 어느 단계까지 포함하는지는 밝히지 않습니다. | says what a paper does not state or report; that is rarely evidence (the reader saw only part of it): leave it out or state what the paper does say: 논문은 무효화의 정밀도를 따로 측정하지 않았습니다."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 1081.8,
+  "input_tokens": 867793,
+  "output_tokens": 128165,
+  "estimated_cost_usd": 4.6564,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 102,
+      "failed_calls": 0,
+      "input_tokens": 272505,
+      "output_tokens": 128165,
+      "cache_read_tokens": 349733,
+      "cache_write_tokens": 245555,
+      "cost_usd": 4.656447
+    },
+    "by_stage": {
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 238,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001891
+      },
+      "extract_citations": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 19192,
+        "output_tokens": 1620,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.054584
+      },
+      "read": {
+        "calls": 17,
+        "failed_calls": 0,
+        "input_tokens": 40,
+        "output_tokens": 14539,
+        "cache_read_tokens": 101401,
+        "cache_write_tokens": 28194,
+        "cost_usd": 0.236238
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 4501,
+        "cache_read_tokens": 1327,
+        "cache_write_tokens": 3697,
+        "cost_usd": 0.109052
+      },
+      "verify": {
+        "calls": 38,
+        "failed_calls": 0,
+        "input_tokens": 176531,
+        "output_tokens": 25165,
+        "cache_read_tokens": 139634,
+        "cache_write_tokens": 48365,
+        "cost_usd": 1.507103
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 23299,
+        "cache_read_tokens": 31900,
+        "cache_write_tokens": 92579,
+        "cost_usd": 0.941811
+      },
+      "review": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 6718,
+        "cache_read_tokens": 14432,
+        "cache_write_tokens": 25478,
+        "cost_usd": 0.267701
+      },
+      "fix": {
+        "calls": 20,
+        "failed_calls": 0,
+        "input_tokens": 58926,
+        "output_tokens": 51646,
+        "cache_read_tokens": 60400,
+        "cache_write_tokens": 42960,
+        "cost_usd": 1.507589
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 439,
+        "cache_read_tokens": 639,
+        "cache_write_tokens": 4282,
+        "cost_usd": 0.030478
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 238,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001891
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 18,
+        "failed_calls": 0,
+        "input_tokens": 19232,
+        "output_tokens": 16159,
+        "cache_read_tokens": 101401,
+        "cache_write_tokens": 28194,
+        "cost_usd": 0.290822
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 83,
+        "failed_calls": 0,
+        "input_tokens": 235557,
+        "output_tokens": 111768,
+        "cache_read_tokens": 248332,
+        "cache_write_tokens": 217361,
+        "cost_usd": 4.363734
+      }
+    }
+  }
+}

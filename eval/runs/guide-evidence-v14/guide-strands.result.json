@@ -1,0 +1,158 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/, https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+  "title": "Strands Agents: Agent Loop and Production Controls in Python and TS",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-strands-agents-agent-loop-and-production-controls-in-python-and-ts/2026-11-07-strands-agents-agent-loop-and-production-controls-in-python-and-ts.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-strands-agents-agent-loop-and-production-controls-in-python-and-ts.md",
+  "pr_url": null,
+  "warnings": [
+    "Evidence that misstates its quote was left out: E156 (The quote says prompt caching is the capability that 'varies most', not that it is the only one that varies; the claim's)",
+    "Section '훅 이벤트 위에 타입이 있는 결정을 얹은 개입 계층': the writer could not fix: MODEL_ROUTING: 이 상수가 `HookOrder`에 속한다는 점은 밝혔습니다. 하지만 어느 SDK 훅의 위치를 나타내는지는 근거에 없어서(근거는 값 50과 상수 이름만 줍니다) 적지 않았습니다.",
+    "Section '강제 재시도 문구와 요청 단위 시도 한도, 스트림 끝에 한 번 오는 객체': the writer could not fix: 해결하지 못한 문제: `invocation_context` 문제. 근거 자료에는 `result.invocation_context`를 다음 호출에 넘기면 시도 횟수가 이어진다는 내용만 있습니다. 다음 호출의 어느 인자로 넘기는지, 호출 예제가 어떤 모양인지는 나오지 않습니다. 인자 이름을 지어낼 수 없어서 문장을 그대로 두었습니다.",
+    "Section '반복 경계에서만 검사하는 턴·토큰 예산과 협력적 취소': the writer could not fix: The `route_stop_reason` function from an earlier section wasn't provided, so I couldn't safely reuse its signature. I kept `STOPPED_EARLY` and added a sentence after the code explaining why it holds only those three stop reasons.",
+    "Section '반복 경계에서 검사하는 턴·토큰 예산과 협력적 취소': check 4 sentence(s) the evidence may not support: 토큰 한도는 이 에이전트 자신의 모델 호출만 셉니다. (unsupported: Stated only in the Python section. TypeScript says agents passed as tools share the request's limits and usage.) | 도구로 호출한 에이전트와 대화 관리자의 요약 호출은 한도 밖에서 돌고, 사용량도 한도에 더해지지 않습니다 [[E3]]. (unsupported: Python-only claim given without a qualifier. In TypeScript, agents used as tools share limits, and summarization tokens are added to usage.) | 에이전트 루프 페이지는 턴, 총 토큰, 출력 토큰 순서만 적고 있습니다 [[E2]]. (unsupported: Claims the page lists 'only' these three, but no cited item quotes the page saying so.) | 두 번째 턴까지 7,500을 썼고 세 번째 턴의 모델 응답이 4,000을 더하면 누적 11,500이 되지만, 이 초과는 네 번째 반복이 시작될 때에야 발견됩니다 [[E46]]. (numbers not in its evidence)",
+    "Section '반복 경계에서 검사하는 턴·토큰 예산과 협력적 취소' still has: numbers ['7,500', '4,000', '11,500'] are not in the cited evidence: 두 번째 턴까지 7,500을 썼고 세 번째 턴의 모델 응답이 4,000을 더하면 누적 11,500이 되지만, 이 초과는 네 번째 반복이 시작될 때에야 발견됩니다 . | ['4,000'] already stated in '중단 사유로 다음 동작이 정해지는 에이전트 루프': refer back without repeating: 두 번째 턴까지 7,500을 썼고 세 번째 턴의 모델 응답이 4,000을 더하면 누적 11,500이 되지만, 이 초과는 네 번째 반복이 시작될 때에야 발견됩니다 . | a table cell is blank ('—', or only evidence markers, which code removes): give the value the evidence or the passages state, or drop the row or column it belongs to; markers go after a cell's content: | 도구 실행 전 | 도구 호출을 건너뛰고, 대화 상태를 유효하게 유지하려고 오류 결과를 추가함 | - |",
+    "Section '스로틀링만 다시 시도하는 기본 재시도 전략과 확장 방법': the writer could not fix: The evidence only partly supports the hook-vs-default-strategy sentence. It shows that leaving out `retry_strategy` still applies the default strategy (E154), so the section says the hook does not turn the default strategy off. It does not show how the two interact when a throttled call hits both, s",
+    "Section '모델 컨텍스트 안팎으로 나뉘는 세 가지 기억과 세션 단위 영속화': the writer could not fix: - 에이전트 상태 표 셀: 에이전트 상태가 모델 컨텍스트에 들어가는지 근거에 없어서 '미포함'을 지우고 '—'를 넣었습니다. 근거가 이 점을 다루지 않기 때문입니다. - 수명주기 이벤트: 근거에는 '특정 수명주기 이벤트에서만 영속화된다'는 말만 있고 이벤트 이름이 없습니다. 호출 도중 크래시가 나면 무엇이 사라지는지도 나와 있지 않습니다. 그래서 '저장소 내용이 메모리의 최신 상태와 같다고 가정하면 안 된다'는 결과만 적었고, 이벤트 이름은 적지 못했습니다. - `request_state`: 근거에는 Python이 `request_",
+    "Section '위험 분류기가 위험한 호출만 멈추는 사람 승인 흐름': the writer could not fix: - Running example factory: I couldn't see the earlier `new_ticket_agent` body or the `TicketTriage` model. So the block defines `new_ticket_agent(ticket_id)` again with `HumanInTheLoop`, `aux_model` and `allowed_tools=[\"!issue_refund\"]` added, and it does not carry over `TicketTriage` structured out",
+    "Section '위험 분류기가 위험한 호출만 멈추는 사람 승인 흐름' still has: evidence ['E52'] was already referred back to once; do not restate it again: 서비스 환경에서는 승인이 도착할 때까지 앞서 설정한 세션 상태와 반환된 인터럽트 ID를 보존해야 같은 지점에서 재개할 수 있습니다 .",
+    "Section '언어마다 다른 프로바이더 지원과 세션별 microVM으로 격리하는 런타임': the writer could not fix: 배포 코드(new_triage_agent를 감싸는 진입점)는 넣지 않았습니다. 근거 자료에 AgentCore Runtime 배포 코드가 없어서, 배포를 마친 에이전트를 호출하는 쪽으로 넘어가는 이유를 적는 방식으로 흐름 문제를 풀었습니다. localhost:9000에서 A2A 서버를 띄우는 코드도 근거 자료에 없어서 보여 주지 않았고, 엔드포인트가 무엇을 가리키는지만 설명했습니다.",
+    "Section '모델 프로바이더 선택과 AgentCore Runtime 배포': check 1 sentence(s) the evidence may not support: 배포하려면 적절한 권한이 있는 AWS 계정과 앞서 설치 때 맞춘 Python 버전, 또는 Node.js 22+가 필요합니다. (numbers not in its evidence)",
+    "Section '모델 프로바이더 선택과 AgentCore Runtime 배포' still has: numbers ['22'] without evidence (cite it; an illustration of your own ends with [[EX]]): 배포하려면 적절한 권한이 있는 AWS 계정과 앞서 설치 때 맞춘 Python 버전, 또는 Node.js 22+가 필요합니다. | 1,727 characters of prose for a target of 1,000: cut background, repetition and minor detail",
+    "Section '위험 분류기가 위험한 호출만 멈추는 사람 승인 흐름': the writer could not fix: 문제를 일부만 고쳤습니다. 이번에 바꾼 점: `allowed_tools=[\"!issue_refund\"]`를 추가해 환불 호출은 늘 사람에게 묻고 trust로 넘길 수 없게 했습니다(E98). 호출에 `structured_output_model=TicketTriage`를 넘깁니다(src-D12에 따르면 호출할 때 덮어쓸 수 있습니다). 코드 블록은 터미널용 로컬 시연이라고 밝혔고, `ask=\"stdio\"`는 서비스 배포에 쓰지 말라는 문장을 넣었습니다. 증거가 부족해 고치지 못한 점: (1) `new_ticket_agent(ticke",
+    "Section '언어마다 다른 프로바이더 지원과 세션별 microVM으로 격리하는 런타임': the writer could not fix: 해결하지 못한 문제: 서버 측 코드와 배포 코드. 근거 자료에 분류 에이전트를 노출하는 A2A 서버 코드가 없습니다. `A2AServer`는 v1.25.0 릴리스 노트의 버그 수정 항목에 `A2AServer.serve()`의 host/port 재정의 문제로만 이름이 나오고, import 경로, 생성자 인자, 실행 예시는 나오지 않습니다. AgentCore Runtime의 진입점(entrypoint), 배포 명령, 설정도 근거에 없습니다. 배포 근거는 사전 요건과 함께 Python, TypeScript 언어별 배포 페이지로 넘어가라는"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2622.5,
+  "input_tokens": 2550173,
+  "output_tokens": 328623,
+  "estimated_cost_usd": 14.0623,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 147,
+      "failed_calls": 0,
+      "input_tokens": 319491,
+      "output_tokens": 328623,
+      "cache_read_tokens": 898190,
+      "cache_write_tokens": 1332492,
+      "cost_usd": 14.062289
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2616,
+        "output_tokens": 205,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000364
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2785,
+        "output_tokens": 876,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000717
+      },
+      "read": {
+        "calls": 56,
+        "failed_calls": 0,
+        "input_tokens": 136,
+        "output_tokens": 40380,
+        "cache_read_tokens": 317555,
+        "cache_write_tokens": 89372,
+        "cost_usd": 0.691014
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 6512,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 25076,
+        "cost_usd": 0.255636
+      },
+      "verify": {
+        "calls": 32,
+        "failed_calls": 0,
+        "input_tokens": 211000,
+        "output_tokens": 63183,
+        "cache_read_tokens": 351380,
+        "cache_write_tokens": 422307,
+        "cost_usd": 4.35975
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 63545,
+        "cache_read_tokens": 48276,
+        "cache_write_tokens": 358487,
+        "cost_usd": 3.082867
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 36814,
+        "cache_read_tokens": 28106,
+        "cache_write_tokens": 106340,
+        "cost_usd": 1.279467
+      },
+      "fix": {
+        "calls": 26,
+        "failed_calls": 0,
+        "input_tokens": 90533,
+        "output_tokens": 115634,
+        "cache_read_tokens": 152873,
+        "cache_write_tokens": 330910,
+        "cost_usd": 4.390507
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 12301,
+        "output_tokens": 1474,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001967
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 17702,
+        "output_tokens": 2555,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003048
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 56,
+        "failed_calls": 0,
+        "input_tokens": 136,
+        "output_tokens": 40380,
+        "cache_read_tokens": 317555,
+        "cache_write_tokens": 89372,
+        "cost_usd": 0.691014
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 88,
+        "failed_calls": 0,
+        "input_tokens": 301653,
+        "output_tokens": 285688,
+        "cache_read_tokens": 580635,
+        "cache_write_tokens": 1243120,
+        "cost_usd": 13.368227
+      }
+    }
+  }
+}

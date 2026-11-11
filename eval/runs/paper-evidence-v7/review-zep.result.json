@@ -1,0 +1,135 @@
+{
+  "kind": "review",
+  "status": "succeeded",
+  "input": "2501.13956",
+  "title": "Zep: A Temporal Knowledge Graph Architecture for Agent Memory",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2501_13956/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Hybrid-Graph-Search' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Agentic-AI' (or its acronym) does not appear in the paper; check it fits.",
+    "Evidence that misstates its quote was left out: E4 (Claim adds that the feature was not tested in experiments and is future work; the quote states no such limitation.)",
+    "Section '시간에 따라 바뀌는 사실을 다루는 에이전트 메모리': the writer could not fix: 근거가 없는 문장은 모두 지웠고, 남은 내용에 맞게 제목과 첫 문장을 바꿨습니다. 아래 두 가지는 근거 [E1]만으로는 고칠 수 없었습니다. 1. 엣지 유효기간의 정의(depth 항목): 근거에 유효기간 메커니즘이 없습니다. 그래서 시작·종료 시각 필드를 정의하는 문장도, 나이키 사실이 4월 2일부터 유효하다는 문장도 쓰지 않았고, 아디다스 유효기간 문장은 삭제했습니다. 이 내용을 다룬 논문 부분을 근거로 받아야 쓸 수 있습니다. 2. '핵심' 판단 문장(style 항목): 근거가 없어 마무리 섹션으로 옮기지 않고 삭제했습니다. 마",
+    "Section '사실이 바뀌는 긴 대화에 정적 RAG가 맞지 않는 이유': check 14 sentence(s) the evidence may not support: 에이전트 메모리의 핵심 난제는 같은 대상에 대한 사실이 시간이 지나면서 바뀐다는 데 있습니다. (unsupported: No evidence cited) | 문서 묶음은 한 번 색인하면 내용이 거의 그대로지만, 대화 이력에서는 어제 맞던 사실이 오늘은 틀린 사실이 됩니다. (unsupported: No evidence) | 대화 전체를 컨텍스트 창(context window)에 그대로 넣으면 대화가 길어질수록 토큰과 지연이 함께 늘어납니다. (unsupported: No evidence) | 이 경우 어느 발화가 최신인지는 모델이 긴 원문을 읽으면서 스스로 가려내야 합니다. (unsupported: No evidence) | 정적 문서를 전제로 한 검색은 두 발화를 비슷한 점수의 독립된 조각으로 돌려줄 뿐입니다. (unsupported: No evidence)",
+    "Section '원문, 엔티티 관계, 클러스터 요약의 세 계층과 이중 시간 축': check 2 sentence(s) the evidence may not support: 여기서 $$\\phi$$는 엣지 하나를 그 엣지가 잇는 노드 쌍에 대응시키는 결합 함수이고, 아래 표의 $$\\phi^{*}(\\cdot\\times\\cdot)$$는 지정한 두 노드 집합 사이의 쌍에 대응되는 엣지들, 즉  (unsupported: φ*를 역상으로 해석하는 내용은 논문에 정의되어 있지 않습니다.) | 예를 들어 가상의 경우로, 사건 시간과 수집 시간을 하나의 타임스탬프로 합쳐 두면 이 두 경우를 구분할 수 없고, 늦게 들어온 메시지가 더 최근 사실처럼 보일 수 있습니다 [[EX]]. (unsupported: 논문에 없는 결과(늦게 들어온 메시지가 더 최근 사실처럼 보일 수 있다는 점)를 주장합니다.)",
+    "Section '추출, 중복 제거, 엣지 무효화로 이루어진 증분 그래프 구축 파이프라인': check 1 sentence(s) the evidence may not support: 최종 판단은 유사도 임계값이 아니라 LLM이 문맥을 보고 내립니다 [[E9]]. (unsupported: The source never compares the LLM decision with a similarity threshold.)",
+    "Section '추출, 중복 제거, 엣지 무효화로 이루어진 증분 그래프 구축 파이프라인' still has: a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '동적 확장을 위해 Leiden 대신 고른 레이블 전파 커뮤니티': the writer could not fix: 표류가 생기는 원인을 설명하던 문장은 논문에 없는 해석이라 이 절에서 삭제했습니다. 이 해석을 남기려면 마무리 절에 저자 본인의 판단으로 표시해 다시 넣어야 하는데, 마무리 절은 이번 수정 범위에 포함되지 않습니다.",
+    "Section '검색, 재순위, 구성의 세 단계로 합성한 메모리 조회 함수': the writer could not fix: RRF 수식(1/(k+r))은 근거 자료에 없는 일반 정의라서 '일반적으로'를 붙여 표에 넣었습니다. 근거에 없는 내용을 피하려면 이 부분을 지워도 됩니다.",
+    "Section '검색, 재순위, 구성의 세 단계로 합성한 메모리 조회 함수': check 3 sentence(s) the evidence may not support: 여기서 $$\\mathcal{E}_{s}$$와 $$\\mathcal{N}_{s}$$의 첨자 $$s$$는 의미(semantic) 계층, $$\\mathcal{N}_{c}$$의 첨자 $$c$$는 커뮤니티(community)  (unsupported: Subscript meanings and superscript n interpretation not stated in the sources.) | 논문은 이 홉 수도 $$n$$으로 적지만, 앞의 목록 길이 $$n$$과는 별개인 탐색 깊이 매개변수입니다. (unsupported: The sources never say the hop-count n is a separate depth parameter from the list-length n.) | 그래서 BM25보다는 코사인 검색이 '신발'과 의미가 가까운 사실 엣지를 찾습니다. (unsupported: This is an illustration that is not marked [[EX]], and it states retrieval behaviour the sources do not give.)",
+    "Section 'DMR에서 전체 대화 기준선을 근소하게 넘어선 정확도': the writer could not fix: 문제는 모두 고쳤습니다. 다만 표의 gpt-4o-mini 기준선 값(98.0%, 88.0%)도 주어진 근거에는 없습니다. 지적된 문제가 아니어서 표는 그대로 두었습니다. 20개와 10개 검색 개수가 엇갈리는 점에 대한 평가는 마무리 절에서 다뤄야 합니다. 마무리 절은 이 절 밖이라 여기서는 고칠 수 없었습니다.",
+    "Section 'LongMemEval에서 확인한 정확도 향상과 90% 지연 감소': the writer could not fix: 고치지 못한 부분: - 질문 유형별 결과: 원문 Table 3에는 유형별 수치가 있지만, 그 수치를 담은 근거 항목이 제공되지 않았습니다. 그래서 표나 숫자는 넣지 않았습니다. 대신 비교 대상(전체 컨텍스트 기준선)과 해당 모델(두 모델 모두)만 밝혔습니다. 다만 이 문장의 출처 E3도 이 내용을 직접 다루지 않습니다. - 글쓴이 해석 두 문장('지연 개선은 보수적으로 추정된 값에 가깝습니다', '유효기간이 붙은 사실과 엔티티 요약만 추려 주는 편이 더 나은 입력이었습니다'): 이 섹션 밖의 마무리 섹션은 고칠 수 없어서 옮기지 못",
+    "Section '선호도 질문에 집중된 질문 유형별 개선': check 10 sentence(s) the evidence may not support: 정보가 다 주어져도 모델이 그 안에서 사용자 선호를 끌어내지 못했다는 뜻입니다 [[E28]]. (unsupported: Interpretation not stated by paper.) | 지식 갱신은 앞서 본 엣지 무효화와 유효기간 필드가 직접 겨냥하는 유형입니다 [[E5, E16]]. (unsupported: Paper does not link knowledge-update to edge invalidation.) | 저자들의 해석은 이 마지막 해석 단계가 모델 역량에 달려 있다는 쪽입니다 [[E28]]. (unsupported: Authors only say less capable models may need development for temporal data; 'last interpretation step' framing added.) | 그래서 assistant가 말한 세부 문장처럼 원문 그대로 필요한 정보는 압축 과정에서 빠지기 쉬운 구조로 보입니다. (unsupported: Causal speculation not in paper.) | 다만 이 원인을 따로 검증한 실험은 없습니다. (unsupported: Absence claim not quoted.)",
+    "Section '선호도 질문에 집중된 질문 유형별 개선' still has: numbers ['36.7'] are not in the cited evidence: 절대 점수는 20.0%에서 56.7%로 36.7%p 올랐고, 상대 향상은 184%입니다 . | numbers ['115k'] without evidence (cite it; an illustration of your own ends with [[EX]]): 이 유형은 115k 토큰 전체를 받은 기준선이 가장 낮은 점수를 낸 유형이기도 합니다. | ['115k'] already stated in 'LongMemEval에서 확인한 정확도 향상과 90% 지연 감소': refer back without repeating: 이 유형은 115k 토큰 전체를 받은 기준선이 가장 낮은 점수를 낸 유형이기도 합니다. | evidence ['E5'] was already referred back to once; do not restate it again: 지식 갱신은 앞서 본 엣지 무효화와 유효기간 필드가 직접 겨냥하는 유형입니다 . | numbers ['17.7', '9.06'] without evidence (cite it; an illustration of your own ends with [[EX]]): 하락폭은 gpt-4o에서 17.7%, gpt-4o-mini에서 9.06%로, 개선 흐름에서 벗어난 예외입니다.",
+    "Section '지연 이점은 분명하지만 핵심 주장은 아직 검증 전인 메모리 그래프': the writer could not fix: knowledge-update 수치(gpt-4o-mini 76.9%→74.4%, 2.5%p 하락)는 논문의 Table 3에서 가져왔습니다. 인용한 근거 항목에는 이 수치가 들어 있지 않아서, 약한 모델 문제를 다루는 가장 가까운 근거인 [[E23]]를 대신 붙였습니다. 이 표의 행을 다루는 근거 항목이 있으면 그 항목으로 바꿔 달아 주세요.",
+    "Whole-post review problems naming no section of the post, not applied: 원문과 사실 사이의 양방향 색인: 운동화 예시의 설정(3월 10일 아디다스, 4월 2일 나이키)을 처음부터 다시 소개합니다.",
+    "Section '원문, 엔티티 관계, 클러스터 요약의 세 계층과 이중 시간 축': whole-post review problems left as they were: 그래프의 형식 정의 G=(N,E,φ)와 결합 함수 φ 설명을 첫 섹션에서 이미 했는데 여기서 수식까지 다시 적어 설명합니다. Fix: 수식과 φ 설명은 지우고 첫 섹션 정의를 가리키는 한 줄만 남기세요. φ* 설명만 새로 추가하면 됩니다.",
+    "Section 'DMR에서 전체 대화 기준선을 근소하게 넘어선 정확도': the writer could not fix: DMR 한계 설명이 중복되는 문제는 일부만 고쳤습니다. 이 섹션이 그 결과를 해석하는 자리라서 마지막 문단의 한계 설명은 그대로 두었습니다. 다만 한계 섹션은 이번 수정 범위 밖이라 직접 고칠 수 없었습니다. 그 섹션에서 DMR 약점을 다시 풀어 쓴 부분은 \"앞서 본 DMR 벤치마크의 한계\"처럼 이 섹션을 가리키는 말로 바꿔 주세요."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 1020.7,
+  "input_tokens": 699176,
+  "output_tokens": 113798,
+  "estimated_cost_usd": 4.4566,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 76,
+      "failed_calls": 0,
+      "input_tokens": 226985,
+      "output_tokens": 113798,
+      "cache_read_tokens": 220544,
+      "cache_write_tokens": 251647,
+      "cost_usd": 4.456622
+    },
+    "by_stage": {
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 238,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001891
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 4096,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 5024,
+        "cost_usd": 0.107056
+      },
+      "verify": {
+        "calls": 26,
+        "failed_calls": 0,
+        "input_tokens": 133624,
+        "output_tokens": 16967,
+        "cache_read_tokens": 86299,
+        "cache_write_tokens": 56384,
+        "cost_usd": 1.19028
+      },
+      "draft": {
+        "calls": 10,
+        "failed_calls": 0,
+        "input_tokens": 40,
+        "output_tokens": 23224,
+        "cache_read_tokens": 30051,
+        "cache_write_tokens": 84795,
+        "cost_usd": 0.900639
+      },
+      "review": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 8221,
+        "cache_read_tokens": 14364,
+        "cache_write_tokens": 47356,
+        "cost_usd": 0.407118
+      },
+      "fix": {
+        "calls": 25,
+        "failed_calls": 0,
+        "input_tokens": 75549,
+        "output_tokens": 60347,
+        "cache_read_tokens": 89191,
+        "cache_write_tokens": 54018,
+        "cost_usd": 1.8149
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 705,
+        "cache_read_tokens": 639,
+        "cache_write_tokens": 4070,
+        "cost_usd": 0.034738
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 238,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001891
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 75,
+        "failed_calls": 0,
+        "input_tokens": 209269,
+        "output_tokens": 113560,
+        "cache_read_tokens": 220544,
+        "cache_write_tokens": 251647,
+        "cost_usd": 4.454731
+      }
+    }
+  }
+}

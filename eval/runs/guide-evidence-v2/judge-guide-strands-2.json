@@ -1,0 +1,100 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/eval-guide/guide-strands-v2.md",
+  "judge_run": 2,
+  "sample_rule": "prose paragraphs (blank-line blocks excluding headings, code, tables, display math, sources) numbered from the start of the body; paragraphs 2, 5, 8, ... (60 of 179) sampled; claims taken from sampled paragraphs and the tables or code next to them",
+  "scores": {"A": 7, "B": 7, "C": 8, "D": 8, "E": 7.5, "F": 6, "T1": 5, "T2": 8, "T3": 8.5},
+  "score_evidence": {
+    "A": "L123 and L126 are the same H2 '## 수명주기 시점마다 발생하는 타입 안전한 훅 이벤트'; the first one is an empty section. Otherwise the order holds (TL;DR, problem, loop, hooks, middleware, interventions, steering, install at L655, retry, context, structured output, lifecycle, production, choice). Front matter OK: two-level categories, use_math true with $$ in the body, description 124 chars.",
+    "B": "Hedge boilerplate repeats about 12 times ('쓰는 SDK 버전에서 확인해야 합니다' at L172, L195, L212, L252; '모듈 경로는 설치한 SDK 버전에서 확인' at L284, L328, L355). Writer-process talk: L313 '어느 쪽이 바깥에 놓이는지는 여기서 확정하지 않았습니다' (better: '공식 문서는 이 순서를 밝히지 않습니다'); L284 '이 블록에서는 두 이름의 모듈 경로를 확정하지 않았으므로'. L48 '이 목록은 서드파티 페이지의 설명입니다' is a redundant attribution tail. L77 '...변화라고 부릅니다' has no subject (who calls it that?). L471 '주목하십시오' switches register. L104 '이 설계에서 중요한 점은 ... 방식입니다' is a noun frame.",
+    "C": "Mostly smooth, and the running example ties the sections together. The name `agent` is reassigned about 8 times (L245, L465, L535, L629, L685, L712, L800, L926), so 'the agent defined above' (L277) is hard to follow. The duplicate heading at L123/L126 breaks the flow.",
+    "D": "The hard parts get worked numbers: the backoff schedule table L740-747, the limit overshoot at L985 (8,500 -> over 10,000), the event-count table L156-162 and the precedence table L479-483. Some padding: the formula N_model = N_tool + 1 (L92) and the 1+2=3 s sum (L309-311) belabour simple arithmetic.",
+    "E": "Tables and code are used where they help. The display formulas at L92 and L309-311 are decorative. The ASCII diagrams are fine. There is no real architecture figure for the control layers (hooks, middleware and interventions around the loop), even though that is the post's main idea.",
+    "F": "In-sample: one wrong attribution (L48) and one unsupported default (L528); details in claims. Out of sample, PLAUSIBLE: L195 advises HookOrder.SDK_FIRST so an audit hook wraps outermost. Per the hooks docs, an explicit order means 'lower values run first' (After events reverse only within one order group), so an SDK_FIRST hook also runs first on After events and does not wrap outermost.",
+    "T1": "Plenty of real code, but 9 of the 27 Python blocks fail as pasted (executed against strands-agents 1.63.0 with the agent call stubbed). NameErrors come from imports the post leaves out on purpose, although the docs give them: InvokeModelStage, ExecuteToolStage, ModelThrottledException (L279, L323, L352; docs import from strands.middleware and strands.types.exceptions) and InterventionHandler, Deny, Proceed, Transform, Confirm, HumanInTheLoop (L434, L499, L511, L532; docs: strands.interventions, strands.vended_interventions.hitl). The block at L619 also omits 'from agent_control.integrations.strands import ...' and 'from strands.models.openai import OpenAIModel', which the Agent Control blog prints, and fails on import until agent-control-sdk is installed. The MCP block at L706 imports streamablehttp_client, which mcp 2.3.0 (pulled by the current SDK) renamed to streamable_http_client, so it raises ImportError. The post also hedges on the invocation_state argument names (L172), which the hooks docs show as agent(..., user_id=...).",
+    "T2": "Covers the source pages in a sensible order (agent loop, hooks, hook events, middleware, interventions, HITL, steering, lifecycle controls, retry, conversation management, structured output, AgentCore deploy) and does not pad with sections the sources do not support.",
+    "T3": "Strong internals: hooks vs middleware vs interventions, last-write-wins vs typed precedence, and the semantics of limits checked at turn boundaries. Integration is covered: AgentCore /ping and /invocations, OTel baggage session.id, the eval pipeline, and Graph or AgentCore Policy when determinism is needed. Design advice reads as recommendation."
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Most headings are claim noun phrases ('스로틀링만 기본 재시도하는 지수 백오프 전략과 그 확장' L730), but some are topic names ('상황별 선택' L1168, 'Strands가 맞는 조건' L1152), and one H2 is duplicated (L123/L126)."},
+    "running_example": {"status": "met", "evidence": "A customer-support agent (lookup_order, refund, send_email, delete_file) is used from L35 to L1180."},
+    "mechanism_design_code_example": {"status": "met", "evidence": "Middleware: problem L261, phases and next-count L265-271, code L279-305, numeric backoff L307-311. Limits: semantics L985 with the 8,500/10,000 example."},
+    "facts_once": {"status": "partly met", "evidence": "'Hooks see one Before/After pair under middleware retry' is stated at L387 and again at L805. Guide accumulation and the uncapped Guide retry appear at L475/L505 and again at L579 (as a back-reference)."},
+    "numbers_with_scope": {"status": "met", "evidence": "Defaults name the language and parameter: max_attempts 6 / initial_delay 4 / max_delay 128 (Python) vs baseMs 4000 / maxMs 240000 (TS) at L736/L749."},
+    "nothing_invented": {"status": "partly met", "evidence": "L48 calls the official strands-agents/harness-sdk README a '서드파티 GitHub 페이지'. L528 presents trust memory as default behaviour, while the docs make it opt-in via enable_trust. L195 SDK_FIRST advice is a wrong inference (PLAUSIBLE)."},
+    "own_assessment_at_end": {"status": "met", "evidence": "L1180 '이 글의 판단으로는 ... Strands로 시작하는 편이 낫습니다 ... Graph와 AgentCore Policy로 옮기는 것이 좋습니다'."},
+    "length_fitted": {"status": "partly met", "evidence": "About 67k characters. Trivial arithmetic gets display math (L92, L309-311), and the hedge sentences add bulk."},
+    "type_specific_shape": {"status": "met", "evidence": "Opens with TL;DR (L11) and the problem (L25-35). The loop and control layers (L54-L653) come before installation (L655). Non-official sources are included. Closes with choice criteria and failure modes (L1148-1180)."},
+    "korean_style": {"status": "partly met", "evidence": "Natural overall, but the hedge boilerplate repeats and writer-process sentences remain (L284, L313); see B."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "numeric_claims": 8,
+    "examples": [
+      {"n": 1, "line": 15, "claim": "When several intervention policies apply at once, precedence that puts deny first yields one result", "verdict": "supported", "source": "interventions: 'handlers always run in registration order with well-defined precedence (deny > confirm > guide > transform > proceed)'"},
+      {"n": 2, "line": 33, "claim": "A Strands agent is defined by model, tools and prompt", "verdict": "supported", "source": "AWS Open Source Blog: 'a combination of three things: 1) a model, 2) tools, and 3) a prompt'"},
+      {"n": 3, "line": 48, "claim": "'서드파티 GitHub 페이지인 harness-sdk README' describes Strands as an OSS SDK for Python/TS that runs in-process with no hosted control plane", "verdict": "wrong", "source": "github.com/strands-agents/harness-sdk is the official Strands organization monorepo (it holds strands-py and strands-ts, and the README links strandsagents.com docs). The content matches the README ('runs in your process with no hosted control plane'), but the third-party label is a wrong attribution."},
+      {"n": 4, "line": 201, "claim": "Writable-field table (Python names): BeforeInvocationEvent.cancel, BeforeModelCallEvent.cancel, AfterModelCallEvent.retry, BeforeToolsEvent.cancel, BeforeToolCallEvent cancel_tool/selected_tool/tool_use, AfterToolCallEvent result/retry, AfterToolsEvent.end_turn, AfterInvocationEvent.resume", "verdict": "supported", "source": "hooks-events 'Event Properties'. The Python tab lists the retry, cancel, cancel_tool, selected_tool, tool_use, result, end_turn and resume rows; the two Before* cancel rows appear only in the TS tab, but strands-agents 1.63.0 _can_write allows 'cancel' on both events. Minor gap: the writable BeforeInvocationEvent.messages is left out."},
+      {"n": 5, "line": 407, "claim": "Five handler points; before_tool_call accepts all five actions, after_tool_call only Proceed and Transform; methods default to Proceed()", "verdict": "supported", "source": "interventions Lifecycle Methods table: 'after_tool_call | Proceed, Transform'; 'All methods default to Proceed()'"},
+      {"n": 6, "line": 491, "claim": "on_error has three values: 'throw' (default), 'proceed' (fail-open), 'deny' (fail-closed)", "verdict": "supported", "source": "interventions Error Handling: \"'throw' | Rethrow the error (default)\""},
+      {"n": 7, "line": 528, "claim": "Trust state, which stops re-asking for a tool once approved, is stored in agent.state (TS agent.appState); it lasts across turns and resets on re-creation", "verdict": "unsupported", "source": "human-in-the-loop Trust Mode: trust is opt-in (enable_trust default False) and needs a 't'/'trust' response; plain approval is not remembered. The post never mentions enable_trust, so it reads as default behaviour."},
+      {"n": 8, "line": 383, "claim": "Input middleware can route a call to a larger model when projected_input_tokens > 50,000", "verdict": "supported", "source": "middleware: 'if (context.projected_input_tokens or 0) > 50_000:'"},
+      {"n": 9, "line": 736, "claim": "Python ModelRetryStrategy defaults: max_attempts 6 (1 disables), initial_delay 4 s doubling, max_delay 128 s; up to 5 retries", "verdict": "supported", "source": "retry-strategies Parameters table and 'retry throttling errors up to 5 times (6 total attempts) ... starting at 4 seconds'"},
+      {"n": 10, "line": 749, "claim": "TS DefaultModelRetryStrategy maxAttempts 6, backoff new ExponentialBackoff({ baseMs: 4000, maxMs: 240000 }); LinearBackoff and ConstantBackoff available", "verdict": "supported", "source": "retry-strategies DefaultModelRetryStrategy table and Backoff Strategies"},
+      {"n": 11, "line": 821, "claim": "proactive_compression=True uses default threshold 0.7; a dict sets compression_threshold in 0-1; best-effort, reduce() errors swallowed", "verdict": "supported", "source": "conversation-management: 'Use True for the default 0.7 threshold ... ratio between 0 and 1'; 'Proactive compression is best-effort only, so if reduce() throws or returns false, the error is swallowed'"},
+      {"n": 12, "line": 852, "claim": "SummarizingConversationManager summary_ratio default 0.3 clamped 0.1-0.8; preserve_recent_messages default 10", "verdict": "supported", "source": "conversation-management: 'summary_ratio (float, default: 0.3) ... (clamped between 0.1 and 0.8)'; 'preserve_recent_messages (int, default: 10)'; SDK 1.63.0 signature agrees"},
+      {"n": 13, "line": 987, "claim": "Stop-reason priority when caps trip together: turns, total tokens, output tokens, structured output attempts; total-token limit counts cache reads/writes on Bedrock, Anthropic, OpenAI, Gemini; Python token limits count only this agent's own model calls", "verdict": "supported", "source": "lifecycle-controls: 'priority order: turns, then total tokens, then output tokens, then structured output attempts'. agent-loop: 'counts prompt-cache reads and writes in full'; Python tab: 'Token limits count only this agent's own model calls ...'"},
+      {"n": 14, "line": 1011, "claim": "Deadline via threading.Timer(30.0, cancel_signal.set); the agent never sets or clears the caller-owned event; agent.cancel() is thread-safe and idempotent, and in Python an idle call cancels the next invocation", "verdict": "supported", "source": "lifecycle-controls 'Stop a running agent' code and text"},
+      {"n": 15, "line": 1044, "claim": "Python accepts idempotency_token in __call__, invoke_async and stream_async; same token waits for the same AgentResult, a different token raises ConcurrencyException, an aborted original raises IdempotencyAbortedError; TS has neither mode nor token", "verdict": "supported", "source": "agent-loop 'Deduplicating retried requests' and lifecycle-controls TS tab: 'This SDK does not offer a configurable concurrency mode or idempotency-token deduplication'"}
+    ]
+  },
+  "checklist": {
+    "repeated": 2,
+    "avoided": 1,
+    "na": 2,
+    "repeated_ids": ["shared-agent-history-leak", "result-fields-incomplete"],
+    "details": [
+      {"id": "loop-diagram-remote", "result": "avoided", "evidence": "No image links at all. The agent-loop diagram is an inline text block (L64-75), so there is no remote docs host image."},
+      {"id": "shared-agent-throw-scope", "result": "n/a", "evidence": "There is no shared-module-agent-in-async-handler warning. L1042 only restates the docs ('이미 실행 중인 에이전트를 다시 호출하면 ConcurrencyException'), and sync-vs-invoke_async blocking is never discussed."},
+      {"id": "shared-agent-history-leak", "result": "repeated", "evidence": "The per-request agent pattern (L1054) is justified only by the concurrency guard and the retry-strategy sharing rule. The post never says a shared agent carries one request's conversation into the next, and invoke_async appears only in the idempotency sentence (L1044)."},
+      {"id": "result-fields-incomplete", "result": "repeated", "evidence": "AgentResult use shows stop_reason (L546, L1073), interrupts and structured_output. result.metrics.get_summary() never appears (grep 'metrics' finds nothing)."},
+      {"id": "multi-agent-subject", "result": "n/a", "evidence": "There is no '최소 실행 단위 ... 정보를 주고받으며' sentence; multi-agent appears only as hook events (L168) and Graph (L1164)."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 54,
+    "architecture_note": "The TL;DR (L13-15) already sketches the loop and the control layers. The first architecture section is L54 '## 추론·도구 실행·재호출을 반복하는 ReAct형 에이전트 루프'. Installation starts at L655, after the mechanisms.",
+    "sources_total": 24,
+    "non_official_share": 0.375,
+    "non_official_note": "9 of 24 sources are outside strandsagents.com and the strands-agents GitHub org: 3 AWS ML blogs, the AWS Open Source blog, DeepWiki, AWS Builder Center, aws-samples, Medium (Posoldova) and pickaxe.co. Strictly third-party, non-AWS sources: 4/24 (17%).",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose": true,
+    "closes_with_failure_modes": true,
+    "close_note": "L1148-1180 give choice conditions, a 상황별 선택 table and failure modes (no ordering guarantee at L1160; Guide retry without a cap at L505).",
+    "runnable_code": {
+      "verdict": "does not run as pasted",
+      "method": "Executed all 27 Python blocks in order in one namespace against strands-agents 1.63.0 (mcp 2.3.0), with Agent.__call__ stubbed so no model was called.",
+      "failing_blocks": [
+        {"line": 279, "error": "NameError InvokeModelStage (docs: from strands.middleware import InvokeModelStage; from strands.types.exceptions import ModelThrottledException)"},
+        {"line": 323, "error": "NameError InvokeModelStage"},
+        {"line": 352, "error": "NameError ExecuteToolStage (docs: from strands.middleware import ExecuteToolStage, ToolResultEvent)"},
+        {"line": 434, "error": "NameError InterventionHandler (docs: from strands.interventions import Deny, InterventionHandler, Proceed; Transform also there)"},
+        {"line": 499, "error": "NameError InterventionHandler"},
+        {"line": 511, "error": "NameError InterventionHandler (Confirm)"},
+        {"line": 532, "error": "NameError via the L434 failure; HumanInTheLoop is never imported (strands.vended_interventions.hitl)"},
+        {"line": 619, "error": "ModuleNotFoundError agent_control unless agent-control-sdk is installed; AgentControlPlugin, AgentControlSteeringHandler and OpenAIModel are never imported, though the blog prints the paths"},
+        {"line": 706, "error": "ImportError: mcp 2.3.0 has streamable_http_client, not streamablehttp_client (the Builder Center source predates the rename)"}
+      ],
+      "running_blocks": "The hook blocks (L174, L214), tool stubs, @tool lookup_order, retry strategy subclass and hook, conversation managers, structured output, limits, cancel, idempotency, handle_request and OTel baggage all run. Request shapes (interruptResponse list, limits dict, cancel_signal) match the docs."
+    }
+  },
+  "top_issues": [
+    "Running-example code does not run as pasted: 9 of 27 Python blocks fail. 7 NameErrors come from imports the post says it 'could not determine', although the docs print them (strands.middleware, strands.interventions, strands.vended_interventions.hitl); the Agent Control block fails unless agent-control-sdk is installed; and the MCP import is stale (streamablehttp_client vs streamable_http_client in mcp 2.x).",
+    "Two factual slips: L48 labels the official strands-agents/harness-sdk README a third-party page. L528 presents HITL trust memory as default, but it is opt-in via enable_trust with a 't'/'trust' reply. L195 SDK_FIRST 'outermost' advice also contradicts the documented explicit-order rule (PLAUSIBLE).",
+    "Structure and style: duplicated empty H2 at L123/L126; about 12 boilerplate hedges ('쓰는 SDK 버전에서 확인해야') and writer-process sentences (L284, L313); result.metrics.get_summary() and the shared-agent history leak are still missing (human-fix checklist)."
+  ]
+}

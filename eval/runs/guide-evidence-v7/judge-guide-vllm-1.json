@@ -1,0 +1,230 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/eval-guide/guide-vllm-v7.md",
+  "judge_run": 1,
+  "sampling": "body blocks after front matter (prose paragraphs, tables, code fences, lists, images, blockquotes; headings excluded): 183 blocks; blocks 1,4,7,... (61 sampled, L13 to L654); 15 claims drawn from sampled blocks P1-P178 (L13-L643), 11 of them numbers",
+  "sources_checked": "arXiv 2309.06180 PDF (pdftotext); vLLM blog 2023-06-20 (blog.vllm.ai -> vllm.ai/blog); vLLM V1 alpha blog 2025-01-27 (used by the post but not in its Sources); vllm-project/vllm main @cb59326 (2026-11-05) sparse checkout: docs/getting_started/quickstart.md, installation/gpu.md + gpu.cuda/rocm/apple.inc.md, cpu.md + cpu.x86.inc.md, configuration/conserving_memory.md, configuration/optimization.md, design/arch_overview.md, deployment/docker.md, vllm/config/scheduler.py, cache.py, model.py, compilation.py, vllm/engine/arg_utils.py, vllm/entrypoints/llm.py, entrypoints/common/cli_args.py, entrypoints/cli/; GitHub API for issue #7155; deploybase.ai article (fetched); iotdigitaltwinplm.com article (blocked, 166 chars)",
+  "scores": {
+    "A": 8.5,
+    "B": 7.5,
+    "C": 8,
+    "D": 9,
+    "E": 8.5,
+    "F": 6.5,
+    "T1": 8.5,
+    "T2": 8.5,
+    "T3": 8.5
+  },
+  "score_evidence": {
+    "A": "Clean arc: TL;DR (L11) -> problem (L17) -> PagedAttention (L35) -> sharing (L89) -> scheduler (L135) -> preemption (L202) -> V1 processes (L239) -> install (L283) -> LLM/serve/memory/CPU/deploy -> when to choose (L621). No body H1, no skipped levels, 18 fences balanced, $$ math only. Deductions: TL;DR L13 is a ~15-sentence paragraph that previews nearly every section; '### Sources' (L662) sits as an H3 under the last H2 'when to choose' section after '- - -'.",
+    "B": "Mostly natural '입니다' prose with established English terms. Deductions: the same figure-intro frame repeats (L31 '그림에서는 ... 모습을 보면 됩니다', L43 '애니메이션에서 볼 부분은 두 가지입니다', L81 '그림에서는 ... 흐름을 보면 됩니다', L99 '그림에서 주목할 지점은', L101 '...순간을 따라가면 됩니다'); L13 '논문의 설계에서는 ... 선점합니다. 논문 설계에서 선점된 요청은 ...' -> '논문 설계에서는 블록이 바닥나면 가장 늦게 온 요청을 통째로 선점하고, CPU 스왑이나 재계산으로 복구합니다.'; L125 'V1 아키텍처 소개 글은 ... 소개합니다. V1 아키텍처 소개 글의 벤치마크에서는 ... 그 글은 ... 적고 있습니다' (source named three times in three sentences); L141 '... 이 문제를 풀고, 반복 단위 스케줄링이나 in-flight batching으로도 부릅니다' (subjectless second clause) -> '... 이 문제를 풉니다. 반복 단위 스케줄링이나 in-flight batching이라고도 합니다.'",
+    "C": "Back-references are accurate and named ('앞의 \\'블록 매니저와 블록 테이블의 역할 분담\\' 참고' L99, 'V1 프로세스 구조 절에서 본 all-reduce 비용' L615). Deductions: facts restated rather than pointed to: 24x vs HF at L13, L19, L629; 60-80% at L13, L17 heading, L25; the OS-paging analogy re-explained at L13, L33, L39, L91, L99, L123.",
+    "D": "Hard parts get worked numbers at the right moment: 7-token block walk-through table (L57), 100-token waste (L67), P+3 sharing (L105), chunked-prefill step table (L176), 800-token preemption (L227), KV budget arithmetic (L462-472, all arithmetic correct: 2*28*2*128*2=28,672 B; 18 GiB/28,672 B = 674,133; /4096 = 164.6). Minor over-explanation of the OS analogy (see C).",
+    "E": "Figures sit next to their discussion and are referred to descriptively; tables for block states (L57, L111), swap vs recompute (L216), engine args (L163), platforms (L312), trade-offs (L531), third-party benchmark (L645). Block-attention formula (L73) matches the paper. Deductions: three images hot-link a remote docs host (L41, L103, L631 vllm.ai/blog-assets/...; they resolve today, but the Strands checklist treats remote-host images as a defect); the ASCII async-scheduling sketch (L190) is labelled as an example but is decorative.",
+    "F": "Three factual defects: (1) L495-501 '서버에서는 같은 인자를 플래그로 넘깁니다' with '--max-model-len 4k', but per vllm/config/model.py '1k -> 1000, 1K -> 1024', so 4k is 4,000, not the Python block's 4096 (the post itself explains the k/K difference at L168); (2) L641-650 attributes the Triton-TRT 5210 / SGLang 4880 / vLLM 4250 / TGI 3120 table to '같은 글' = the Deploybase article, whose fetched text has no such table (the listed iotdigitaltwinplm Q2-2026 benchmark is the likely source; unverifiable, blocked); (3) L317/L323 'CPU용 vLLM은 표에 적은 명령으로 소스에서 빌드해 설치합니다' while cpu.x86.inc.md says 'Pre-built vLLM wheels for x86 with AVX512/AVX2 are available since version 0.17.0' (and L567 itself uses the vllm/vllm-openai-cpu image). Minor: L438 '고를 수 있는 값은 FLASH_ATTN과 FLASHINFER입니다' vs docs 'Some of the available backend options include'; the V1 alpha blog (L125, L262) and a 2026-06-25 Medium article (L184) are used but missing from Sources.",
+    "T1": "Install block (L293-298), offline script (L335-354), llm.chat (L366-373), serve/curl/api-key (L389-432), memory args (L484-502), CompilationConfig (L514-525), CPU docker (L559-568), GPU docker + TP (L578-611) are all real commands/flags that match the docs; all six Python blocks parse. Deduction: the 4k/4096 mismatch, and the CPU source-build cell (L317) is not a standalone command (needs a clone and the compiler/requirements steps).",
+    "T2": "Covers the topics the sources support, in a sensible order (mechanism before configuration). The CPU backend gets its own H2 (L543) of about the same weight as GPU memory tuning, which is more than a GPU-serving guide needs; production-stack (L617-619) rests only on the Introl blog.",
+    "T3": "Strong internals: block table and block engine (L45-47), block-wise attention (L71-77), COW/beam/prefix sharing (L89-133), token-budget scheduler, chunked prefill, async scheduling (L135-200), preemption and swap vs recompute with V1 behaviour (L202-237), V1 process split and TP block table sharing (L239-281), placement in a larger system and failure modes (L617-654). Design advice is mostly phrased as recommendation ('편이 맞습니다', L281, L658). Deductions: some third-party mechanism claims stated near-factually (L262 SitePoint pinned memory/DMA; L281 5-20 µs all-reduce; L512 20-40% CUDA graph latency, flagged as 'claim' only at the end)."
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "Noun-phrase claim headings throughout, e.g. L17 '메모리의 60~80%를 버리던 기존 KV 캐시 관리라는 병목', L202 '블록이 바닥날 때 늦게 온 요청을 통째로 내보내는 선점과 재계산 복구'; no 다-form headings."
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Qwen/Qwen2.5-1.5B-Instruct runs through block waste (L87), chunked prefill (L174), preemption (L227), V1 processes (L245), TP (L272), LLM/serve/memory/CPU/docker code (L346-610)."
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "PagedAttention: problem L21-31 -> design vs contiguous allocation L37-47 -> formula L73 -> 7-token example L51-63 and 100-token example L67; scheduler: token budget L157 -> chunked prefill table L176-182."
+    },
+    "facts_said_once": {
+      "status": "partly met",
+      "evidence": "24x at L13/L19/L629, 60-80% at L13/L17/L25, OS analogy at L13/L33/L39/L91/L99/L123."
+    },
+    "numbers_with_scope": {
+      "status": "met",
+      "evidence": "L629 'A10G의 LLaMA-7B와 A100 40GB의 LLaMA-13B ... ShareGPT'; L153 'vLLM v0.18.0, Llama 3.3 70B FP8, H100 SXM5 80GB'; L643 'Llama 70B 4-bit GPTQ를 8x H200 SXM에서 기본 설정'; assumed numbers labelled (L174, L227, L460)."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "4k vs 4096 (L500), benchmark table attributed to the wrong article (L643), CPU install implied source-only (L323)."
+    },
+    "writer_assessment_at_end": {
+      "status": "met",
+      "evidence": "L658 '이 글의 판단은 다음과 같습니다...' with when to use vLLM, Ollama, TensorRT, SGLang and 'measure on your own distribution'."
+    },
+    "length_fitted": {
+      "status": "partly met",
+      "evidence": "~43k characters; hard parts are long for good reason, but the CPU backend H2 (L543-568) and the long TL;DR (L13-15) add bulk."
+    },
+    "type_specific_shape": {
+      "status": "met",
+      "evidence": "Opens with TL;DR (L11) and the problem (L17); architecture and mechanisms (L35-281) precede install (L283) and configuration; non-official design sources included; closes with when to choose and failure modes (L621-658)."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "'입니다' register and Korean headings kept; figure-intro frame repeated (L31, L43, L81, L99, L101); source name repeated (L125)."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "unsupported": 1,
+    "wrong": 1,
+    "examples": [
+      {
+        "para": 1,
+        "line": 13,
+        "number": true,
+        "claim": "Waste under 4%; existing systems waste 60-80%; up to 24x throughput vs HF Transformers without model changes",
+        "verdict": "supported",
+        "source": "vLLM blog: 'a mere waste of under 4%'; 'existing systems waste 60% – 80% of memory due to fragmentation and over-reservation'; 'up to 24x higher throughput than HuggingFace Transformers, without requiring any model architecture changes'"
+      },
+      {
+        "para": 19,
+        "line": 57,
+        "number": true,
+        "claim": "Block size 4, 7-token prompt: logical 0,1 -> physical 7,1 (4/4, 3/4); decode 1 fills block 1; decode 2 allocates physical block 3",
+        "verdict": "supported",
+        "source": "paper §4.3: 'maps the first 2 logical KV blocks (0 and 1) to 2 physical KV blocks (7 and 1) ... first 4 tokens in logical block 0 and the following 3 tokens in logical block 1 ... allocates a new physical block (physical block 3)'"
+      },
+      {
+        "para": 31,
+        "line": 95,
+        "number": true,
+        "claim": "Parallel sampling: both sequences' logical blocks 0 and 1 map to physical 7 and 1, reference counts both 2",
+        "verdict": "supported",
+        "source": "paper §4.4: 'the logical block 0 and 1 of both sequences are mapped to physical blocks 7 and 1 ... the reference counts for physical blocks 7 and 1 are both 2'"
+      },
+      {
+        "para": 37,
+        "line": 109,
+        "number": true,
+        "claim": "Beam k=4: each candidate used 4 full blocks, all share block 0, candidate 3 diverges from the second block, 0-2 share first 3 blocks",
+        "verdict": "supported",
+        "source": "paper §4.4: 'with k = 4 ... each candidate sequence has used 4 full logical blocks. All beam candidates share the first block 0 ... Candidate 3 digresses from others from the second block. Candidates 0-2 share the first 3 blocks'"
+      },
+      {
+        "para": 55,
+        "line": 163,
+        "number": true,
+        "claim": "--max-num-batched-tokens / --max-num-seqs limit tokens / sequences per iteration; defaults mainly for testing, set in EngineArgs.create_engine_config; --max-num-batched-tokens accepts 1k/1K/25.6k",
+        "verdict": "supported",
+        "source": "vllm/config/scheduler.py docstrings ('The default value here is mainly for convenience when testing. In real usage, this should be set in EngineArgs.create_engine_config'); arg_utils.py human_readable_int_args includes 'max_num_batched_tokens'"
+      },
+      {
+        "para": 64,
+        "line": 198,
+        "number": false,
+        "claim": "Async scheduling is disabled with --no-async-scheduling and avoids GPU utilization gaps",
+        "verdict": "supported",
+        "source": "scheduler.py: 'async_scheduling: bool | None ... If set to False, disable async scheduling. Async scheduling helps to avoid gaps in GPU utilization'; arg_utils.py uses argparse.BooleanOptionalAction for bool fields"
+      },
+      {
+        "para": 70,
+        "line": 216,
+        "number": false,
+        "claim": "Swap copies blocks to CPU and back, cost set by CPU-GPU bandwidth, worse with small blocks; recompute is constant across block sizes",
+        "verdict": "supported",
+        "source": "paper §4.5/§7.3: 'we copy evicted blocks to the CPU memory'; 'swapping incurs excessive overhead with small block sizes ... limits the effective PCIe bandwidth ... the overhead of recomputation remains constant across different block sizes'"
+      },
+      {
+        "para": 100,
+        "line": 319,
+        "number": true,
+        "claim": "ROCm quickstart wheel supports Python 3.12, ROCm 7.0, glibc >= 2.35; GPU page requires ROCm 6.3+, MI350 7.0+",
+        "verdict": "supported",
+        "source": "quickstart.md AMD tab: 'It currently supports Python 3.12, ROCm 7.0 and glibc >= 2.35'; gpu.rocm.inc.md: 'ROCm 6.3 or above - MI350 requires ROCm 7.0 or above' (note: the same page now says pre-built wheels are for ROCm 10.0)"
+      },
+      {
+        "para": 121,
+        "line": 405,
+        "number": false,
+        "claim": "Server applies generation_config.json by default; --generation-config vllm disables it",
+        "verdict": "supported",
+        "source": "quickstart.md: 'By default, the server applies generation_config.json ... To disable this behavior, please pass --generation-config vllm'"
+      },
+      {
+        "para": 139,
+        "line": 472,
+        "number": true,
+        "claim": "28,672 B/token, 18 GiB -> ~674,000 tokens -> ~164 concurrent 4,096-token requests; 1-byte KV dtype doubles tokens",
+        "verdict": "supported",
+        "source": "Arithmetic check: 2*28*2*128*2 = 28,672; 18*2^30/28,672 = 674,133; /4096 = 164.6 (labelled as an assumed example)"
+      },
+      {
+        "para": 142,
+        "line": 480,
+        "number": true,
+        "claim": "Issue #7155 (2024) proposed limiting allocation by max_model_len and was auto-closed as not planned later that year",
+        "verdict": "supported",
+        "source": "GitHub API: state CLOSED, stateReason NOT_PLANNED, closedAt 2024-12-04"
+      },
+      {
+        "para": 145,
+        "line": 495,
+        "number": true,
+        "claim": "The server passes 'the same arguments' as the LLM(max_model_len=4096, ...) block via --max-model-len 4k",
+        "verdict": "wrong",
+        "source": "vllm/config/model.py: 'supports k/m/g/K/M/G in human-readable format ... 1k -> 1000, 1K -> 1024'; 4k = 4,000, so the flag form should be 4K or 4096"
+      },
+      {
+        "para": 172,
+        "line": 627,
+        "number": true,
+        "claim": "2-4x throughput over FasterTransformer and Orca without accuracy loss; up to 22x higher request rate vs FasterTransformer on ShareGPT",
+        "verdict": "supported",
+        "source": "paper §1: 'improves the LLM serving throughput by 2-4× ... without affecting the model accuracy at all'; §6.2: 'Compared to FasterTransformer, vLLM can sustain up to 22× higher request rates'"
+      },
+      {
+        "para": 175,
+        "line": 633,
+        "number": true,
+        "claim": "FastChat-vLLM handled up to 5x more traffic; average 30K, peak 60K requests daily",
+        "verdict": "supported",
+        "source": "vLLM blog: 'support the growing demands (up to 5x more traffic)'; 'an average of 30K requests daily and a peak of 60K' (the post calls them '처리량', but they are request counts)"
+      },
+      {
+        "para": 178,
+        "line": 643,
+        "number": true,
+        "claim": "'같은 글' (Deploybase) published an internal benchmark: Llama 70B 4-bit GPTQ on 8x H200, Triton-TRT 5210, SGLang 4880, vLLM 4250, TGI 3120 tok/s",
+        "verdict": "unsupported",
+        "source": "Fetched Deploybase text has no H200 run or these numbers (it cites ~3,500 tok/s on A100 80GB for Llama 70B); the listed iotdigitaltwinplm Q2-2026 benchmark is the likely source but blocked the fetch"
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 0,
+    "na": 0,
+    "repeated_ids": [],
+    "note": "guide-vllm has fixes: [] in human_fixes.yaml, so there are no item checks. The notes' local-run defects, applied as generic guide checks: non-existent chapter cross-references avoided (none; back-references name existing sections, L99, L615); tag remnant avoided (no '</path></name>'); entity leak avoided in body (the only entities are &#124;/&#91;/&#93; inside Sources link titles, L669-679, which render as | [ ]); unclosed fence avoided (36 fence lines, balanced); stale third-party CLI flags avoided (all flags match current docs/config; third-party sources only back concepts and numbers); install/usage-centric coverage avoided (install starts at L283 after about 250 lines of internals). Strands' remote-docs-image check would be repeated (L41, L103, L631)."
+  },
+  "extras": {
+    "architecture_first_line": 35,
+    "architecture_note": "PagedAttention block table/block engine at L35-47, scheduler at L135, V1 API server/engine core/GPU worker split at L239; all before install (L283) and configuration (L446)",
+    "non_official_sources": "7 of 17 listed (41%): DhanushKumar Medium, Introl, Spheron, SitePoint, iotdigitaltwinplm, Unsloth docs, Deploybase. Official: 6 docs.vllm.ai pages, vLLM 2023 blog, arXiv paper, GitHub arch_overview.md, GitHub issue #7155. Used but unlisted: vLLM V1 alpha blog (L125, L262), a 2026-06-25 Medium chunked-prefill article (L184)",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "closing_evidence": "L621-658: memory-bound vs compute-bound (L635-637), distributed operations outside the engine and Cascade Attention bug (L639-641), alternative-engine table (L645), writer's choice rules (L658); preemption thrash as a failure mode at L237"
+  },
+  "runnable_code": {
+    "verdict": "runs as pasted, with one value mismatch",
+    "details": [
+      "Install (L293-298) matches quickstart verbatim; `vllm download-kernels` exists (vllm/entrypoints/cli/download_kernels.py).",
+      "All six Python blocks parse; imports `from vllm import LLM, SamplingParams` and `from vllm.config import CompilationConfig` exist; `llm.chat(messages, sampling_params)` with a single conversation is accepted (llm.py: 'A sequence of conversations or a single conversation'); the llm.chat block reuses `llm`/`sampling_params` from the previous block, as the post says.",
+      "`vllm serve ... --api-key key-2025-a key-2025-b` is valid (api_key: list[str]); the curl body matches the quickstart and the Bearer header matches the key.",
+      "`--max-model-len 4k` sets 4,000 tokens, not the 4096 the Python block and the L472 arithmetic use (should be 4K).",
+      "GPU docker commands (L578-611) follow the docs' pre-built image example (`--model` after the image, engine args appended); CPU docker (L559-568) uses the documented image tag; `--tensor-parallel-size 2` is valid for Qwen2.5-1.5B (12 heads, 2 KV heads).",
+      "CPU install cell `VLLM_TARGET_DEVICE=cpu uv pip install . --no-build-isolation` (L317) needs a cloned repo plus the compiler/requirements steps; not runnable as pasted.",
+      "Not executed: no model download or GPU, per instructions."
+    ]
+  },
+  "top_issues": [
+    "`--max-model-len 4k` is presented as the same setting as max_model_len=4096, but 4k = 4,000 (L495-501); use 4K.",
+    "The Triton-TRT/SGLang/vLLM/TGI throughput table is attributed to the Deploybase article, which has no such numbers (L643-650).",
+    "The CPU install path is given as source build only (L317, L323), although x86 has pre-built wheels since 0.17.0; the V1 blog and a Medium article are used without being in Sources, and figure-intro sentences and headline numbers (24x, 60-80%) repeat."
+  ]
+}

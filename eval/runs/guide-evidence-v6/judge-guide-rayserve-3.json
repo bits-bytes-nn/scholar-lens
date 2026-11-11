@@ -1,0 +1,130 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v6.md",
+  "judge_run": 3,
+  "sampling": "body blocks after front matter (prose paragraphs, tables, code fences, lists; headings excluded): 184 blocks; blocks 3,6,9,... (61 sampled, L19 to L971); 15 claims drawn from sampled blocks P30-P177 (L128-L948), 8 of them numbers",
+  "scores": {"A": 8.5, "B": 7.5, "C": 7.5, "D": 8.5, "E": 8.5, "F": 7.5, "T1": 9, "T2": 8.5, "T3": 9},
+  "score_evidence": {
+    "A": [
+      "Arc: TL;DR (L11) -> problem (L17) -> four units (L50) -> controller/proxy/replica request path (L111) -> composition (L174) -> fault tolerance (L294) -> hands-on (L326) -> FastAPI/streaming (L441) -> config file (L569) -> autoscaling/backpressure (L698) -> KubeRay (L769) -> observability (L794) -> Ray Data LLM (L872) -> when to choose (L932)",
+      "Markup clean: no body H1, fences balanced, $$ only (L439, L696), use_math true, description 135 chars opening with 'Ray Serve', two-level categories, no author key",
+      "Same install block twice (L72-74 and L330-332)",
+      "text_ml.py is defined three ways: the load_t5/generate version at L180-218 ('text_ml.py에서 두 디플로이먼트를 합성하는 부분'), a fresh standalone file at L336-398 that 'does not use load_t5()', and a replacement Translator at L577-604"
+    ],
+    "B": [
+      "Repeated table-intro formula: L117 '각 액터의 역할을 정리하면 아래 표와 같습니다.', L283 '...정리하면 아래 표와 같습니다.', L310 '장애 유형별로 정리하면 아래 표와 같습니다.', L958 '...아래 표와 같습니다.' -> vary them or drop them ('액터별 역할:' is not allowed, so e.g. '액터마다 맡는 일이 다릅니다.')",
+      "L569 heading calque '단일 진실 공급원인 Serve 설정 파일' -> '클러스터 설정을 하나로 모은 Serve 설정 파일'",
+      "L48 restates the section: '정리하면 Ray Serve는 ... 서빙 라이브러리입니다. ... 서빙 계층입니다.' (two definitions in a row)",
+      "L306 double connective: '따라서 ... 복구 대상이 아닙니다. 그래서 클라이언트에는 ...' -> '... 복구되지 않으므로 클라이언트에 재시도 로직을 둡니다.'",
+      "L790 unclear sentence: '검사 간격을 빼고도 10초 타임아웃이 세 번 연달아 지나가야 합니다' -> '검사 주기(기본 10초)마다 10초 타임아웃이 세 번 연달아 나야 재시작됩니다'",
+      "'수 있습니다' 38 times in 55.7k characters; register otherwise consistent (no ~한다 sentences)"
+    ],
+    "C": [
+      "Contradictory proxy default: L122 and L128 say 'HTTP 프록시는 기본적으로 헤드 노드에 하나만 뜹니다' (architecture page), while L642 says proxy_location '기본값 EveryNode' (config page). The post never reconciles them",
+      "L493 'serve run serve_quickstart:translator_app': the FastAPI block (L447) is never given a file name, so the module serve_quickstart is undefined for the reader",
+      "L180 presents load_t5/generate as part of text_ml.py, then L336 rebuilds text_ml.py without them; L575 then says to replace the Translator 'in text_ml.py', but the replacement block (L578-581) has its own import header, so it is unclear whether the Request/DeploymentHandle imports stay",
+      "Cross-references are otherwise accurate (L235 -> table L230, L308 -> L126, L928 -> L878)"
+    ],
+    "D": [
+      "Power of two choices gets a worked table with replica loads (L160-168)",
+      "Autoscaling target maths is applied to the example (L719-725) and queue-limit multiplication per caller (L737)",
+      "LB health-check vs draining timing worked through (L792)",
+      "Fault-tolerance content is explained three times (L126, L308, L731), which pads easy parts"
+    ],
+    "E": [
+      "Good tables: units (L104), actors (L119), failure matrix (L312), handle values (L285), auto defaults (L708), dashboard views (L817), choice table (L960)",
+      "ASCII request-path diagrams (L27, L140) placed where discussed; no official architecture figure",
+      "The 100KiB fact is given as prose (L172) and again as a table (L230-233)"
+    ],
+    "F": [
+      "Wrong: L684 '디플로이먼트 상태는 HEALTHY, UNHEALTHY, UPDATING 셋입니다' - monitoring docs and the installed enum list six (UPDATING, HEALTHY, UNHEALTHY, DEPLOY_FAILED, UPSCALING, DOWNSCALING); the application status list omits UNHEALTHY",
+      "Unsupported: L783 '이 흐름과 맞물리는 Serve 쪽 환경 변수는 두 개' - the config page lists four proxy env vars; RAY_SERVE_PROXY_HEALTH_CHECK_PERIOD_S (default 10.0) directly sets the restart timing L790 describes, yet the post leaves it unnamed",
+      "Unreconciled defaults (L122/L128 vs L642): each is backed by a docs page, but the reader gets two defaults",
+      "L166 row 3 (both sampled candidates full -> '어느 쪽에도 보내지 않음' while C has room) is the writer's illustration, not documented router behaviour; it is labelled as an example (L160)"
+    ],
+    "T1": [
+      "Every running-example block ran as pasted on Ray 2.60.0 (see runnable_code); YAML validates against ServeDeploySchema; real flags and options (serve build -o, serve deploy, num_replicas auto, max_queued_requests, backpressure_config)",
+      "The only gap is that the FastAPI file is never named (L493)"
+    ],
+    "T2": [
+      "Covers the getting-started, key-concepts, architecture, composition, HTTP, config, autoscaling, KubeRay and monitoring pages in learning order",
+      "Serve LLM observability and the Ray Data LLM section (L829-930) are supported by the sources but peripheral to a getting-started guide and cannot be run without a GPU"
+    ],
+    "T3": [
+      "Internals: request lifecycle (L130-168), object store threshold (L170), hierarchical fault tolerance with what survives (L294-324), Serve vs Ray autoscaler (L727), per-caller queue limits (L733-737), LB/draining interplay (L781-792)",
+      "Third-party views are named with scope and caveats (L948 '날짜 없음, 벤치마크 없는 의견', L950)"
+    ]
+  },
+  "principles": {
+    "claim_headings": "met - noun-phrase claim headings throughout (L111, L156, L294, L698); a few topic headings remain (L798 '대시보드 접속 경로', L956 '상황별 선택')",
+    "running_example": "met - Summarizer->Translator text_ml app from L25 to L969, including config (L614), autoscaling (L741), draining (L792) and Grafana filtering (L827)",
+    "mechanism_design_formula_example": "met - routing (L156-168), autoscaling target (L717-725), backpressure (L733-763)",
+    "facts_once": "not met - 100KiB twice (L172, L228-233); controller death pauses autoscaling three times (L126, L308, L731); install command twice (L73, L331); max_replicas=1 caveat twice (L715, L954); Spheron PENDING twice (L731, L954); host 0.0.0.0 twice (L643, L777); http_options immutability (L15, L648)",
+    "numbers_with_scope": "met - version-scoped numbers ('Ray 2.59.0 기준' L228, L706; 'Ray 2.51부터' L843); KiB units; example values labelled (L160, L739)",
+    "nothing_invented": "partly met - deployment status count wrong (L684); 'two' env vars (L783); illustrative router row (L166) labelled as an example",
+    "own_assessment_at_end": "met - L958 '이 글의 판단으로는 ...' plus choice table and the text_ml scaling caveat (L969)",
+    "length_fitted": "partly met - 55.7k characters; LLM/Ray Data sections (L829-930) and repeated fault-tolerance text add length without adding difficulty",
+    "type_specific_shape": "met - TL;DR first (L11), problem (L17), architecture before config (L50/L111 before L569), non-official sources included, closes with when to choose and failure modes (L932-969)",
+    "korean_style": "partly met - repeated '정리하면 아래 표와 같습니다' table intros (L117, L283, L310), calque heading (L569), '수 있습니다' 38 times"
+  },
+  "claims": {
+    "checked": 15, "unsupported": 1, "wrong": 1,
+    "examples": [
+      {"line": 128, "claim": "HTTP proxy: one on the head node by default; proxy_location in serve.start() or config for per-node proxies", "number": true, "verdict": "supported", "source": "architecture.html: 'By default there is one HTTP proxy actor on the head node ... via the proxy_location field inside serve.start() or the config file.' (conflicts with production-guide/config.html 'EveryNode (default)', which the post states at L642)"},
+      {"line": 158, "claim": "power of two choices subject to max_ongoing_requests; handles poll the controller for new replicas", "verdict": "supported", "source": "architecture.html: 'Each DeploymentHandle continuously polls the controller ... power of two choices scheduling strategy, subject to the constraint that no replica is handling more than max_ongoing_requests'"},
+      {"line": 232, "claim": "request objects of 100KiB+ go via the object store with zero-copy read; smaller ones via network call", "number": true, "verdict": "supported", "source": "architecture.html: 'Larger request objects (100KiB+) are written to the object store and the replica can read them via zero-copy read.'"},
+      {"line": 306, "claim": "controller data checkpointed to GCS on head node; transient router/replica queues lost on machine failure", "verdict": "supported", "source": "architecture.html: 'All data in the Controller ... is checkpointed to the Ray Global Control Store (GCS) on the head node. Transient data ... will be lost'"},
+      {"line": 488, "claim": "route_prefix default '/', must start with '/', cannot end with '/' unless it is '/', no wildcards; FastAPI routes layer on top", "verdict": "supported", "source": "http-guide.html 'routes ... layered on top of the route prefix'; schema.py _route_prefix_format rules 1-3"},
+      {"line": 652, "claim": "serve run blocks and streams logs, Ctrl-C shuts down Serve; with a YAML, unchanged apps are not updated", "verdict": "supported", "source": "serve run --help (Ray 2.60.0): 'If passing a YAML config, existing applications with no code changes will not be updated. By default, this will block ...'"},
+      {"line": 684, "claim": "application status is one of NOT_STARTED/DEPLOYING/RUNNING/DEPLOY_FAILED/DELETING; deployment status is three values HEALTHY/UNHEALTHY/UPDATING", "number": true, "verdict": "wrong", "source": "monitoring.html: 'A Serve deployment has six possible statuses' (UPDATING, HEALTHY, UNHEALTHY, DEPLOY_FAILED, UPSCALING, DOWNSCALING); schema ApplicationStatus also has UNHEALTHY"},
+      {"line": 684, "claim": "serve deploy --working-dir must be a remote .zip URI, not a local dir", "verdict": "supported", "source": "serve deploy --help: 'This must be a remote URI to a .zip file (e.g., S3 bucket) ... Ignored when deploying from a config file.' (the post's context is a config-file deploy, where the flag is ignored)"},
+      {"line": 710, "claim": "num_replicas='auto' equals max_ongoing_requests 5, target_ongoing_requests 2, min_replicas 1, max_replicas 100", "number": true, "verdict": "supported", "source": "autoscaling-guide.html 'Setting num_replicas=\"auto\" is equivalent to ...' block"},
+      {"line": 763, "claim": "over-limit HTTP requests get 503 by default; handle calls raise BackPressureError", "number": true, "verdict": "supported", "source": "configure-serve-deployment.html: 'raise a BackPressureError (for handles) or return an HTTP 503 status code by default (configurable via backpressure_config)'"},
+      {"line": 783, "claim": "two Serve env vars govern proxy restart and draining", "number": true, "verdict": "unsupported", "source": "production-guide/config.html lists four proxy env vars (HEALTH_CHECK_PERIOD_S 10.0, HEALTH_CHECK_TIMEOUT_S 10.0, READY_CHECK_TIMEOUT_S 5.0, MIN_DRAINING_PERIOD_S 30.0); the period var also sets the restart timing"},
+      {"line": 792, "claim": "during draining the proxy fails LB health checks; ongoing requests finish; min draining 30 s", "number": true, "verdict": "supported", "source": "config.html RAY_SERVE_PROXY_MIN_DRAINING_PERIOD_S: '(1) the proxy fails health checks ... (2) ongoing requests complete normally ... Default is 30.0.'"},
+      {"line": 870, "claim": "Serve LLM usage data list (architecture, JSON mode, LoRA count, autoscaling min/max, TP size, initial replicas, GPU type/count); opt out via usage stats", "verdict": "supported", "source": "serve/llm/user-guides/observability.html 'Usage data collection'"},
+      {"line": 880, "claim": "install ray[data, llm]>=2.53.0; quickstart needs a GPU", "number": true, "verdict": "supported", "source": "data/working-with-llms.html: 'pip install -U \"ray[data, llm]>=2.53.0\"', 'This quickstart requires a GPU as vLLM is GPU-accelerated.'"},
+      {"line": 948, "claim": "Suhas Bhairav: Triton for GPU-centric inference; Ray Serve for dynamic routing, actor-style state, data processing; less out-of-the-box GPU batching; hybrid Triton+Ray", "verdict": "supported", "source": "suhasbhairav.com post: 'Ray Serve shines when ... dynamic routing, actor-style state, and close coupling with data processing'; table 'depends on Python worker scheduling, less out-of-the-box GPU batching'; 'hybrid approach'"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0, "avoided": 2, "na": 0, "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "verdict": "avoided", "evidence": "No empty-text or docs-relative links or images anywhere; the request path is drawn as text diagrams (L27-34, L140-152), and all Sources links are absolute (L974-992). The post has no official architecture image."},
+      {"id": "proxy-env-ray-start-unsupported", "verdict": "avoided", "evidence": "The env-var section (L783-792) gives only names, defaults and behaviour; no claim about exporting before `ray start` or setting them in a specific process."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 50,
+    "architecture_note": "four units at L50; controller/proxy/replica actors and request lifecycle at L111, before the hands-on (L326) and config (L569) sections",
+    "non_official_sources": "3 of 19 (15.8%): Spheron, Suhas Bhairav, The Holy Grail ch. 45",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "closing_evidence": "L932-969: strengths, gaps (no model optimisation, no lifecycle management), third-party boundaries, '운영에서 터지는 지점' (GPU nodes not provisioned, max_replicas=1 trap, cluster failure), choice table"
+  },
+  "runnable_code": {
+    "environment": "uv venv, ray[serve] 2.60.0, transformers 5.22.1, torch 2.15.0, Python 3.12; private ray.init(address='local', _temp_dir=/tmp/judge-gv6-ray3/ray), HTTP port 18473; t5-small downloaded into a temp HF_HOME; no paid model",
+    "verdict": "runs as pasted",
+    "results": [
+      "MyFirstDeployment (L79-93): assert passed",
+      "text_ml.py (L339-360 + L370-397), serve.run then requests.post(json=english_text): 200 'C'était le meilleur des temps, c'était le pire des temps,'",
+      "load_t5/generate composed version (L181-217): 200, same output",
+      "FastAPI Translator (L448-481) with params={'text': ...} and response.json(): 200 full French translation; posting json= body gives 422 'missing query text', which matches the post's warning at L445",
+      "Streamer/Caller (L252-278) via handle.options(stream=True): [0,1,2,3,4]",
+      "StreamingTranslator FastAPI (L520-545) GET /stream: 200 'hello big world '",
+      "reconfigure Translator (L578-603) with user_config french then german: French then 'es war die beste Zeit, es war die schlimmste Zeit,'",
+      "serve_config.yaml (L615-635) and the autoscaling deployments block (L742-760) validate against ServeDeploySchema; int num_replicas plus autoscaling_config is rejected as L715 says",
+      "serve build text_ml:app: app name app1, runtime_env {}, grpc_options and logging_config emitted, as L612 describes (the post silently drops logging_config too)"
+    ],
+    "not_run": "Serve LLM and Ray Data LLM blocks (L851-926) need vLLM and a GPU; the serve run/serve deploy CLI was not run to avoid attaching to other judges' clusters (the Python API path was used instead)",
+    "issues": [
+      "L493 runs serve_quickstart:translator_app, but the FastAPI block is never named serve_quickstart.py",
+      "L575-581 replacement Translator brings its own import header; whether the Request/DeploymentHandle imports the Summarizer needs stay is left to the reader"
+    ]
+  },
+  "top_issues": [
+    "Wrong status lists at L684: deployments have six statuses, not three; the application list omits UNHEALTHY",
+    "Facts repeated across sections (100KiB L172/L230, controller-death autoscaling pause L126/L308/L731, install L73/L331, max_replicas=1 L715/L954, Spheron PENDING L731/L954), plus contradictory proxy defaults (head-node-only at L122/L128 vs EveryNode at L642)",
+    "Proxy env vars cut to 'two' (L783) while the timing at L790 depends on the unnamed HEALTH_CHECK_PERIOD_S; text_ml.py defined three ways and the FastAPI file never named (L493)"
+  ]
+}

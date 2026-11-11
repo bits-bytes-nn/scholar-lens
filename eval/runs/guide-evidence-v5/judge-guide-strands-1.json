@@ -1,0 +1,95 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/eval-guide/guide-strands-v5.md",
+  "judge_run": 1,
+  "sdk_checked": "strands-agents 1.64.0 (temp venv, scripted fake model, no paid model calls)",
+  "scores": {"A": 8, "B": 7.5, "C": 6, "D": 8, "E": 8, "F": 6, "T1": 6, "T2": 8.5, "T3": 8.5},
+  "score_evidence": {
+    "A": "TL;DR, then problem, loop, hooks, middleware, context, structured output, interventions, steering, assembly, retries, limits, OTEL, choice. Deductions: a sentence heading at L158 ('### 읽기 전용이 기본이고, 루프를 움직이는 필드는 일부입니다'); build_agent() is redefined four times (L114, L544, L816, L851) and each version drops the previous one's settings; 1,140 lines.",
+    "B": "Mostly natural Korean in the 입니다 register. Deductions: a repeated figure-intro formula ('예를 들어 루프의 재귀 구조를 상자와 화살표로 옮기면 아래 그림이 됩니다' L49, '예를 들어 훅까지 포함한 한 단계의 흐름을 상자로 그리면 다음 그림처럼 됩니다' L240, '예를 들어 다음 표는' L499) -> drop '예를 들어' and vary them; an internal source id leaks into the prose: '영상 튜토리얼(W8) 저자는' L1109.",
+    "C": "L653 '앞서 구조화 출력에서 다룬 환불 요청 \"Please refund order 4512\"' points to a request that never appears (every earlier prompt is '주문 1234 환불해 줘'). L685 says the earlier build_agent() already had '턴·토큰 한도, 스로틀링 재시도, 슬라이딩 윈도 대화 관리자, 훅', but no build_agent() has limits (those are passed per call at L1004) or a conversation manager (L331 is a standalone Agent). L750 '앞서 붙인 데드라인 취소' refers to cancellation, which only appears at L906.",
+    "D": "Hard parts get worked examples: the attempt-count table (L430), the backoff table (L741), the steering counter table (L655), the compression ratio (L351). Easy facts are repeated, for example tool failure returns an error result (L77, L81, L175, L369, L874).",
+    "E": "Good comparison tables (error routing L85, writable fields L162, stop reasons L892, cancel checkpoints L910, retry means L866) and ASCII flow diagrams. The formula at L425 adds little. No figures (only ASCII).",
+    "F": "All 15 sampled claims are supported. Wrong statements outside the sample: (1) L729 '검증을 통과한 RefundDecision은 result.structured_output에 담깁니다': with the post's Cedar policy, the structured-output tool 'RefundDecision' is denied ('DENIED: Access denied by Cedar policy'), so the call ends limit_structured_output_attempts with no output (reproduced). (2) L509 'handle_refund는 바꿀 필요가 없습니다': OrderToolAuth's allow-list {lookup_order, send_email} denies 'RefundDecision' ('DENIED: Tool RefundDecision is not allowed'), so handle_refund always returns None (reproduced). (3) The L685 recap describes build_agent() contents that do not exist. (4) The model id 'global.anthropic.claude-opus-5-20260301-v1:0' (L117 and others) appears in no fetched docs page (unverified).",
+    "T1": "A lot of real code with correct kwargs (limits, cancel_signal, invocation_state, interruptResponse). But there is no install command anywhere (and Cedar needs the strands-agents[cedar] extra). OrderIdSteering lacks the required 'name' and raises TypeError, so every agent built after L645 fails. The structured-output decision is blocked by the post's own authorization layers.",
+    "T2": "Covers the topics the sources support (agent loop, hooks, middleware, conversation management, structured output, interventions, steering, HITL/Cedar, retries, lifecycle controls) in a sensible order, and flags inconsistencies between docs pages (max_delay 128 vs 240 at L752, middleware removal at L301, the Deny escalation contradiction at L493).",
+    "T3": "Explains internals and why they are designed that way: hook order and reversed After callbacks (L154-156), hooks outside the middleware chain (L305), best-effort proactive compression (L353), the schema-as-tool design (L365), the decision-precedence rationale (L467), retry nesting with middleware (L864), deployment shapes and OTEL (L1047-1084), failure modes (L1105). The trade-offs read as recommendations."
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Most H2/H3 are claim noun phrases; L158 is a sentence ('...일부입니다'); L1090 '### 고르는 기준' is a topic name."},
+    "running_example": {"status": "partly met", "evidence": "An order-support agent runs throughout, but continuity breaks: the ghost '4512' request (L653), the false recap (L685), build_agent redefined four times."},
+    "mechanism_design_code_example": {"status": "met", "evidence": "For example, proactive compression: mechanism L345 -> formula L347 -> numeric example L351 -> failure semantics L353."},
+    "facts_said_once": {"status": "not met", "evidence": "aux_model is explained at L17, L95 and L671; 'Guide retry has no cap' at L493, L618 and L1107; the interruptResponse list at L556 and L1027; stateless agents cannot resume interrupts at L1027 and L1111."},
+    "numbers_with_scope_unit": {"status": "met", "evidence": "Backoff table in seconds (L741); HookOrder values (L154); the 0.7 threshold as a ratio (L329)."},
+    "nothing_invented": {"status": "partly met", "evidence": "Writer's examples are labelled ('예시', '가정'), but the Bedrock model id is not in the docs, and the L729 and L509 behaviour claims are false in practice."},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L1113 '이 글의 판단으로는 ...'"},
+    "length_fitted": {"status": "partly met", "evidence": "About 38.6k characters of prose plus 17 code blocks; repeated facts inflate it."},
+    "type_shape": {"status": "met", "evidence": "Opens with TL;DR and the problem (L11, L21-33), the loop architecture at L41 before configuration detail, closes with when to choose it and failure modes (L1086-1113), includes non-official sources."},
+    "korean_style": {"status": "partly met", "evidence": "Consistent 입니다 register; repeated '예를 들어 ... 그림' intros (L49, L240, L499); the 'W8' leak (L1109)."}
+  },
+  "claims": {
+    "checked": 15, "supported": 15, "unsupported": 0, "wrong": 0, "unverifiable": 0, "numeric": 8,
+    "sampling": "Body paragraphs (blank-line blocks, headings excluded, code/table blocks counted) 1,4,7,...; one claim taken from claim-bearing sampled paragraphs; C13 is taken from the paragraph adjacent to sampled P145.",
+    "examples": [
+      {"id": "C1", "line": 154, "claim": "HookOrder.SDK_FIRST -100, DEFAULT 0, SDK_LAST 100; API reference also has MODEL_ROUTING 50; not enforced bounds", "verdict": "supported", "source": "hooks page: 'HookOrder.SDK_FIRST (-100) ... DEFAULT (0) ... SDK_LAST (100) ... These are not enforced bounds'; SDK HookOrder.MODEL_ROUTING=50"},
+      {"id": "C2", "line": 162, "claim": "writable fields table (messages None from structured_output, AfterModelCallEvent.retry, cancel, cancel_tool, selected_tool, tool_use, result, retry, end_turn, resume)", "verdict": "supported", "source": "hooks-events 'Event Properties' Python list"},
+      {"id": "C3", "line": 179, "claim": "retry=True discards the result and reinvokes with the same tool_use_id; ToolStreamEvent from discarded attempts already emitted", "verdict": "supported", "source": "hooks page Tool Call Retry"},
+      {"id": "C4", "line": 323, "claim": "text truncated head+tail with <truncated chars=\"N\"/>; status and error preserved; on by default", "verdict": "supported", "source": "conversation-management: 'Text payloads keep their head and tail, separated by a <truncated chars=\"N\"/> marker... original status and error fields are preserved'"},
+      {"id": "C5", "line": 329, "claim": "proactive_compression True = default threshold; dict compression_threshold ratio 0-1; without it only reactive recovery", "verdict": "supported", "source": "conversation-management: 'Use True for the default 0.7 threshold, or pass a dict with a custom compression_threshold ratio between 0 and 1'"},
+      {"id": "C6", "line": 351, "claim": "projected/limit >= threshold check before every model call; 150,000/200,000 = 0.75 >= 0.7 triggers compression", "verdict": "supported", "source": "conversation-management: 'if projectedInputTokens / contextWindowLimit >= compressionThreshold: reduce()'; arithmetic correct"},
+      {"id": "C7", "line": 359, "claim": "context_manager False disables all context management; any non-False value ignores conversation_manager; default None -> SlidingWindowConversationManager", "verdict": "supported", "source": "Agent.__init__ docstring (API reference)"},
+      {"id": "C8", "line": 414, "claim": "Python adds 'You must format the previous response as structured output.'; structured_output_prompt overrides, call value wins; TS changes only tool choice", "verdict": "supported", "source": "structured-output-behavior 'Forced tool call'"},
+      {"id": "C9", "line": 430, "claim": "attempt counting: validation-failed tool call and failed forced retry each count; other tools before the forced retry do not; limit 3 stops before next model call with limit_structured_output_attempts", "verdict": "supported", "source": "structured-output-behavior 'Limit attempts'"},
+      {"id": "C10", "line": 556, "claim": "Confirm only on before_tool_call; with response no pause; default evaluate accepts True, 'y', 'yes' case-insensitive; resuming with a plain string raises TypeError", "verdict": "supported", "source": "interventions 'Confirm Action'; hooks page 'Passing a plain string raises a TypeError'"},
+      {"id": "C11", "line": 673, "claim": "HITL: y/yes approves this call; t/trust approves later calls while the agent exists; default classifier is LLM-as-judge on aux model if set", "verdict": "supported", "source": "approve-before-acting"},
+      {"id": "C12", "line": 739, "claim": "default ModelRetryStrategy retries throttling up to 5 times (6 attempts), first delay 4 s, doubling", "verdict": "supported", "source": "retry-strategies: 'retry throttling errors up to 5 times (6 total attempts) with exponential backoff starting at 4 seconds'; SDK signature max_attempts=6, initial_delay=4"},
+      {"id": "C13", "line": 882, "claim": "limits keys turns/output/total tokens/structured_output_attempts; positive ints; unknown key or non-positive value -> TypeError; cache read/write tokens count in full on Bedrock/Anthropic/OpenAI/Gemini", "verdict": "supported", "source": "lifecycle-controls + agent-loop; TypeError reproduced in SDK 1.64.0"},
+      {"id": "C14", "line": 910, "claim": "Python cancellation at four checkpoints: model streaming, before tool, during MCP tool, after tool", "verdict": "supported", "source": "agent-loop: 'The agent checks for cancellation at four checkpoints'"},
+      {"id": "C15", "line": 1094, "claim": "RockB (2026-06-12) calls Strands a production-oriented Python SDK; Graph/Swarm/Workflow chosen by control needs, determinism, cycles, parallelism, error handling; author picks LangGraph when the graph is the control plane", "verdict": "supported", "source": "RockB post, 'June 12, 2026', section 'Why Choose Strands Agents...' and 'What makes Strands different from LangGraph?'"}
+    ],
+    "outside_sample_errors": [
+      {"line": 729, "claim": "RefundDecision passing validation lands in result.structured_output under the Cedar-guarded agent", "verdict": "wrong in practice", "evidence": "Cedar default-deny blocks the structured output tool 'RefundDecision' -> stop_reason limit_structured_output_attempts, structured_output None (reproduced with a fake model, alice and bob)"},
+      {"line": 509, "claim": "handle_refund needs no change after adding interventions", "verdict": "wrong in practice", "evidence": "OrderToolAuth denies 'RefundDecision' -> handle_refund always returns None (reproduced)"},
+      {"line": 685, "claim": "build_agent() earlier held turn/token limits, throttling retry, sliding-window manager, hooks", "verdict": "wrong (internal)", "evidence": "no build_agent() definition contains limits or conversation_manager"},
+      {"line": 117, "claim": "model id global.anthropic.claude-opus-5-20260301-v1:0", "verdict": "unverifiable", "evidence": "not in any fetched docs page; SDK default is global.anthropic.claude-sonnet-4-6"}
+    ]
+  },
+  "checklist": {
+    "repeated": 3, "avoided": 1, "na": 1,
+    "repeated_ids": ["shared-agent-throw-scope", "shared-agent-history-leak", "result-fields-incomplete"],
+    "details": [
+      {"id": "loop-diagram-remote", "status": "avoided", "evidence": "No remote image links; the loop is an ASCII diagram (L51-61). No local /assets/ image either."},
+      {"id": "shared-agent-throw-scope", "status": "repeated", "evidence": "L938 '한 인스턴스에 호출이 겹치면 ... 기본 모드 THROW는 겹친 호출에 ConcurrencyException을 던집니다': not tied to invoke_async, and nothing says sync calls in async handlers block or serialize instead of raising (the statement is docs-consistent but misses the fix)."},
+      {"id": "shared-agent-history-leak", "status": "repeated", "evidence": "Per-request agents are recommended (L944) for concurrency reasons only; the post never says a shared agent carries the previous request's conversation into the next, and invoke_async never appears."},
+      {"id": "result-fields-incomplete", "status": "repeated", "evidence": "Result handling prints stop_reason and structured_output (L726, L1024); metrics.get_summary() never appears."},
+      {"id": "multi-agent-subject", "status": "n/a", "evidence": "No multi-agent execution-unit sentence in the post."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 41,
+    "architecture_note": "Agent-loop mechanics at L41-89, before hooks and configuration detail; the deployment architecture is late (L1073).",
+    "sources_total": 22,
+    "sources_non_official": 8,
+    "non_official_share": 0.36,
+    "non_official_list": ["AWS ML blog deep dive", "dev.to", "RockB", "LinkedIn deep dive", "Medium (sukul)", "AWS Open Source blog", "AWS Builder Center", "Medium (Posoldova)"],
+    "opens_with_problem": true,
+    "closes_with_choice_and_failure_modes": true,
+    "install_command_present": false,
+    "broken_links": "none found (Medium returns 403 to curl only)"
+  },
+  "runnable_code": {
+    "verdict": "not runnable as pasted",
+    "method": "17 python blocks executed in order in strands-agents 1.64.0 with Agent.__call__ signature-checked; behaviour flows with a scripted fake Model",
+    "failures": [
+      "OrderIdSteering (L627) lacks the abstract 'name' property -> TypeError: Can't instantiate abstract class OrderIdSteering; every build_agent()/build_guarded_agent() after L645 fails, including handle_order_request/serve",
+      "After adding name: OrderToolAuth allow-list (L540) and the Cedar policy (L693) deny the structured output tool 'RefundDecision', so handle_refund and the guarded handler never return a decision",
+      "No install step; CedarAuthorization import needs cedarpy (strands-agents[cedar])"
+    ],
+    "passed": "All imports resolve; hooks (LimitToolCounts cancels the 2nd send_email), middleware (Input/Wrap/cache), retry strategy subclass, hook retry, middleware retry, ToolContext cancel tool, the limits/cancel_signal/invocation_state/interruptResponse call shapes all bind and run"
+  },
+  "top_issues": [
+    "Running example is broken: OrderIdSteering misses the required name (TypeError) and the post's own allow-list/Cedar layers deny the RefundDecision structured-output tool, so L509 and L729 claims fail in practice.",
+    "Running-example continuity: ghost 'Please refund order 4512' reference (L653), false recap of build_agent contents (L685), forward ref to deadline cancel (L750), build_agent redefined 4 times; no install command.",
+    "Checklist repeats: shared-agent warning not tied to invoke_async/blocking and no history-leak warning (L938-944); no metrics.get_summary(); facts repeated (aux_model x3, Guide no-cap x3); 'W8' source-id leak (L1109)."
+  ]
+}

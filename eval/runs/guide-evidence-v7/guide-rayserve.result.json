@@ -1,0 +1,154 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.ray.io/en/latest/serve/getting_started.html",
+  "title": "Ray Serve: Python-Native Model Serving from Laptop to KubeRay",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-ray-serve-python-native-model-serving-from-laptop-to-kuberay/2026-11-05-ray-serve-python-native-model-serving-from-laptop-to-kuberay.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-05-ray-serve-python-native-model-serving-from-laptop-to-kuberay.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '큐 길이를 기준으로 하는 컨트롤러 내장 오토스케일러': check 5 sentence(s) the evidence may not support: `target_replicas`가 실수이면 올림 처리되고, 정책은 컨트롤러 안에서 주기적으로 실행되므로 빠르고 가볍게 작성해야 합니다 [[E137]]. (unsupported: Evidence says floats are rounded up and policies should be fast/lightweight, but does not state the policy runs periodically inside the controller as the reason.) | 두 값은 Ray 2.32.0에서 바뀌었습니다. (numbers not in its evidence) | 같은 계산을 `Translator`에 적용하면, 동시에 처리 중인 번역 요청이 40개일 때 오토스케일러가 목표로 잡는 레플리카는 $$40 / 2 = 20$$개입니다. (numbers not in its evidence) | 이 20개가 받을 수 있는 동시 요청 상한은 기본값 기준 $$20 \\times 5 = 100$$개이므로, 새 레플리카가 뜨기 전 순간적인 급증은 기존 레플리카가 상한까지 흡수합니다. (numbers not in its evidence) | 지침대로 상한을 목표보다 20~50% 높게 잡는다면 $$2 \\times 1.2 = 2.4$$에서 $$2 \\times 1.5 = 3$$ 사이이므로 정수로는 3이 됩니다. (numbers not in its evidence)",
+    "Section '큐 길이를 기준으로 하는 컨트롤러 내장 오토스케일러' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 오토스케일러는 별도 프로세스가 아니라 앞서 설명한 컨트롤러 액터 안에서 돕니다 . | ['100'] already stated in '컨트롤러·프록시·레플리카 액터를 거치는 요청의 수명': refer back without repeating: Ray 2.59.0 기준으로 `\"auto\"`는 `max_ongoing_requests: 5`, `target_ongoing_requests: 2`, `min_replicas: 1`, `max_replicas: 100`을 지정한 설정과 같습니다 . | numbers ['2.32'] without evidence: 두 값은 Ray 2.32.0에서 바뀌었습니다. | ['100'] already stated in '컨트롤러·프록시·레플리카 액터를 거치는 요청의 수명': refer back without repeating: `target_ongoing_requests`의 기본값은 1.0에서 2.0으로, `max_ongoing_requests`의 기본값은 100에서 5로 바뀌었으므로, 그 이전 버전에서 만든 설정을 옮길 때는 값을 다시 확인해야 합니다 . | numbers ['40', '20'] without evidence: 같은 계산을 `Translator`에 적용하면, 동시에 처리 중인 번역 요청이 40개일 때 오토스케일러가 목표로 잡는 레플리카는 $$40 / 2 = 20$$개입니다.",
+    "Section '계층별 재시작과 GCS 체크포인트로 이루는 장애 허용' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 설명한 큐 길이 기반 오토스케일러는 복구 직후 빈 메트릭에서 다시 출발하므로, 트래픽이 급증하는 시점에 컨트롤러가 재시작되면 업스케일이 한 박자 늦을 수 있습니다. | a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '설치부터 첫 번역 요청까지 이어지는 로컬 개발 루프': check 1 sentence(s) the evidence may not support: 애플리케이션은 기본 HTTP 주소에서 요청을 받으며, 예제 클라이언트는 `http://127.0.0.1:8000/`으로 요청을 보냅니다 [[E11, E65, E83]]. (numbers not in its evidence)",
+    "Section '설치부터 첫 번역 요청까지 이어지는 로컬 개발 루프' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 `Translator` 클래스에 import와 `bind` 호출을 붙이면 그대로 실행할 수 있는 파일이 됩니다. | numbers ['127.0', '8000'] are not in the cited evidence: 애플리케이션은 기본 HTTP 주소에서 요청을 받으며, 예제 클라이언트는 `http://127.0.0.1:8000/`으로 요청을 보냅니다 .",
+    "Section 'KubeRay RayService를 통한 프로덕션 배포': check 1 sentence(s) the evidence may not support: Kubernetes 없이 VM 위 Ray 클러스터에 배포할 때 고르는 선택지가 바로 이 Serve CLI 방식입니다. (unsupported: The Production Guide only points to a separate 'Deploy on VM' page for VM deployments. It never says that the VM route is the Serve CLI method.)",
+    "Section 'KubeRay RayService를 통한 프로덕션 배포' still has: evidence ['E99'] was already referred back to once; do not restate it again: `http_options`는 클러스터 전역 설정이고, 같은 포럼 답변의 설명으로는 클러스터당 HTTP 서버(포트)가 하나뿐이므로, 텍스트 ML 애플리케이션은 `applications` 항목의 `route_prefix`를 `/` 대신 `/text` 같은 고유한 값으로 지정해 구분합니다 .",
+    "Section 'Ray 대시보드·Prometheus·Grafana로 구성하는 Serve 관측성' still has: ['2.51'] already stated in 'route_prefix 위에 얹히는 FastAPI 인그레스와 HTTP 스트리밍': refer back without repeating: 엔진 메트릭 로깅은 Ray 2.51부터 기본으로 켜져 있으며, LLM 디플로이먼트 설정에서 `log_engine_metrics: False`로 끕니다 .",
+    "Section '분산·합성 서빙에는 강하고 모델 최적화·플랫폼 기능은 빠진 도구': check 1 sentence(s) the evidence may not support: 오토스케일러가 레플리카만 늘리고 GPU 노드는 공급하지 않는다는 서드파티 보고 [[E180]] 역시 용량 계획을 사용자 몫으로 남깁니다. (unsupported: Treats the third-party claim (no GPU node provisioning, so capacity planning falls to the user) as established, but official E118 says the Ray Autoscaler requests more nodes when resources are insufficient.)",
+    "Section '분산·합성 서빙에는 강하고 모델 최적화·플랫폼 기능은 빠진 도구' still has: an evidence marker stands for a word; state the fact and put the marker at the end of the sentence: 소형부터 대형까지의 LLM, 비전·추론 LLM, gpt-oss 배포 [[E77]]와 AWS NeuronCores, Intel Gaudi 가속기 서빙 [[E78]]도 다룹니다.",
+    "English stem with a Korean ending 'import할': _ml:app`이나 `serve build`가 모듈을 import할 때마다 그 호출이 실행되기 때문입니다. 접두사는 Se"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3479.4,
+  "input_tokens": 3035780,
+  "output_tokens": 412717,
+  "estimated_cost_usd": 19.2821,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 152,
+      "failed_calls": 0,
+      "input_tokens": 18821,
+      "output_tokens": 412717,
+      "cache_read_tokens": 784430,
+      "cache_write_tokens": 2232529,
+      "cost_usd": 19.282107
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2617,
+        "output_tokens": 191,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000357
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2786,
+        "output_tokens": 672,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000615
+      },
+      "read": {
+        "calls": 24,
+        "failed_calls": 0,
+        "input_tokens": 58,
+        "output_tokens": 24730,
+        "cache_read_tokens": 171637,
+        "cache_write_tokens": 50794,
+        "cost_usd": 0.408728
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 7069,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 22996,
+        "cost_usd": 0.256376
+      },
+      "verify": {
+        "calls": 59,
+        "failed_calls": 0,
+        "input_tokens": 236,
+        "output_tokens": 126361,
+        "cache_read_tokens": 488105,
+        "cache_write_tokens": 1171974,
+        "cost_usd": 8.583274
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 62679,
+        "cache_read_tokens": 47190,
+        "cache_write_tokens": 315625,
+        "cost_usd": 2.850805
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 36056,
+        "cache_read_tokens": 24648,
+        "cache_write_tokens": 105348,
+        "cost_usd": 1.257954
+      },
+      "fix": {
+        "calls": 36,
+        "failed_calls": 0,
+        "input_tokens": 144,
+        "output_tokens": 153567,
+        "cache_read_tokens": 52850,
+        "cache_write_tokens": 565792,
+        "cost_usd": 5.922016
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 12860,
+        "output_tokens": 1392,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001982
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 18263,
+        "output_tokens": 2255,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002954
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 24,
+        "failed_calls": 0,
+        "input_tokens": 58,
+        "output_tokens": 24730,
+        "cache_read_tokens": 171637,
+        "cache_write_tokens": 50794,
+        "cost_usd": 0.408728
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 125,
+        "failed_calls": 0,
+        "input_tokens": 500,
+        "output_tokens": 385732,
+        "cache_read_tokens": 612793,
+        "cache_write_tokens": 2181735,
+        "cost_usd": 18.870425
+      }
+    }
+  }
+}

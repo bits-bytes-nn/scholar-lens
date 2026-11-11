@@ -1,0 +1,146 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/eval-guide/guide-vllm-v6.md",
+  "judge_run": 3,
+  "sampling": "body blocks after front matter (prose paragraphs, tables, code fences, lists, images; headings excluded): 184 blocks; blocks 3,6,9,... (61 sampled, L19 to L647); 15 claims drawn from sampled blocks P21-P177 (L70-L628), 10 of them numbers",
+  "sources_checked": "arXiv HTML 2309.06180; blog.vllm.ai/2023/06/20/vllm.html; vllm-project/vllm main via raw.githubusercontent.com (docs/getting_started/quickstart.md, installation/README.md, gpu.md + gpu.cuda.inc.md + python_env_setup.inc.md, cpu.md + cpu.x86/arm/apple/s390x.inc.md, docs/cli/README.md, docs/deployment/docker.md, docs/configuration/optimization.md, docs/serving/online_serving/README.md, vllm/config/cache.py, scheduler.py, model.py, vllm/engine/arg_utils.py, vllm/utils/argparse_utils.py, vllm/entrypoints/common/cli_args.py, vllm/v1/metrics/loggers.py); GitHub API for issues #7155 and #20241; kunwar.page chapter 24",
+  "scores": {"A": 8.5, "B": 8, "C": 7, "D": 8.5, "E": 8.5, "F": 7, "T1": 8.5, "T2": 8.5, "T3": 8},
+  "score_evidence": {
+    "A": [
+      "Arc: TL;DR (L11) -> problem (L17) -> paged blocks (L35) -> scheduler/worker architecture (L99) -> sharing/CoW (L169) -> token-budget batching (L223) -> preemption (L265) -> install (L300) -> offline LLM (L343) -> vllm serve/Docker (L401) -> KV memory budget (L475) -> CPU backend (L544) -> scaling/metrics (L574) -> when to choose/failure modes (L602)",
+      "Markup clean: no body H1, 34 fence lines (balanced), math only as $$ (L29, L58, L87, L197, L215), use_math true, two-level categories, no author key, description 122 chars opening with 'vLLM'",
+      "Same content twice: per-step input rule L89 and L127 ('프롬프트 단계 요청은 프롬프트 토큰 전부를, 생성 단계 요청은 최신 토큰 하나를'); suffix-accepting argument list L455 and L502",
+      "Orphan sentence L23 'KV 캐시는 크기도 상당합니다.' with nothing following; Sources entry L660 has the bare link text 'Medium'"
+    ],
+    "B": [
+      "L582 '... 이유는 구조에서 나옵니다. 반면 KV 블록이 모자라 ...' - the contrasted clause about GPU utilisation is missing -> 'GPU 사용률은 KV 블록이 모자라 요청을 못 받는 상황을 드러내지 못하지만, 그 압박은 waiting 큐 길이에 그대로 나타납니다.'",
+      "L263 '토큰 예산은 처리량, 디코드 지연, 메모리 압박 사이에서 하나를 고르는 값이므로' -> '... 사이의 균형을 정하는 값이므로'",
+      "L345 '뉴클리어스 샘플링 확률은 `0.95`로 둡니다' (calque of 'nucleus sampling probability') -> 'top-p는 `0.95`로 둡니다'",
+      "L433 '템플릿이 없는 모델의 경우, v0.7.1에서는 ...' -> '채팅 템플릿이 없는 모델이면 서버가 채팅 요청을 처리하지 못합니다'",
+      "'앞서' 25 times in 43.9k characters (e.g. L298, L494, L588, L638-639), '수 있습니다' 20 times; register consistent ('입니다' throughout, table cells L289-292 also '입니다')"
+    ],
+    "C": [
+      "L588 '그러면 KV 캐시는 앞서 계산한 대로 0.4 몫에서 가중치와 오버헤드를 뺀 나머지입니다' - no calculation exists earlier and the 80 GB x 0.4 - 12 GB = 20 GB result is never given",
+      "L237 '두 인자 모두 여기 적힌 기본값은 주로 테스트 편의를 위한 값' - the post never states any default value, so '여기' points at nothing",
+      "L556 warns to quote values containing '|' but the example at L559-561 uses '0-31' with no '|'",
+      "Internals sections invoke the running example before it exists: L157 '실행 예제처럼 모델이 GPU 한 장에 들어가면' and L215 '실행 예제처럼 ... /v1/chat/completions 요청이 계속 들어오는 서버' while the Qwen example first appears at L345/L403",
+      "L298 restates the max_num_seqs definition already given at L237"
+    ],
+    "D": [
+      "Good worked numbers at the hard points: 2048-vs-300 token waste 85% vs 16-token blocks 1.3% (L29, L87), block table walk-through (L72-83), TP head split (L157), CoW ref counts (L165), beam-search block table (L197-205), chunked-prefill step table (L249-255), recompute 1,000+200 -> one 1,200-token prefill (L281), prefix 100x500 (L215)",
+      "The one memory-budget example that would help most (L588) stops before the number",
+      "Some padding: L60 re-explains that the softmax normalisation is unchanged twice in one paragraph; L221 recaps L171-L215"
+    ],
+    "E": [
+      "Tables where comparison helps: OS mapping (L43), beam block states (L199), chunked prefill (L249), swap vs recompute (L287), platforms (L331), metric patterns (L590), alternatives (L610)",
+      "Figures placed where discussed and described, not numbered (L27, L64, L107, L113, L185, L163, L189, L622)",
+      "L622-624: the graph is the A100/LLaMA-13B panel only, but the text reads the two-setting ranges 8.5~15x / 3.3~3.5x off it as '같은 GPU와 같은 요청 길이 분포에서'"
+    ],
+    "F": [
+      "Unsupported (sampled): L624 attributes the blog's 8.5x-15x (HF) and 3.3x-3.5x (TGI) ranges to one A100 graph; the blog's ranges span LLaMA-7B/A10G and LLaMA-13B/A100",
+      "Wrong (not sampled): L566 '최소 권한으로 이 최적화를 켜려면 다음 옵션을 붙입니다' for '--cap-add SYS_NICE --security-opt seccomp=unconfined'; the CPU doc says seccomp=unconfined 'bypasses the seccomp for container' and suggests a custom seccomp profile if that is unacceptable",
+      "Stale framing (not sampled): L548 '가장 먼저 설정할 값은 VLLM_CPU_KVCACHE_SPACE' and the CPU run at L559 use it, while cpu.md says 'This is a legacy setting; use --kv-cache-memory-bytes instead'",
+      "Version scope (not sampled): TL;DR L15 and L267 present swap-or-recompute preemption and 'no new requests until preempted sequences finish' (L279) as current vLLM behaviour; optimization.md says V1 uses RECOMPUTE and current CacheConfig has no swap space option. Only the scheduler section (L101, L259) names the paper/V0 scope",
+      "Uncited sources (not sampled): L525 'vLLM Forums의 답변' and L527 user cmwilhelm's August 2024 report have no entry in the Sources list"
+    ],
+    "T1": [
+      "Install block (L308-313) is the quickstart's; 'uv pip install vllm --torch-backend=auto --dry-run' resolved vllm 0.33.0 + flashinfer-python 0.7.2.post1; all serve flags used exist in arg_utils/cli_args on main (--scheduling-policy, --attention-backend, --generation-config, --api-key, --uds, --port, --gpu-memory-utilization, --max-model-len 32K, --kv-cache-dtype, --kv-cache-memory-bytes, --kv-offloading-size, --block-size)",
+      "Offline script (L347-366), llm.chat (L378-383) and generation_config='vllm' (L394-396) match the documented API; curl JSON body (L424-430) parses; Docker command matches gpu.cuda.inc.md with the model swapped",
+      "CPU build line L553 does not run as pasted: it needs the clone and 'uv pip install -r requirements/build/cpu.txt ... -r requirements/cpu.txt --torch-backend cpu' steps from cpu.x86.inc.md, and the post ignores the pre-built x86 CPU wheels"
+    ],
+    "T2": [
+      "Covers quickstart, install (GPU/CPU/other), CLI, engine args and the paper/blog in a sensible order; the KV-memory and failure sections rest on issues #7155 and #20241 and are supported",
+      "Two GitHub-issue narratives (L527, L531) and Unsloth's Cascade Attention note (L641) are peripheral to a getting-started guide"
+    ],
+    "T3": [
+      "Internals before usage: block table, attention per block, central scheduler and broadcast control messages, TP single KV manager, CoW/ref counts, beam search, token budget, chunked prefill, preemption (L35-L298)",
+      "System fit: HPA on queue length with asymmetric stabilisation (L578-582), metric interpretation (L584-596), process metrics vs GPU memory (L600), Ray Serve / llm-d boundary (L630-632), failure modes (L634-641)",
+      "Most internals are the 2023 paper's design; apart from L259 the post does not say which parts changed in V1 (swap removed, recompute default)"
+    ]
+  },
+  "principles": {
+    "claim_headings": "met - noun-phrase claim headings (L17 'KV 캐시 낭비에 묶인 LLM 서빙 처리량', L265, L475, L574, L602); a few topic headings (L327 'NVIDIA 밖의 하드웨어', L411 '기본 주소와 엔드포인트')",
+    "running_example": "partly met - Qwen2.5-1.5B-Instruct runs from install (L308) through offline (L358), serve (L406), memory flags (L513), CPU (L561) and metrics (L596); internals sections refer to it before it is introduced (L157, L215)",
+    "mechanism_design_formula_example": "met - block attention formula (L58) -> worked block table (L76-83); CoW rules (L177-181) -> two-sample walk-through (L165); recompute cost example (L281)",
+    "facts_once": "not met - per-step input rule L89/L127; max_num_seqs definition L237/L298; suffix args L455/L502; v0.7.1 chat-template error L433/L640; 24x L15/L33; 60-80% and 20.4-38.2% L13/L29 (TL;DR excepted); v0.9.1 length override L531/L638",
+    "numbers_with_scope": "partly met - blog numbers carry model/GPU setting in the table (L614-617), but L624 reads the two-setting ranges off one A100 graph",
+    "nothing_invented": "partly met - writer examples are labelled (L76 '(예시)', L247, L483); but 'least privilege' for seccomp=unconfined (L566) and uncited forum/user reports (L525-527)",
+    "own_assessment_at_end": "met - L645 '이 글의 판단으로는 단일 노드에 들어가는 모델 하나를 많은 동시 사용자에게 서빙하는 경우 vLLM을 기본 선택으로 ...'",
+    "length_fitted": "partly met - 43.9k characters; internals depth is warranted, but L221 recap, repeated definitions and two issue narratives add length",
+    "type_specific_shape": "met - opens with TL;DR and the problem (L11, L17), architecture/mechanisms (L35-L298) before configuration (L300+), non-official design sources included, closes with when to choose and failure modes (L602-645)",
+    "korean_style": "partly met - natural '입니다' register; dangling '반면' (L582), '하나를 고르는 값' (L263), '뉴클리어스 샘플링 확률' (L345), heavy '앞서' (25x)"
+  },
+  "claims": {
+    "checked": 15,
+    "unsupported": 1,
+    "wrong": 0,
+    "examples": [
+      {"line": 70, "number": true, "claim": "Paper example uses 4 tokens per block; 7-token prompt maps logical blocks 0,1 to physical 7,1", "verdict": "supported", "source": "paper §4.3: 'The prompt has 7 tokens, so vLLM maps the first 2 logical KV blocks (0 and 1) to 2 physical KV blocks (7 and 1) ... stores the KV cache of the first 4 tokens in logical block 0 and the following 3 tokens in logical block 1'"},
+      {"line": 153, "number": false, "claim": "Megatron-LM style tensor parallelism, SPMD, attention split on the head dimension", "verdict": "supported", "source": "paper §4.6: 'supporting the widely used Megatron-LM style tensor model parallelism ... SPMD ... the attention operator is split on the attention head dimension'"},
+      {"line": 199, "number": true, "claim": "Beam k=4: blocks 0,1,3 shared by all; 6 by candidates 0 and 1; 7 by 2 and 3; 2,4,5,8 freed; 9-12 newly allocated", "verdict": "supported", "source": "paper §4.4: 'vLLM frees all physical blocks whose reference counts reach 0 (blocks 2, 4, 5, 8) ... allocates new physical blocks (blocks 9-12) ... all candidates share blocks 0, 1, 3; candidates 0 and 1 share block 6, and candidates 2 and 3 further share block 7'"},
+      {"line": 231, "number": false, "claim": "--scheduling-policy fcfs|priority, default fcfs; priority: lower value first, ties by arrival", "verdict": "supported", "source": "vllm/config/scheduler.py: policy: SchedulerPolicy = 'fcfs'; '\"priority\" means requests are handled based on given priority (lower value means earlier handling) and time of arrival deciding any ties'"},
+      {"line": 279, "number": false, "claim": "Swapping: no new requests until preempted sequences complete; CPU swap space bounded by GPU memory allocated for KV cache", "verdict": "supported", "source": "paper §4.5: 'stops accepting new requests until all preempted sequences are completed ... the swap space on the CPU RAM is bounded by the GPU memory allocated for the KV cache' (paper design; current V1 uses recompute, optimization.md)"},
+      {"line": 292, "number": true, "claim": "Swap vs recompute: recompute constant across block sizes, swap poor for small blocks, comparable at block sizes 16-64", "verdict": "supported", "source": "paper §7.3: 'the overhead of recomputation remains constant across different block sizes ... For medium block sizes from 16 to 64, the two methods exhibit comparable end-to-end performance'"},
+      {"line": 309, "number": true, "claim": "uv venv --python 3.12 --seed; uv pip install vllm --torch-backend=auto; vllm download-kernels", "verdict": "supported", "source": "quickstart.md L25-28 (same four lines); dry-run resolve succeeded (vllm 0.33.0)"},
+      {"line": 341, "number": false, "claim": "TPU: uv pip install vllm-tpu; other accelerators via out-of-tree plugins following the Hardware-Pluggable RFC", "verdict": "supported", "source": "quickstart.md: 'you need to install the vllm-tpu package ... uv pip install vllm-tpu'; installation/README.md: 'third-party hardware plugins that live outside the main vllm repository. These follow the Hardware-Pluggable RFC'"},
+      {"line": 368, "number": false, "claim": "Models come from Hugging Face by default; export VLLM_USE_MODELSCOPE=True before engine init for ModelScope", "verdict": "supported", "source": "quickstart.md: 'set the environment variable VLLM_USE_MODELSCOPE before initializing the engine ... export VLLM_USE_MODELSCOPE=True'"},
+      {"line": 409, "number": false, "claim": "vllm CLI also has chat, complete, bench, run-batch, download-kernels", "verdict": "supported", "source": "docs/cli/README.md headings: serve, launch, chat, complete, bench, collect-env, download-kernels, run-batch, preload"},
+      {"line": 500, "number": true, "claim": "Issue #7155: all available GPU memory allocated regardless of max_model_len; closed 'not planned' on 2024-12-04", "verdict": "supported", "source": "GitHub API: state closed, state_reason not_planned, closed_at 2024-12-04T02:07:23Z; body 'vLLM allocates all available GPU memory after loading model weights, regardless of the max_model_len setting'"},
+      {"line": 508, "number": true, "claim": "--kv-offloading-size in GiB, default None (disabled), total across ranks when TP > 1", "verdict": "supported", "source": "vllm/config/cache.py: 'Size of the KV cache offloading buffer in GiB. When TP > 1, this is the total buffer size summed across all TP ranks. By default, this is set to None, which means no KV offloading is enabled'"},
+      {"line": 546, "number": true, "claim": "CPU: x86 FP32/FP16/BF16; AArch64 NEON same types; Apple Silicon and IBM Z experimental; Python 3.11-3.14; vllm/vllm-openai-cpu image", "verdict": "supported", "source": "cpu.md 'Python: 3.11 -- 3.14'; cpu.x86.inc.md 'data types FP32, FP16 and BF16', 'docker pull vllm/vllm-openai-cpu:latest-x86_64'; cpu.arm.inc.md 'NEON, data types FP32, FP16 and BF16'; apple/s390x 'experimental support'"},
+      {"line": 564, "number": true, "claim": "CPU --block-size multiples of 32, default 128; set dtype=bfloat16 if float16 misbehaves", "verdict": "supported", "source": "cpu.md: 'Use multiples of 32 as --block-size, which is 128 by default'; 'due to unstable float16 support in torch CPU, it is recommended to explicitly set dtype=bfloat16'"},
+      {"line": 624, "number": true, "claim": "On the shown graph (same GPU, same length distribution) vLLM is 8.5-15x HF and 3.3-3.5x TGI", "verdict": "unsupported", "source": "blog: 'LLaMA-7B on an NVIDIA A10G GPU and LLaMA-13B on an NVIDIA A100 GPU (40GB) ... three parallel output completions. vLLM achieves 8.5x - 15x higher throughput than HF and 3.3x - 3.5x higher throughput than TGI'; the embedded image is perf_a100_n3 only, so the ranges span two settings, not one GPU"},
+      {"line": 628, "number": true, "claim": "Alpaca + OPT-175B: large KV memory, short sequences, vLLM's advantage shrinks", "verdict": "supported", "source": "paper §6.2: 'vLLM's advantage over Orca (Oracle) and Orca (Pow2) is less pronounced ... OPT-175B allows for large GPU memory space available to store KV cache, while the Alpaca dataset has short sequences'"}
+    ],
+    "unsampled_findings": [
+      "L566 wrong: seccomp=unconfined is called the least-privilege option; cpu.md says it bypasses seccomp entirely",
+      "L548 VLLM_CPU_KVCACHE_SPACE presented as the first setting; cpu.md calls it legacy and points to --kv-cache-memory-bytes",
+      "L15/L267/L279 paper-era swap preemption presented as current behaviour; optimization.md: 'In vLLM V1, the default preemption mode is RECOMPUTE rather than SWAP'",
+      "L525/L527 forum answer and user report cited without a Sources entry",
+      "Spot checks that held: L481 gpu-memory-utilization default 1.0 (extensible KV cache) / 0.92 (cache.py); L502 suffix rules (cli README); L497 Llama 3 70B 5.12 MB / ~3000 blocks / 48,000 tokens matches kunwar.page; L613 22x request rate vs FasterTransformer (paper §6.2); L219 55% / 2.2x and L87 'under 4%' (blog)"
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "note": "guide-vllm has no item-specific fixes; the notes' local-run defects are used as generic guide checks",
+    "details": [
+      {"id": "cross-ref-nonexistent-chapters", "verdict": "avoided", "evidence": "No numbered chapter/section references; back-references are '앞서 ...' and all point at existing content"},
+      {"id": "tag-remnant", "verdict": "avoided", "evidence": "No '</path></name>' or other stray closing tags in the file"},
+      {"id": "entity-leak", "verdict": "avoided", "evidence": "No '&gt;'/'&lt;' in body; Sources link texts use '&#124;', '&#91;&#93;', '&amp;' (L656, L661, L664, L666), which render as characters in Markdown link text"},
+      {"id": "unclosed-code-fence", "verdict": "avoided", "evidence": "34 fence lines, all paired (L76-83 ... L568-570)"},
+      {"id": "stale-third-party-cli-flags", "verdict": "avoided", "evidence": "Commands and flags follow current docs; the blog's old 'python -m vllm.entrypoints.openai.api_server' is named as that era's entry point (L409). Caveat: official legacy VLLM_CPU_KVCACHE_SPACE presented as primary (L548) and the removed gpu_cache_usage_perc metric name in the grep (L520)"},
+      {"id": "install-usage-centric", "verdict": "avoided", "evidence": "Internals occupy L35-L298 before installation starts at L300; integration and failure modes at L574-L641"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 35,
+    "architecture_note": "paged block structure at L35, scheduler/KV cache manager/GPU worker architecture at L99, both before install (L300) and configuration (L475)",
+    "non_official_sources": "9 of 18 (50%): kunwar.page, varunk.me, two Medium posts, Unsloth docs, Parseable, premai.io, GitHub issues #7155 and #20241 (official: 6 current docs pages + v0.7.1 OpenAI server page, vLLM blog, arXiv paper)",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "closing_evidence": "L602-645: workloads where vLLM wins (alternatives table L610), compute-bound case where it shrinks (L626-628), Ray Serve/llm-d boundary (L630-632), failure modes list (L634-641), writer's verdict (L645)"
+  },
+  "runnable_code": {
+    "environment": "macOS arm64, no GPU; uv 0.13.0; static checks against vllm main source plus a uv dry-run resolution; no model download or execution",
+    "verdict": "runs as pasted except the CPU source build",
+    "results": [
+      "Install (L309-312): 'uv venv --python 3.12 --seed --managed-python' created a venv; 'uv pip install vllm --torch-backend=auto --dry-run --python-platform x86_64-manylinux_2_35' resolved 185 packages incl. vllm 0.33.0 and flashinfer-python 0.7.2.post1",
+      "Offline script (L347-366): imports, SamplingParams(temperature, top_p), LLM(model=...), generate, output.prompt / outputs[0].text match quickstart; model swapped from facebook/opt-125m to Qwen2.5-1.5B-Instruct",
+      "llm.chat(messages, sampling_params) with one conversation (L378-383) and LLM(..., generation_config='vllm') (L396): documented API",
+      "vllm serve variants (L406, L446, L452, L455): --port, --uds, --help=all/ModelConfig/max-num-seqs/max all documented in cli README",
+      "curl /v1/models and /v1/chat/completions (L416, L422-430): JSON body parses; matches quickstart",
+      "Docker (L462-469): matches gpu.cuda.inc.md with model swapped",
+      "Memory flags (L513-517): all flags exist; '32K' parses to 32768 via human_readable_int_or_auto; fp8 KV needs a supporting platform (stated); metric grep matches vllm:kv_cache_usage_perc and vllm:num_preemptions from v1 loggers; gpu_cache_usage_perc no longer exists (harmless)",
+      "CPU build (L553): fails in a fresh env as pasted - requires clone + build/runtime requirement installs from cpu.x86.inc.md; pre-built x86 CPU wheels exist since 0.17.0 and are not mentioned",
+      "CPU serve (L559-561): env vars and --block-size 128 valid on a CPU build"
+    ]
+  },
+  "top_issues": [
+    "Version scope and stale guidance: paper-era swap preemption presented as current (L15, L267, L279; V1 recompute only), legacy VLLM_CPU_KVCACHE_SPACE as the first CPU setting (L548), and seccomp=unconfined called least privilege (L566)",
+    "Broken flow: L588 promises 'as calculated earlier' but never computes the KV budget; L582 dangling '반면'; L237 '여기 적힌 기본값' with no values; running example invoked in internals before it exists (L157, L215)",
+    "Scope slip on numbers and sources: two-setting 8.5-15x / 3.3-3.5x ranges read off one A100 graph (L624); forum answer and user report cited without Sources entries (L525-527); repeated facts (L89/L127, L237/L298, L455/L502, L433/L640)"
+  ]
+}

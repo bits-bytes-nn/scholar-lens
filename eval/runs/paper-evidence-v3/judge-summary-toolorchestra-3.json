@@ -1,0 +1,74 @@
+{
+  "item": "summary-toolorchestra",
+  "post": "/tmp/eval-paper/summary-toolorchestra-v3.md",
+  "judge_run": 3,
+  "source_checked": "https://arxiv.org/html/2511.21689 (full text incl. appendices A, L and Tables 1, 2, 3, 15, 16)",
+  "sampling": "prose paragraphs numbered 1-20 after front matter (headings, images, tables, display equations not counted); took paragraphs 3,6,9,12,15,18, wrapped to 1,4,7,10,13,16,19 (13 includes the results table it introduces); 15 claims drawn from these",
+  "scores": {"A": 8.5, "B": 8.0, "C": 8.0, "D": 8.0, "E": 8.0, "F": 8.0},
+  "type_scores": {"U1": 8.0, "U2": 7.5},
+  "deductions": {
+    "A": ["Headings are topic names (L19 '## 연구 배경', L29 '## 제안 방법', L47 '## 구현 방식'); acceptable for the fixed five-section summary.", "L42 uses 'max(1, ...)' instead of '\\max' and wraps a superscript in {% raw %} Liquid; renders but is awkward. Front matter complete, description 128 chars, math only $$."],
+    "B": ["L70 'FRAMES' vs L80 'Frames' -- inconsistent benchmark name.", "L82 '비교 모델 가운데서는 여전히 1위지만, 적어도 τ²-Bench에서는 미학습 도구 구성일 때 점수가 기본 구성보다 낮아집니다.' restates the previous sentence; drop it.", "L27 '프롬프트 기반 오케스트레이터는 이런 판단 대신 습관적인 선택을 반복합니다' -- '습관적' is the writer's gloss, not the paper's framing; rewrite: '프롬프트 기반 오케스트레이터는 비용을 따지지 않고 같은 모델을 반복해서 고릅니다.'", "L31 '연구 배경에서 본 호출 쏠림 때문에 보상 설계가 학습의 핵심입니다' -- causal leap; rewrite: '호출 쏠림을 막으려고 보상에 비용과 선호를 함께 넣었습니다.'"],
+    "C": ["L27 ends the background with the trained Orchestrator-8B's balanced calls, which L78 states again as the significance -- same fact twice.", "L40 is a one-sentence paragraph bridging to the eval formula; L82 sentence 2-3 repeat each other."],
+    "D": ["Reward sign intuition (L38 '비용과 지연 항은 음수이므로 ... 정규화 값이 커집니다') and the labelled worked ratio (L45 '30/10=3') help at the right moment.", "Training algorithm (GRPO, group-normalized advantage, clipped objective; paper §3.2) is never named, so 'RL로 학습' stays a black box."],
+    "E": ["Results table L61-66 matches Table 16 cell for cell (80.2/10.3/8.6, 77.7/31.3/20.2, 62.3/18.2/14.5, 46.0/81.2/32.8).", "The headline HLE/FRAMES comparison (Table 1) is only in prose (L70); a second short table or HLE/FRAMES columns would help. TL;DR (L17) numbers lack units (비용 10.3, 지연 8.6)."],
+    "F": ["No wrong number in the 15-claim sample.", "Outside the sample, L82 'τ²-Bench 점수는 기본 도구 구성에서 낸 점수보다 크게 낮습니다': the 80.2 comes from the basic tools + specialized + generalist LLMs configuration, not the 'basic tools' setting the post's own table (L64) names '기본 도구' -- setting mis-attributed (-2). The run's own verifier warning flagged the same sentence.", "L53 '영화 예매 도메인이라면 예약 테이블과 취소·환불 도구가 먼저 생기고' and L27 '매 턴 웹 검색, 코드 실행기, GPT-5-mini, GPT-5 중 하나' are writer illustrations not marked as such at first use (L78 later calls the HLE one '가상의'); the paper's pilot tool set was GPT-5, GPT-5-mini, Qwen3-32B, Qwen2.5-Coder-32B (Appendix A)."],
+    "U1": ["All five questions covered; implementation omits GRPO, the base model being Qwen3-8B (only implied at L40), and the dataset name ToolScale appears only in an image alt text (L51)."],
+    "U2": ["TL;DR (L17) is five sentences with six numbers, longer than the two-to-three-line target.", "The one stated limitation (L82) is the writer's, and rests on the mis-labelled comparison above; the closing paragraph is long relative to the summary."]
+  },
+  "principles": {
+    "claim_headings": {"status": "not met", "evidence": "L19/L29/L47/L57/L76 are fixed topic headings (연구 배경, 제안 방법, 구현 방식, 실험 결과, 의의와 한계)."},
+    "running_example": {"status": "partly met", "evidence": "Hypothetical HLE question L27, reused L78 ('앞서 본 가상의 HLE 질문'); not labelled hypothetical at L27, and a second unlabelled movie-booking example at L53."},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "L31-45: problem (call skew) -> reward design -> Eq. R(tau) and eval normalization -> labelled worked ratio 30/10=3."},
+    "facts_said_once": {"status": "partly met", "evidence": "Orchestrator-8B's balanced calls stated L27 and L78; L82 sentences 2-3 repeat."},
+    "numbers_with_scope_unit": {"status": "partly met", "evidence": "Table L61 gives units (미국 센트, 분) and settings; TL;DR L17 and L80 '비용 34.8과 지연 8.2' lack units; L82 mislabels the setting of 80.2."},
+    "nothing_invented": {"status": "partly met", "evidence": "No invented numbers; L82 setting mislabel; L53 movie cancel/refund tools unlabelled illustration."},
+    "writer_assessment_at_end": {"status": "partly met", "evidence": "L82 '이 글은 ... 봅니다' is the writer's view, but ends by re-telling the paper's future work ('재귀적 오케스트레이터 시스템')."},
+    "length_fitted": {"status": "met", "evidence": "About 4,900 non-space characters; five-minute read; method sections get most space."},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR, five sections, one distilled results table (L61-66), a limitation (L82)."},
+    "korean_style": {"status": "partly met", "evidence": "입니다 register throughout; minor issues: FRAMES/Frames, L82 repetition, L31 causal leap."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numeric": 8,
+    "examples": [
+      {"line": 25, "claim": "GPT-5 sends most calls to GPT-5-mini; Qwen3-8B relies heavily on GPT-5", "verdict": "supported", "source": "Fig. 3 caption: 'GPT-5 tends to call GPT-5-mini most of the time, while Qwen3-8B relies heavily on GPT-5.'"},
+      {"line": 25, "claim": "Two issues: self-enhancement bias (overusing own variants) and defaulting to the strongest tool regardless of cost", "verdict": "supported", "source": "§1: '(i) the overuse of developmentally-related variants of oneself, i.e., self-enhancement bias, and (ii) defaulting to the strongest available tool regardless of the cost or relative utility'"},
+      {"line": 27, "claim": "Authors conclude orchestrating weaker and stronger models warrants its own training approach", "verdict": "supported", "source": "§1: 'idiosyncratic in the context of model tool calling and warrant their own approach to training'"},
+      {"line": 33, "claim": "GPT-5 judge gives a binary outcome reward; tokens converted to cost via third-party API pricing", "verdict": "supported", "source": "§3.2: 'binary accuracy reward r_outcome in {0,1}', 'We leverage GPT-5 as a judge', 'convert both the input tokens and output tokens to monetary costs following the third-party API pricing systems'"},
+      {"line": 38, "claim": "Training normalizes each element by batch min/max; p in [0,1]; p_outcome=1, p_compute=0 means accuracy only", "verdict": "supported", "source": "§3.2 normalization formula and 'P[n+1]=p_outcome=1 and P[n+2]=p_compute=0 implies that the user wants to exclusively optimize accuracy'"},
+      {"line": 45, "claim": "Eval normalization: counts and outcome (k<=n+1) as ratio to Qwen3-8B baseline, cost/latency inverse ratio; used only in evaluation", "verdict": "supported", "source": "Appendix L Eq. 5; 'During training, we directly follow the Equation 2'"},
+      {"line": 49, "claim": "LLM generates database and tool APIs for a domain, then user tasks with golden function calls", "verdict": "supported", "source": "§3.3 ToolScale two-step process; Fig. 4 caption"},
+      {"line": 55, "claim": "Rollout batches with reward std below 0.1 are filtered; format-inconsistent and invalid outputs excluded", "verdict": "supported", "source": "§3.2 Training techniques (1)-(3): 'standard deviation of rewards in a rollout batch is smaller than 0.1'"},
+      {"line": 17, "claim": "tau2-Bench: Orchestrator-8B 80.2 / cost 10.3 / latency 8.6 vs GPT-5 orchestrator 62.3 / 18.2 / 14.5", "verdict": "supported", "source": "Table 16 rows 'GPT-5 | 62.3 | 18.2 | 14.5', 'Orchestrator-8B | 80.2 | 10.3 | 8.6'"},
+      {"line": 64, "claim": "GPT-5 basic tools 77.7 / 31.3 / 20.2; Claude Opus 4.1 basic tools 46.0 / 81.2 / 32.8", "verdict": "supported", "source": "Table 16 basic-tools rows"},
+      {"line": 70, "claim": "GPT-5 with tools and LLMs: HLE (text-only subset) 21.2, FRAMES 57.5, below its basic-tools scores", "verdict": "supported", "source": "Table 1: GPT-5 tools+LLMs 21.2 / 57.5 vs basic tools 35.1 / 74.0; footnote: text-only subset"},
+      {"line": 70, "claim": "Orchestrator-8B HLE 37.1, FRAMES 76.3", "verdict": "supported", "source": "§5: 'our Orchestrator-8B achieves 37.1 on HLE and 76.3 on FRAMES'"},
+      {"line": 72, "claim": "Max turns 10/20/50/100; Orchestrator-8B beats GPT-5, Claude Opus 4.1, Qwen3-235B-A22B at a given budget", "verdict": "supported", "source": "§6.2: 'maximum number of 10, 20, 50 and 100 turns' ... 'consistently outperforms GPT-5, Claude Opus 4.1 and Qwen3-235B-A22B at a given budget'"},
+      {"line": 78, "claim": "Orchestrator-8B spreads calls over local search, GPT-5-mini, GPT-5, Qwen3-32B (averaged over three benchmarks)", "verdict": "supported", "source": "Table 15 Orchestrator-8B row: GPT-5 1.6, GPT-5-mini 1.7, Qwen-32B 1.3, Local search 1.8"},
+      {"line": 80, "claim": "Unseen tools: HLE 22.0, Frames 73.8, tau2-Bench 48.8, lowest cost 34.8 and latency 8.2", "verdict": "supported", "source": "Table 2 Orchestrator-8B row '22.0 | 73.8 | 48.8 | 34.8 | 8.2'; all other latencies >= 8.3, costs >= 37.9"}
+    ],
+    "outside_sample": [
+      {"line": 82, "claim": "tau2-Bench under unseen tools is far below the score in the 'basic tool configuration'", "verdict": "wrong (setting)", "source": "80.2 is the basic tools + specialized + generalist LLMs row of Table 1/16; the basic-tools row is GPT-5's 77.7"}
+    ]
+  },
+  "checklist": {
+    "repeated": 1,
+    "avoided": 0,
+    "na": 0,
+    "repeated_ids": ["tags-not-in-paper"],
+    "details": [
+      {"id": "tags-not-in-paper", "status": "repeated", "evidence": "L11 tags include 'Multi-Objective-Reward' (no 'multi-objective' in the paper), 'Cost-Efficient-Tool-Use' and 'Synthetic-Tool-Use-Environments' -- the same three PR #101 flagged. The run's warnings flag all three, but no PR checklist exists (pr_url null)."}
+    ]
+  },
+  "extras": {},
+  "top_issues": [
+    "L82 mis-attributes the 80.2 tau2-Bench score to the 'basic tool' setting; it is the full tools + LLMs configuration, so the closing limitation rests on a mislabelled comparison.",
+    "Tags repeat the flagged defect: Multi-Objective-Reward, Cost-Efficient-Tool-Use, Synthetic-Tool-Use-Environments are not paper terms.",
+    "Implementation omits GRPO and the training setup, and the TL;DR is five number-heavy sentences; illustrative examples (L27 HLE tool set, L53 movie domain) are not marked as the writer's at first use."
+  ]
+}

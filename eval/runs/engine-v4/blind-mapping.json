@@ -1,0 +1,18 @@
+{
+ "guide-strands/X": "new",
+ "guide-strands/Y": "base",
+ "guide-vllm/X": "new",
+ "guide-vllm/Y": "base",
+ "review-dpo/X": "new",
+ "review-dpo/Y": "base",
+ "review-kimi/X": "new",
+ "review-kimi/Y": "base",
+ "review-zep/X": "base",
+ "review-zep/Y": "new",
+ "summary-lora/X": "base",
+ "summary-lora/Y": "new",
+ "summary-toolorchestra/X": "new",
+ "summary-toolorchestra/Y": "base",
+ "guide-rayserve/X": "new",
+ "guide-rayserve/Y": "base"
+}

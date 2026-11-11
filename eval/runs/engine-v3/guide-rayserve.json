@@ -1,0 +1,169 @@
+{
+  "item": "guide-rayserve",
+  "kind": "guide",
+  "judge_notes": "Sources checked: docs.ray.io (latest, Ray 2.60.0) pages, ray.serve.schema/config source, installed ray 2.60.0 SDK and CLI help, KubeRay pages, arXiv 1712.05889, Anyscale blog, RFC #53016, discuss.ray.io thread 12515, gocodeo post, lingyunyang notes. T1 ran in a scratch venv (Python 3.12, ray[serve] 2.60.0, transformers, torch CPU) with AWS credentials removed and RAY_AUTH_MODE=disabled (the host has ~/.ray/auth_token, which a clean machine lacks). GPU, model-registry (MLflow), LLM (vLLM) and KubeRay blocks were skipped. runtime_env pip installs failed in both posts' configs because the uv-created venv has no pip; that is an environment artifact, so those configs were also deployed with runtime_env removed.",
+  "X": {
+    "scores": {
+      "A": {"score": 9.0, "reason": "Arc problem (L17) -> concepts (L58) -> architecture and failure boundaries (L129) -> first run (L206) -> composition (L404) -> parameters (L651) -> autoscaling (L822) -> config-file deploy (L970) -> KubeRay (L1081) -> assessment (L1195). No body H1, no skipped levels, $$ math only, real tables, description 145 chars. Thin tail sections: L1199-1207 opens with one bare sentence ('프레임워크 전용 서버의 예로는 TorchServe가 있습니다.') before a table; L1224-1226 failure-mode section is a single sentence."},
+      "B": {"score": 8.5, "reason": "Natural 입니다 register throughout, no 한다 breaks, few noun frames (one '다는 점'). Some stiff sentences: L1226 one long sentence chaining four back-references ('앞서 다룬 장애 경계와 튜닝 조건이 곧 이 도구의 약점이 되는 지점입니다. 앞서 본 장애 경계(...)...는 모두 ... 전제가 됩니다') -> split into a list of failure modes; L1230 '...Serve가 스스로 정의한 역할, 즉 ML 플랫폼을 직접 쌓기 위한 기본 구성 요소라는 자리와도 맞습니다' -> 'Serve 문서가 말하듯 Serve는 ML 플랫폼을 쌓는 기본 구성 요소입니다'. Garbled glyph L1193 '‹kuberay-operator-pod-name>'."},
+      "C": {"score": 8.5, "reason": "Concepts precede use, running Summarizer->Translator example threads every section, cross-references are accurate. Heavy repeated signposting ('...다루는 부분에서 이어집니다/봅니다' at L86, L90, L107, L174, L198, L263, L295, L622). L738 excerpt comment says '데코레이터와 FastAPI 라우트는 앞서와 같음' for serve_quickstart.py, which has no FastAPI route. L1045 links the composed app's config to the reconfigure path that the composed code never gets."},
+      "D": {"score": 9.0, "reason": "Hard parts get worked numbers: power-of-two pick with loads 3,7,1,5 (L174), route_prefix rule table (L119-125), per-parameter precedence table (L709-713), 30 QPS/100 ms arithmetic (L862-866), max_ongoing range for target 4 (L868), maxSurgePercent GPU arithmetic (L1183), spec A/B/C rollback (L1185). Easy parts (install) are short."},
+      "E": {"score": 9.0, "reason": "Official architecture diagram with Korean alt (L146), autoscaling diagram (L196), ASCII request path (L160-168), ResNet50 load-test plots (L874-886), many comparison tables, Ray paper table copied cell for cell (L1217-1220). Four consecutive load-test images are a little heavy but each is discussed."},
+      "F": {"score": 8.0, "reason": "23 claims checked, 0 unsupported, 1 wrong. Wrong: L1045 says changing Translator user_config language and redeploying the L987-1008 config switches language without restart via reconfigure, but the post's serve_quickstart_composed.py Translator (L422-443) has no reconfigure; deploying that config gives DEPLOY_FAILED 'user_config ... specified but deployment ... missing reconfigure method' (also affects L920-936). All numbers (2.32.0 default changes, 20-50%, auto defaults, 100KiB, delays, 0.1 s loop, 0.01 sampling, Ray paper 1.8M tasks/s and Clipper table, KubeRay v0.6.0/v1.5.1/200%/60 s) match sources."},
+      "T1": {"score": 7.5, "reason": "Ran: serve_quickstart.py + model_client.py -> 'Bonjour monde!'; FastAPI model.py + client -> 'Bonjour monde!'; composed app + client -> \"C'était le meilleur des temps, c'était le pire des temps,\"; chain.py and stream.py asserts pass; serve build output matches the described fields; autoscale/app1/prod YAML parse as ServeDeploySchema; route_prefix rules enforced by serve.run; TracingConfig/serve.start(tracing_config) exist. Failed: the production config (L987-1008) deployed with `serve deploy` -> Translator DEPLOY_FAILED (no reconfigure), client hangs. Incremental-upgrade steps (L1153-1169) omit the required RayServiceIncrementalUpgrade feature gate. user_config excerpt (L737-770) is a fragment that is never wired into the composed app."},
+      "T2": {"score": 9.0, "reason": "Covers what the getting-started/key-concepts/architecture/config/autoscaling/production/KubeRay pages support, in learning order; no padding beyond sources. The LLMConfig section (L791-820) is a brief side trip but grounded."},
+      "T3": {"score": 8.5, "reason": "Strong internals: actor roles, request lifecycle, handle path skipping steps 1-2, object store threshold, failure boundaries, autoscaler control loop and aggregation semantics, Serve vs Ray Autoscaler, KubeRay in-place vs cluster upgrade and incremental upgrade mechanics. Gaps: request routing beyond power-of-two, @serve.batch (only named at L142), backpressure only in a table row, observability one paragraph (L1067-1077). Non-official sources 2/20 (the Ray paper only)."}
+    },
+    "principles": {
+      "claim_headings": {"status": "met", "evidence": "L129 '컨트롤러·프록시·레플리카 액터 사이의 요청 흐름과 장애 경계', L651 '코드보다 설정 파일이 이기는 배포 파라미터 체계'; topic-only L1228 '선택 기준'."},
+      "running_example": {"status": "met", "evidence": "Summarizer->Translator introduced L27-40 and reused in architecture (L144), routing (L174), autoscaling (L918), config (L986), KubeRay (L1116)."},
+      "mechanism_design_formula_example": {"status": "met", "evidence": "autoscaling L858-868 (definition -> reason -> formula -> numeric example); maxSurgePercent L1179-1183."},
+      "facts_said_once": {"status": "partly met", "evidence": "TL;DR L13-15 restates the architecture paragraph L135-142 and the precedence rule L653; replica/actor definition repeated L13, L66."},
+      "numbers_with_scope_unit": {"status": "met", "evidence": "L731 'Ray 2.32.0에서 100에서 5로'; L1222 'This value is 2018 Ray actor embedded serving, not current Serve HTTP serving'."},
+      "nothing_invented": {"status": "partly met", "evidence": "L1045 claims a reconfigure path the composed code lacks; author examples are labelled (L174 '가정합니다', L916 '기본값을 넣어 그린 예시')."},
+      "own_assessment_at_end": {"status": "met", "evidence": "L1230 '이 글의 판단은 다음과 같습니다...'."},
+      "length_fitted": {"status": "met", "evidence": "Install L210-216 short; autoscaling and KubeRay get the most space."},
+      "type_specific_shape": {"status": "partly met", "evidence": "Opens with TL;DR and problem (L11, L17); architecture (L129) before config detail; closes with when-to-choose (L1228) but failure modes are one back-pointing sentence (L1226); few non-official sources."},
+      "korean_style": {"status": "met", "evidence": "입니다 register, Korean headings, '즉' 3 times, no 한다 sentences found."}
+    },
+    "claims": {
+      "checked": 23,
+      "unsupported": 0,
+      "wrong": 1,
+      "numbers_checked": 15,
+      "error_rate": 0.043,
+      "examples": [
+        {"line": 731, "claim": "max_ongoing_requests default changed 100 -> 5 in Ray 2.32.0", "verdict": "supported", "source": "configure-serve-deployment: 'Defaults to 5 (note the default changed from 100 to 5 in Ray 2.32.0)'"},
+        {"line": 860, "claim": "target_ongoing_requests default 2, changed 1.0 -> 2.0 in 2.32.0", "verdict": "supported", "source": "advanced-autoscaling: 'The default for target_ongoing_requests changed from 1.0 to 2.0 in Ray 2.32.0.'"},
+        {"line": 868, "claim": "max_ongoing_requests ~20-50% above target", "verdict": "supported", "source": "advanced-autoscaling: 'Set max_ongoing_requests to ~20 to 50% higher than target_ongoing_requests.'"},
+        {"line": 854, "claim": "num_replicas=auto == max_ongoing 5, target 2, min 1, max 100; manual max_replicas default 1", "verdict": "supported", "source": "autoscaling-guide"},
+        {"line": 178, "claim": "objects 100KiB+ go to the object store, zero-copy read", "verdict": "supported", "source": "architecture: 'Larger request objects (100KiB+) are written to the object store'"},
+        {"line": 900, "claim": "upscale_delay_s 30s, downscale_delay_s 600s, metrics_interval_s 10, look_back_period_s 30", "verdict": "supported", "source": "advanced-autoscaling parameter list"},
+        {"line": 966, "claim": "policy called every RAY_SERVE_CONTROL_LOOP_INTERVAL_S (0.1 s); record_autoscaling_stats timeout 10 s", "verdict": "supported", "source": "advanced-autoscaling env var list"},
+        {"line": 1077, "claim": "tracing sampling default 0.01 via RAY_SERVE_TRACING_SAMPLING_RATIO", "verdict": "supported", "source": "ray.serve._private.constants (2.60.0) = 0.01; TracingConfig(enabled=True).sampling_ratio=0.01"},
+        {"line": 862, "claim": "2 replicas, 100 ms, 30 QPS; target 1 -> 3 replicas", "verdict": "supported", "source": "advanced-autoscaling example"},
+        {"line": 876, "claim": "replicas about half the Locust users with target 2", "verdict": "supported", "source": "autoscaling-guide 'roughly half the number of Locust users'"},
+        {"line": 1215, "claim": "Ray scales beyond 1.8M tasks/s; p3.8xlarge; batches of 64; Clipper 4400±15/290±1.3, Ray 6200±21/6900±150", "verdict": "supported", "source": "arXiv 1712.05889 abstract and Table 3"},
+        {"line": 1089, "claim": "serveConfigV2 available from KubeRay v0.6.0", "verdict": "supported", "source": "rayservice-quick-start"},
+        {"line": 1153, "claim": "NewClusterWithIncrementalUpgrade alpha in KubeRay v1.5.1; NewCluster needs 200%", "verdict": "supported", "source": "rayservice-incremental-upgrade"},
+        {"line": 1183, "claim": "intervalSeconds 60 recommended; stepSize < maxSurge; maxSurgePercent formula", "verdict": "supported", "source": "rayservice-incremental-upgrade 'Recommended Parameters'"},
+        {"line": 1136, "claim": "replicas/minReplicas/maxReplicas/workersToDelete don't trigger upgrade or propagate", "verdict": "supported", "source": "rayservice user guide"},
+        {"line": 910, "claim": "'max' uses the deployment total's peak; 'min' pinned to zero by idle stretch", "verdict": "supported", "source": "advanced-autoscaling aggregation_function"},
+        {"line": 113, "claim": "route_prefix must start with /, not end with / (except '/'), no { }", "verdict": "supported", "source": "schema._route_prefix_format; serve.run rejects 'translate', '/translate/', '/translate/{lang}' (T1)"},
+        {"line": 820, "claim": "llm_engine 'vLLM' only; s3/gs/abfss/azure mirrors; PACK/STRICT_PACK/SPREAD/STRICT_SPREAD", "verdict": "supported", "source": "serve/llm/user-guides/configuration"},
+        {"line": 731, "claim": "max_ongoing_requests enforced across all callers (HTTP or DeploymentHandles)", "verdict": "supported", "source": "schema DeploymentSchema.max_ongoing_requests description"},
+        {"line": 968, "claim": "external scaling API idempotent and preserved across serve deploy", "verdict": "supported", "source": "advanced-autoscaling external scaler"},
+        {"line": 1045, "claim": "redeploying the L987-1008 config with language german switches language via reconfigure without restart", "verdict": "wrong", "source": "T1: serve deploy of that config with the post's composed code -> DEPLOY_FAILED 'user_config ... specified but deployment Translator missing reconfigure method'. Docs' Text ML example uses a different module that defines reconfigure."}
+      ]
+    },
+    "checklist": {
+      "repeated": 0, "avoided": 1, "na": 1, "repeated_ids": [],
+      "items": [
+        {"id": "arch-diagram-relative-link", "status": "avoided", "evidence": "L146 '![Serve 애플리케이션을 이루는 컨트롤러·프록시·레플리카 액터 구성도](https://docs.ray.io/en/latest/_images/architecture-2.0.svg)'"},
+        {"id": "proxy-env-ray-start-unsupported", "status": "n/a", "evidence": "No proxy env-var section; `ray start --head` appears only before `serve deploy` (L1017), as in the docs."}
+      ]
+    },
+    "extras": {
+      "architecture_first_line": 129,
+      "concepts_first_line": 58,
+      "install_line": 210,
+      "non_official_sources": "2/20 (10%): USENIX and arXiv Ray paper",
+      "opens_with_problem": true,
+      "closes_with_when_to_choose": true,
+      "closes_with_failure_modes": "partly (L1224-1226, one sentence pointing back)"
+    },
+    "prose_length_chars": 35802,
+    "prose_length_note": "Body without front matter, fenced code, table rows, image lines and the Sources list (with tables: 39,596).",
+    "top_issues": [
+      "L987-1008 (and L920-936, L1045): the production config puts user_config on the composed Translator, which has no reconfigure (L422-443); serve deploy gives DEPLOY_FAILED, so the guide's own production path and its in-place language-change claim fail as written.",
+      "L1153-1169: incremental upgrade steps omit the required RayServiceIncrementalUpgrade feature gate; L738 excerpt comment refers to a FastAPI route that serve_quickstart.py lacks.",
+      "L1224-1226 and L1199-1201: failure modes are a single back-pointing sentence and the comparison opens with a bare one-liner; routing, batching, backpressure and observability are thin, and only 2/20 sources are non-official."
+    ]
+  },
+  "Y": {
+    "scores": {
+      "A": {"score": 8.5, "reason": "Arc TL;DR (L11) -> problem/stack (L17) -> concepts (L64) -> architecture (L110) -> routing (L177) -> first run (L295) -> composition (L467) -> config/autoscaling (L668) -> production config (L811) -> observability (L1165) -> assessment (L1244). Clean markup, description 122 chars. Ordering oddities: KubeRay production (L1116-1118) is one paragraph wedged inside the config chapter and followed by the model-registry section (L1120); TL;DR is two long paragraphs (L13-15)."},
+      "B": {"score": 8.5, "reason": "Natural 입니다 register, no 한다 breaks, '디플로이먼트' used consistently. Meta source-version narration reads as notes, not prose: L389 'Getting Started 가이드는 ... 설명합니다. Ray 2.59.0 API 레퍼런스는 같은 동작을 클러스터의 Serve가 종료된다고 적고 있습니다.' -> 'Ctrl-C를 누르면 앱과 함께 클러스터의 Serve가 종료됩니다.'; L707 and L1122 'Python SDK 기준입니다' adds noise."},
+      "C": {"score": 8.0, "reason": "Good back-references to the running example. Dangling reference L778 '`auto` 열의 값은 앞서 밝힌 Ray Serve 버전 기준입니다' (no version is stated earlier in the body). L1116 KubeRay jump then L1120 registry breaks the deploy->operate flow. Paper digression L165-175 inside the architecture section is loosely tied."},
+      "D": {"score": 9.0, "reason": "Worked numbers where it matters: 2 replicas x 4 -> 9th request waits (L133), power-of-two with loads 1,3,4 (L192), backpressure 10+64 -> 75th gets 503 (L744), 60/2=30 -> max_replicas 36 (L786), 36 x 0.2 = 7.2 CPU (L805), eight-replica prefix scatter (L198). The L786 choice max_ongoing_requests=4 (target+100%) departs from the docs' 20-50% guidance, which the post never states."},
+      "E": {"score": 8.5, "reason": "Stack ASCII (L33-44), deployment tree (L92-104), autoscaling diagram (L147), Ray paper scheduler figure (L173), dashboard screenshots (L1186-1194), decision/default tables. Missing the official Serve architecture diagram where the actor/request path is explained (L114-141)."},
+      "F": {"score": 8.0, "reason": "24 claims checked, 0 unsupported, 1 wrong. Wrong: L255-265 says a router is attached with `@serve.deployment(request_router_class=...)`; in Ray 2.60.0 this raises \"deployment() got an unexpected keyword argument 'request_router_class'\"; the docs' code uses request_router_config=RequestRouterConfig(request_router_class=...). All numbers checked (10% match threshold, Anyscale 2025-09-15/Ray 2.49/32B/-60% TTFT/+40% throughput, RFC May 2025, router defaults 10/30/0.025/2/0.5, backpressure 503/429, gRPC 9000, Ray 2.10, Ray 2.51, 75/25 split) match. Klaviyo case (L1252) rests on a low-quality SEO blog but is reported as that article's claim."},
+      "T1": {"score": 8.0, "reason": "Ran: hello world -> {'result': 'Hello world!'}; serve_quickstart + client -> 'Bonjour monde!'; FastAPI version + client -> 'Bonjour monde!'; composed app + client -> French summary; stream.py and ObjectRef asserts pass; user_config/reconfigure, autoscaling_config(max 36) and num_replicas='auto' deploy and answer; composed config (L861-879) via ray start + serve deploy -> RUNNING and correct response; serve build single output matches L826-847 except added logging_config; serve deploy CLI options match. Failed: custom router attachment (L257-265) TypeError (works once rewritten with RequestRouterConfig: 'UniformRequestRouter routing request' and on_request_routed fire). Multi-app YAML presented as generated (L1007-1037) differs from real serve build output (route_prefix /app1,/app2, encoding TEXT), so the /classify client (L1103-1113) would 404 against the generated file."},
+      "T2": {"score": 9.0, "reason": "Covers concepts, architecture, routing, getting started, composition, configuration, autoscaling, production config, multi-app, observability; each grounded in a listed source. The LLM routing and Serve LLM metrics sections are LLM-weighted but supported."},
+      "T3": {"score": 9.0, "reason": "Deep on internals and design trade-offs: request lifecycle, handle path, GCS checkpointing, Ray paper GCS/scheduler, pluggable routing with RFC motivation, prefix-tree design and why KV-event replication was rejected, broadcast vs singleton stats patterns, backpressure semantics, Serve vs Ray Autoscaler with a forum failure case, observability. Weak on Kubernetes operations: RayService gets one paragraph (L1118), no manifest, upgrade behaviour or troubleshooting. Non-official sources 6/23."}
+    },
+    "principles": {
+      "claim_headings": {"status": "met", "evidence": "L177 '파워 오브 투 초이스에서 접두사 인식·커스텀 라우터로 확장되는 요청 라우팅', L194 'KV 캐시 재사용을 놓치는 페이로드 무관 가정'; topic-only L1269 '실패 지점과 선택 기준'."},
+      "running_example": {"status": "met", "evidence": "Summarizer->Translator set up L27 and reused in routing (L183, L198), backpressure (L744), autoscaling (L786, L805), observability (L1188, L1200)."},
+      "mechanism_design_formula_example": {"status": "met", "evidence": "routing L185-213 (mechanism -> broken assumption -> alternative router -> design choice -> benchmark); max_replicas sizing L782-801."},
+      "facts_said_once": {"status": "partly met", "evidence": "TL;DR L13-15 repeats L118-141 (actors, request path, power-of-two, max_ongoing_requests); MLflow REST-server point appears at L1256 only once but registry composition repeats L1122/L1250."},
+      "numbers_with_scope_unit": {"status": "met", "evidence": "L213 '32B 파라미터 모델 실험에서는 TTFT가 60% 줄고'; L744 marks its numbers '설명을 위한 가정'."},
+      "nothing_invented": {"status": "partly met", "evidence": "L257-265 request_router_class decorator kwarg does not exist; L1007-1037 YAML presented as generated output does not match current serve build."},
+      "own_assessment_at_end": {"status": "met", "evidence": "L1273 '이 글의 판단으로는, ...'."},
+      "length_fitted": {"status": "met", "evidence": "Install L299-305 short; routing and autoscaling sections get the space."},
+      "type_specific_shape": {"status": "partly met", "evidence": "Opens with TL;DR and problem (L11, L17), architecture (L110) before usage (L295), non-official design sources included (RFC, Anyscale, forum, paper); closing failure modes are one back-pointing sentence (L1271)."},
+      "korean_style": {"status": "met", "evidence": "입니다 register, Korean headings, '즉' 2 times; meta 'Ray 2.59.0 API 레퍼런스는 ... 적고 있습니다' (L389) is the main style lapse."}
+    },
+    "claims": {
+      "checked": 24,
+      "unsupported": 0,
+      "wrong": 1,
+      "numbers_checked": 16,
+      "error_rate": 0.042,
+      "examples": [
+        {"line": 153, "claim": "application errors return 500 with traceback; replica keeps serving", "verdict": "supported", "source": "architecture page"},
+        {"line": 141, "claim": "100KiB+ objects via object store, zero-copy", "verdict": "supported", "source": "architecture page"},
+        {"line": 207, "claim": "PrefixCacheAffinityRouter: match >=10% -> highest prefix match, <10% -> lowest cache utilization, imbalance -> power of two", "verdict": "supported", "source": "serve/llm/architecture/routing-policies"},
+        {"line": 211, "claim": "Anyscale blog 2025-09-15; support from Ray 2.49; character-level prefix tree; KV-event design rejected for overhead", "verdict": "supported", "source": "Anyscale blog"},
+        {"line": 213, "claim": "32B model: TTFT -60%, end-to-end throughput +40%+; same with one replica; similar trend on OSS Ray", "verdict": "supported", "source": "Anyscale blog"},
+        {"line": 196, "claim": "custom request router RFC in May 2025; callback named on_request_scheduled in RFC", "verdict": "supported", "source": "GitHub issue #53016 created 2025-05-14; body contains on_request_scheduled"},
+        {"line": 273, "claim": "RequestRouterConfig defaults: stats period 10 s, timeout 30 s, backoff 0.025 s x2 up to 0.5 s", "verdict": "supported", "source": "ray.serve.config / constants 2.60.0"},
+        {"line": 289, "claim": "num_fallback_replicas default 2; 0 = strict affinity; RoundRobinRouter per-instance cursor", "verdict": "supported", "source": "experimental/consistent_hash_router.py; custom-request-router page 'Each router instance keeps its own cursor'"},
+        {"line": 740, "claim": "max_queued_requests -1 = unlimited; BackPressureError / 503; status_code only 503 or 429; Retry-After rounded up; gRPC RESOURCE_EXHAUSTED; alpha", "verdict": "supported", "source": "BackpressureConfig source (stability alpha)"},
+        {"line": 773, "claim": "auto vs manual defaults table (5/2/1/100 vs 5/2/1/1)", "verdict": "supported", "source": "autoscaling-guide"},
+        {"line": 778, "claim": "upscale 30 s, downscale 600 s, look_back 30 s", "verdict": "supported", "source": "advanced-autoscaling"},
+        {"line": 784, "claim": "max_replicas ~20% above peak", "verdict": "supported", "source": "autoscaling-guide"},
+        {"line": 586, "claim": "75% Spanish / 25% French -> 3 and 1 replicas", "verdict": "supported", "source": "model_composition"},
+        {"line": 849, "claim": "gRPC proxy default port 9000", "verdict": "supported", "source": "production-guide/config"},
+        {"line": 894, "claim": "serve deploy -a defaults to http://localhost:8265, RAY_DASHBOARD_ADDRESS; --runtime-env/--working-dir/--name ignored for config files", "verdict": "supported", "source": "serve deploy --help (2.60.0)"},
+        {"line": 666, "claim": "RayServeHandle/RayServeSyncHandle removed as of Ray 2.10", "verdict": "supported", "source": "model_composition"},
+        {"line": 1208, "claim": "engine metrics on by default as of Ray 2.51; log_engine_metrics=False disables", "verdict": "supported", "source": "serve/llm/user-guides/observability"},
+        {"line": 782, "claim": "Oct 2023 forum: equal values -> fewer replicas; answer: max_concurrent_queries > target_num_ongoing_requests_per_replica", "verdict": "supported", "source": "discuss.ray.io thread 12515 (2023-10-19)"},
+        {"line": 167, "claim": "Stoica: 'RPC framework, plus an actor framework, plus an object store'", "verdict": "supported", "source": "paper.lingyunyang.com reading notes"},
+        {"line": 171, "claim": "local scheduler forwards only when overloaded (queue over threshold) or resources unmet", "verdict": "supported", "source": "arXiv 1712.05889 §4.2.2"},
+        {"line": 389, "claim": "serve run key=val args, --route-prefix/--name only with import path, -r/--reload experimental", "verdict": "supported", "source": "serve run --help (2.60.0)"},
+        {"line": 736, "claim": "health_check_period_s 10, timeout 30, graceful wait loop 2, timeout 20", "verdict": "supported", "source": "configure-serve-deployment"},
+        {"line": 1252, "claim": "Klaviyo runs real-time segmentation/recommendation on Ray Serve with sub-second latency", "verdict": "supported", "source": "gocodeo post (low-quality secondary source)"},
+        {"line": 255, "claim": "attach a router with @serve.deployment(request_router_class=...)", "verdict": "wrong", "source": "T1 Ray 2.60.0: TypeError \"deployment() got an unexpected keyword argument 'request_router_class'\"; docs code uses request_router_config=RequestRouterConfig(request_router_class=...)"}
+      ]
+    },
+    "checklist": {
+      "repeated": 0, "avoided": 1, "na": 1, "repeated_ids": [],
+      "items": [
+        {"id": "arch-diagram-relative-link", "status": "avoided", "evidence": "No empty-text or docs-relative links; images use absolute URLs (L147, L1186) or a site-local asset with Korean alt (L173). The official architecture diagram is not used at all."},
+        {"id": "proxy-env-ray-start-unsupported", "status": "n/a", "evidence": "No proxy env-var section; `ray start --head` appears only before `serve deploy` (L888) and with --dashboard-host for Docker (L1180), both as in the docs."}
+      ]
+    },
+    "extras": {
+      "architecture_first_line": 110,
+      "concepts_first_line": 64,
+      "install_line": 299,
+      "non_official_sources": "6/23 (26%): RFC #53016, Lingyun Yang notes, arXiv paper, Anyscale blog, discuss.ray.io thread, gocodeo post",
+      "opens_with_problem": true,
+      "closes_with_when_to_choose": true,
+      "closes_with_failure_modes": "partly (L1271, one sentence pointing back)"
+    },
+    "prose_length_chars": 35335,
+    "prose_length_note": "Body without front matter, fenced code, table rows, image lines and the Sources list (with tables: 37,626).",
+    "top_issues": [
+      "L255-265: `@serve.deployment(request_router_class=UniformRequestRouter)` raises TypeError in Ray 2.60.0; the working form is request_router_config=RequestRouterConfig(request_router_class=...).",
+      "L1116-1118: production on Kubernetes is one paragraph (no RayService manifest, in-place vs cluster upgrade, Ready check or troubleshooting), and it sits oddly before the model-registry section (L1120).",
+      "L778 dangling '앞서 밝힌 Ray Serve 버전' and L389 docs-version narration; L1007-1037 YAML shown as serve build output does not match the real output (route_prefix /app1,/app2, TEXT logs), so the /classify client 404s against the generated file."
+    ]
+  },
+  "preference": {
+    "overall": "Y",
+    "per_criterion": {"A": "X", "B": "tie", "C": "X", "D": "tie", "E": "X", "F": "tie", "T1": "Y", "T2": "tie", "T3": "Y"},
+    "reason": "The two posts are close: each has one wrong, code-breaking claim and otherwise exact numbers. Y's bug is in an alpha custom-router snippet. X's bug is in the guide's own production path: the running example's config file fails to deploy and its language-change claim is false. Y also covers more internals and design reasoning (pluggable routing with RFC and benchmark, backpressure, stats patterns, observability) and draws on more non-official sources. X is tidier in structure and much stronger on KubeRay operations and the autoscaler control loop. Narrow preference for Y."
+  }
+}

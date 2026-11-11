@@ -1,0 +1,274 @@
+{
+  "item": "review-zep",
+  "run": 3,
+  "post": "/tmp/eval-paper/review-zep-v5.md",
+  "source": "https://arxiv.org/html/2501.13956 (v1)",
+  "sampling": "80 body paragraphs (blank-line blocks incl. tables and lists; headings, rules, display math, references excluded); paragraphs 3,6,...,78 read; claims drawn from them; whole post read for wrong claims outside the sample",
+  "scores": {
+    "A": 8,
+    "B": 8,
+    "C": 7.5,
+    "D": 8.5,
+    "E": 8,
+    "F": 7.5
+  },
+  "type_scores": {
+    "R1": 8,
+    "R2": 8.5,
+    "R3": 8
+  },
+  "deductions": {
+    "A": [
+      "L156 '증분 배정은 정확한 해 대신 갱신 비용을 줄이는 근사입니다. 논문은 이를 주기적 전체 갱신을 전제로 한 휴리스틱으로 둡니다.' is a standalone paragraph that only restates L154",
+      "L328 '### References' sits as an H3 under the H2 '한계와 시사점'; topic H3s '실험 설정'/'결과' (L208, L214, L239, L245) repeat across sections",
+      "Front matter complete: subtitle, paper_author 'Zep AI', paper_doi, two-level categories, use_math true, no author key; no body H1, no skipped levels; math only $$...$$"
+    ],
+    "B": [
+      "L106 two near-identical sentences back to back: '같은 사실을 서로 다른 여러 엔티티 쌍 사이에 반복해서 추출할 수도 있습니다. 같은 사실을 여러 엔티티 쌍에 반복해 실으면, ...'; rewrite: '같은 사실을 여러 엔티티 쌍에 반복해 실으면 여러 엔티티가 얽힌 사실을 하이퍼엣지처럼 표현할 수 있습니다.'",
+      "L129 '새로운 가상의 예로' introduces the same running-shoe example as L44/L84; rewrite: '앞의 러닝화 예로 돌아가면'",
+      "L64 '아래 식에서 $$\\phi^{*}(A\\times B)$$는 ...' - there is no display formula below, only inline math in the next sentence; reads as an inserted glossary",
+      "Formulaic lead-ins L121 '규칙은 다음과 같습니다', L268 '보고한 값은 다음과 같습니다', L303 '한계는 다음과 같습니다'; '할 수 있습니다' x7 (e.g. L139 '유지할 수 있고, 전체 갱신 시점도 늦출 수 있습니다')",
+      "L305-310 bullets mix noun fragments ('... 하락.') with full sentences ('MemGPT는 LongMemEval에서 비교하지 못했습니다.')"
+    ],
+    "C": [
+      "L139 '이 서브그래프의 위치와 역할은 앞서 본 세 계층 구조에서 다룬 그대로입니다.' is a pointer that adds nothing; L135 and L139 restate the label-propagation rationale already given at L25",
+      "L182 '사용자가 원래 러닝화를 신는다고 했다가' drifts from the example as set up at L44/L129 ('러닝화를 샀어')",
+      "L260 says Zep passes '커뮤니티 요약' to the model in the LongMemEval run, contradicting L241 ('가장 관련 높은 엣지와 엔티티 노드를 검색')",
+      "L324 '그 능력은 위 과제들이 풀린 뒤에야 제대로 검증할 수 있습니다' - fine-tuned extractors and ontologies are not preconditions for evaluating it; only the benchmark is",
+      "Cross-references accurate (L256 '앞서 말했듯' -> L243; L305-308 point to the right sections)"
+    ],
+    "D": [
+      "Well placed: plurality-vote table L147-152, BM25 vs cosine vs BFS walk-through L182, relative-vs-absolute note L254 and computed %p column L268-283",
+      "Invalidation example L129 is prose only (no before/after timestamp table) and semantically shaky: a return does not make '샀다' stop being true, yet the purchase edge is closed",
+      "Experimental setup omits the models that matter for interpretation (gpt-4o-mini builds the graph, BGE-m3 embeds and reranks) and DMR's scale (500 conversations, 60 messages)"
+    ],
+    "E": [
+      "DMR table L216-225 and LongMemEval table L247-252 copy Table 1/2 cell for cell; question-type table L270-283 has all 12 rows, Delta verbatim, computed %p column labelled at L268",
+      "L188-194 reranker table: RRF and MMR cells '기존 재순위 기법' are not a ranking criterion (the column header promises one)",
+      "No architecture figure; the three-tier graph and retrieval pipeline are text and small tables only. No paper figure/table numbering used"
+    ],
+    "F": [
+      "L260 '사실과 그 유효기간, 엔티티의 이름과 요약, 커뮤니티 요약을 텍스트로 넘깁니다' (in the LongMemEval comparison) - unsupported: Sec 4 retrieves 'the 20 most relevant edges (facts) and entity nodes (entity summaries)'; no community summaries",
+      "L297 '원문을 사실과 요약으로 압축하는 과정에서 어시스턴트 발화의 세부가 빠지면 그대로 손해가 됩니다' - the writer's cause stated as fact; the paper gives no cause ('suggest further research and engineering work is needed'); the question-type definition is from LongMemEval, not this paper",
+      "L186 'Zep이 지원하는 방식은 다섯 가지이며' - the paper names five but says 'supports existing reranking approaches such as RRF and MMR'; the count is the post's",
+      "L287 'Zep은 이를 엔티티 요약과 사실 몇 줄로 미리 정리해 넘깁니다' presents a mechanism for the preference gain the paper does not analyse",
+      "No wrong numbers found: all DMR, LongMemEval and question-type cells, 1024 dims, n=4, four timestamps, 115k/1.6k, 18.5% match the source"
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "H2s are claim noun phrases (L36, L88, L133, L204 'DMR에서 전체 대화 기준선과 MemGPT를 근소하게 앞선 결과', L235, L266); topic H3s '실험 설정', '결과', '그래프의 형식 정의' and H2 L301 '한계와 시사점'"
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Running shoes -> trekking shoes (hypothetical, labelled) through L44 setup, L84 two timelines, L108 dedup, L129 invalidation, L145 community vote, L182 retrieval, L202 constructor, L262 LongMemEval, L293 knowledge-update; drift at L182"
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Invalidation: problem L42, choice L121, rule L123-125, example L129; label propagation: choice L135-139, rule L143, example L145-152, trade-off L154; retrieval: f L171, three searches L178, example L182"
+    },
+    "facts_once": {
+      "status": "partly met",
+      "evidence": "115k average at L17, L29, L237, L241 (adjacent paragraphs), L260, L287; single-session-assistant drop L30, L264, L297, L305, L314; periodic refresh L154, L156, L307; network-latency caveat L243 and L256; label-propagation rationale L25, L135, L139"
+    },
+    "numbers_with_scope": {
+      "status": "met",
+      "evidence": "Numbers carry model and baseline (L29 'gpt-4o를 쓰면', L227 'gpt-4-turbo에서는'); L254 marks 18.5% as relative and the paper's; L268 labels relative vs computed %p; 15.2% (gpt-4o-mini) never given; L256 calls latency '평균' though Table 2 does not say mean or median"
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Hypotheticals labelled '가상' (L44, L84, L106, L108, L129, L145, L182); but L260 adds community summaries to the experiment context and L297/L287 state causes the paper does not give"
+    },
+    "writer_assessment_end": {
+      "status": "met",
+      "evidence": "L314 '이 글의 판단으로는' when to use and not; L318-322 three gaps (single LongMemEval baseline, ingestion cost, error accumulation); future work only from the Conclusion (L324)"
+    },
+    "length_fit": {
+      "status": "met",
+      "evidence": "About 20k characters for a systems paper with three result tables; some restatement (L154/L156, L237/L241) still inflates it"
+    },
+    "type_shape": {
+      "status": "met",
+      "evidence": "TL;DR with four questions L14-32; no abstract/introduction section; closing is judgement plus authors' limitations"
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Natural 입니다 register throughout; '이러한' 0, '즉' 1, '결국' 2; but L106 duplicate sentence, L129 '새로운 가상의 예로', '할 수 있습니다' x7, three '다음과 같습니다'"
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 8,
+    "supported": 14,
+    "unsupported": 1,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 206,
+        "type": "number",
+        "claim": "DMR gpt-4-turbo: Zep ahead of MemGPT and full-conversation by about 1 point",
+        "verdict": "supported",
+        "source": "Table 1: 94.8 vs 93.4 (+1.4) and 94.4 (+0.4)"
+      },
+      {
+        "line": 218,
+        "type": "number",
+        "claim": "DMR gpt-4-turbo rows 35.3/78.6/93.4/94.4/94.8; recursive summarization and MemGPT marked as MemGPT-paper values",
+        "verdict": "supported",
+        "source": "Table 1 rows and dagger 'Results reported in [3]'"
+      },
+      {
+        "line": 223,
+        "type": "number",
+        "claim": "DMR gpt-4o-mini rows: session summaries 88.0, full conversation 98.0, Zep 98.2",
+        "verdict": "supported",
+        "source": "Table 1 gpt-4o-mini rows"
+      },
+      {
+        "line": 256,
+        "type": "number",
+        "claim": "Latency 28.9->2.58 s (gpt-4o), 31.3->3.20 s (gpt-4o-mini), matching ~90% reduction",
+        "verdict": "supported",
+        "source": "Table 2; Sec 4.3.2 'reducing response times by approximately 90%'"
+      },
+      {
+        "line": 256,
+        "type": "number",
+        "claim": "Latency IQR also narrower",
+        "verdict": "supported",
+        "source": "Table 2 IQR 6.01->0.684 s, 8.76->1.31 s"
+      },
+      {
+        "line": 287,
+        "type": "number",
+        "claim": "single-session-preference gpt-4o 20.0->56.7, +184%, absolute +36.7 points the largest in the table",
+        "verdict": "supported",
+        "source": "Table 3; 36.7 is the largest absolute difference"
+      },
+      {
+        "line": 297,
+        "type": "number",
+        "claim": "single-session-assistant fell for both models, gpt-4o by -14.2 points from a 94.6% baseline",
+        "verdict": "supported",
+        "source": "Table 3: 94.6->80.4 (gpt-4o), 81.8->75.0 (gpt-4o-mini)"
+      },
+      {
+        "line": 174,
+        "type": "number",
+        "claim": "Search returns a 3-tuple of semantic-edge, entity-node and community-node lists",
+        "verdict": "supported",
+        "source": "Sec 3: 'transforms a query into a 3-tuple containing lists of semantic edges, entity nodes, and community nodes'"
+      },
+      {
+        "line": 60,
+        "type": "method",
+        "claim": "phi: E -> N x N is the incidence function",
+        "verdict": "supported",
+        "source": "Sec 2: 'phi: E->NxN represents a formal incidence function'"
+      },
+      {
+        "line": 106,
+        "type": "method",
+        "claim": "Same fact extracted between several entity pairs models multi-entity facts as hyper-edges",
+        "verdict": "supported",
+        "source": "Sec 2.2.2: 'the same fact can be extracted multiple times between different entities ... hyper-edges'"
+      },
+      {
+        "line": 160,
+        "type": "comparison",
+        "claim": "Community summaries by iterative map-reduce as in GraphRAG; retrieval differs; community names embedded for cosine search",
+        "verdict": "supported",
+        "source": "Sec 2.3: 'iterative map-reduce-style summarization ... our retrieval methods differ substantially ... These names are embedded and stored to enable cosine similarity searches'"
+      },
+      {
+        "line": 243,
+        "type": "method",
+        "claim": "Zep accessed as a remote cloud service; its network latency absent from baselines",
+        "verdict": "supported",
+        "source": "Sec 4.3: 'connecting to Zep's service hosted in AWS us-west-2 ... this latency was not present in our baseline evaluations'"
+      },
+      {
+        "line": 297,
+        "type": "method",
+        "claim": "single-session-assistant asks what the assistant said; compressing raw text into facts and summaries drops those details",
+        "verdict": "unsupported",
+        "source": "The paper gives no cause, only 'suggest further research and engineering work is needed' (Sec 4.3.2); the type definition is LongMemEval's, not stated here"
+      },
+      {
+        "line": 305,
+        "type": "attribution",
+        "claim": "Authors' own limitations: assistant drop, small-model temporal understanding, periodic refresh, DMR limits, MemGPT not compared on LongMemEval, no benchmark for conversation plus business data",
+        "verdict": "supported",
+        "source": "Sec 4.3.2, 2.3, 4.2, 4.3.1 and Sec 5 'no existing benchmarks adequately assess ...'"
+      },
+      {
+        "line": 320,
+        "type": "method",
+        "claim": "Absence claim: reported latency does not cover graph-construction (ingestion) cost",
+        "verdict": "supported",
+        "source": "Sec 5: 'latency benchmarks for our retrieval mechanisms'; no ingestion cost reported"
+      }
+    ],
+    "outside_sample": [
+      "L260 community summaries added to the experimental context (unsupported; contradicts L241)",
+      "L297 cause of the single-session-assistant drop stated as fact (unsupported)",
+      "L287 mechanism for the preference gain (writer's interpretation, unmarked)",
+      "L186 'five' rerankers (paper says 'such as')",
+      "L324 'only after these tasks are solved can it be verified' (writer's inference beyond the Conclusion)",
+      "L174 '최종 문자열 $$S$$로' uses the string set S for the output beta"
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "items": [
+      {
+        "id": "inline-math-delimiters",
+        "result": "avoided",
+        "evidence": "No \\( \\) or \\[ \\] in the post; inline math is $$...$$ (e.g. L21, L60)"
+      },
+      {
+        "id": "longmemeval-tldr-relative",
+        "result": "avoided",
+        "evidence": "L29 '정확도가 60.2%에서 71.2%로 올랐고'; L30 '55.4%에서 63.8%로'; no %포인트 in the TL;DR (relative 15.2%/18.5% not stated there)"
+      },
+      {
+        "id": "longmemeval-results-relative",
+        "result": "avoided",
+        "evidence": "Table L249-252 gives 55.4/63.8 and 60.2/71.2; L254 '\"최대 18.5% 향상\"은 상대 향상으로 읽힙니다 ... 18.5%를 절대 정확도의 %p 상승으로 읽으면 안 됩니다'; %p used only for computed absolute differences (L270-283); 15.2% omitted"
+      },
+      {
+        "id": "longmemeval-baseline-misattributed",
+        "result": "avoided",
+        "evidence": "L29 'LongMemEval에서 gpt-4o를 쓰면 정확도가 60.2%에서 71.2%로'; L237 '두 모델 모두에서 전체 컨텍스트 기준선보다'"
+      },
+      {
+        "id": "longmemeval-185-arithmetic",
+        "result": "avoided",
+        "evidence": "L254 '논문이 내세우는 ... \"최대 18.5% 향상\"' and computes '$$71.2 / 60.2 \\approx 1.183$$' (does not say outright that 18.3 differs from 18.5)"
+      },
+      {
+        "id": "missing-description",
+        "result": "avoided",
+        "evidence": "L8 starts 'Zep은', 128 characters, numbers 60.2/71.2/28.9/2.58 all in TL;DR L29"
+      }
+    ]
+  },
+  "extras": {
+    "absence_claims_and_source_sentences": "All correct: L64 bidirectional traceback 'not examined in experiments, future work' (Sec 2.1); L210 retrieval count '20개 ... DMR 절에서는 상위 10개로 적혀 있습니다' (Sec 4 vs 4.2, an accurate note on the paper's own inconsistency); L212 MemGPT gpt-4o-mini not reproducible (Sec 4.2); L309 MemGPT not compared on LongMemEval (Sec 4.3.1); L310 no benchmark for conversation plus business data (Sec 5); L318 single LongMemEval baseline; L320 ingestion cost not reported (Sec 5 reports 'latency benchmarks for our retrieval mechanisms'); L322 error accumulation not measured. No pipeline meta language ('이 근거', '제공된 자료') found.",
+    "edit_leaks": "L129 '새로운 가상의 예로' on the same running example; L156 paragraph that only restates L154 (looks appended); L139 pointer sentence '... 앞서 본 세 계층 구조에서 다룬 그대로입니다' standing in for removed text; L143 '여기서 $$\\mathcal{N}_{s}$$는 의미 엔티티 노드 집합입니다' re-defining a symbol from L64/L66 mid-step; L64 '아래 식에서' glossary with no formula below; L106 duplicated sentence.",
+    "repetition": "Running example: 러닝화 15 and 트레킹화 13 mentions in 9 paragraphs (L44, L84, L108, L129, L145, L182, L202, L262, L293); L262 retells L202 with little new. Key facts: 115k in 6 places (L17, L29, L237, L241, L260, L287), single-session-assistant drop in 5 prose places (L30, L264, L297, L305, L314), 184% three times (L32, L272, L287), 60.2->71.2 four times (L8, L29, L252, L254), periodic refresh three times (L154, L156, L307), network latency twice (L243, L256).",
+    "table_cells": "Result tables verbatim; reranker table cells for RRF/MMR are not criteria; no blank or '-' cells",
+    "front_matter": "subtitle, paper_author 'Zep AI', paper_doi, two-level categories, use_math true, no author key; description 128 chars",
+    "tags_note": "7 tags; 'Agentic-AI' and 'Knowledge-Graph' generic alongside specific ones"
+  },
+  "top_issues": [
+    "Unsupported mechanism claims: L260 says the LongMemEval context includes community summaries (Sec 4: edges and entity nodes only, as the post's own L241 says); L297 and L287 state causes for the single-session-assistant drop and the preference gain that the paper does not give",
+    "Edit residue: L156 restates L154 as its own paragraph, L106 repeats a sentence, L129 calls the running example '새로운', L139/L143 pointer and re-definition sentences, L64 '아래 식에서' with no formula",
+    "Restatement: 115k average six times (L237 and L241 adjacent), single-session-assistant drop five times, periodic refresh three times; running example drifts at L182 ('신는다고 했다가')"
+  ]
+}

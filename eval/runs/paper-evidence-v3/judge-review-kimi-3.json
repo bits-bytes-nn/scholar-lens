@@ -1,0 +1,85 @@
+{
+  "item": "review-kimi",
+  "post": "/tmp/eval-paper/review-kimi-v3.md",
+  "source": "https://arxiv.org/html/2507.20534",
+  "judge_run": 3,
+  "sample_rule": "body prose paragraphs (headings, tables, images, display math excluded; 110 total); paragraph 3 then every third (3,6,...,108); 15 claims drawn from those",
+  "scores": {"A": 8.5, "B": 7.5, "C": 7.0, "D": 8.5, "E": 7.5, "F": 6.0},
+  "type_scores": {"R1": 8.0, "R2": 8.5, "R3": 8.0, "X1": 8.0},
+  "deductions": {
+    "A": ["L284 and L290 state the same rubric-filtering fact in two adjacent paragraphs ('성공 기준을 충족한 궤적만 학습에 쓰입니다' / '판정자는 루브릭의 성공 기준을 충족한 궤적만 학습에 남깁니다')", "L250 repeats the L125 K2 max-logit paragraph after the schedule table, outside the MuonClip section"],
+    "B": ["L217 '희소도 48만으로도' reads as 480,000; rewrite '희소도 48만 해도'", "L74 '같은 값 σ̄를 가지고' (가지다); rewrite '특잇값이 모두 σ̄로 같고'", "L31 '이 점수는 뒤에 나오는 다중 시도 설정의 수치와 별개의 설정에서 나온 값입니다' is a meta sentence in the TL;DR", "L260 '구체적인 방식은 뒤의 궤적 생성 부분에서 다룹니다', L325 '여기서는 그중 두 가지를 살펴봅니다' signpost framing", "figure-guide sentence repeated in one mould: L157 '도식에서 볼 부분은', L209 '그래프에서는 ... 비교하면 됩니다', L272 '이 흐름도에서는 ... 주목할 만합니다', L345 '구조도에서는 ... 보면 됩니다'"],
+    "C": ["L449 heading '다중 턴 점진적 공격에 가장 취약한' contradicts L461 'K2에게 Crescendo가 일관되게 가장 강한 공격이었다고 보기는 어렵고'", "L125 '이 구간은 아래 문단에서 클리핑이 작동한 초기 구간과 대략 겹칩니다' points at the next paragraph instead of stating the link", "L284/L290 stitched duplicate"],
+    "D": ["L173 spends three sentences explaining equal exposure in a three-row table; otherwise hard parts (QK-Clip MLA scaling L54/L108, RL loss L306-L313) get worked examples"],
+    "E": ["L392 cell '72.5 (그림 1 표시값)' and L396 '그림 1에 표시된 값 기준으로' cite the paper's figure number; the value is also Table 3's starred report value", "L406-L415 units mixed in one column: '53.7', '49.5' vs '85.7%', '69.6%'", "L453 red-team table is pivoted (strategies as columns, DeepSeek-R1 dropped) rather than whole source rows"],
+    "F": ["L43 '로짓이 이 수준에 이르면 보통 큰 손실 스파이크가 생기고' — paper: 'could lead to potential numerical instabilities and even training divergence'; no 'usually large loss spikes'", "L396 'Verified 기준으로는 시도 횟수와 상관없이 K2가 Claude 4 계열보다 낮습니다' — Table 3 Agentless-Single-Patch: K2 51.8 vs Claude 4 Sonnet 50.2", "L480 '하드웨어에 묶인 인프라' listed under '저자들이 밝힌 한계' although the paper presents the two-stage H2D scheme as a design choice, not a limitation", "L431 '따라서 ... 상당 부분 사전학습 단계에서 이미 갖춰진 것으로 볼 수 있습니다' is the writer's inference stated as conclusion"]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L62 'MuonClip: 업데이트 뒤 헤드별로 query/key 가중치를 재스케일하는 QK-Clip', L181 '희소도 스케일링에 따라 전문가는 늘리고 어텐션 헤드는 줄인 1조 파라미터 MoE'; L449 heading contradicted by its own body"},
+    "running_example": {"status": "partly met", "evidence": "L54 hypothetical head with S_max=200 'is followed' only through the MuonClip section (L98, L108); RL uses a separate 4-response example (L306); the airline task (L286) is a third"},
+    "mechanism_order": {"status": "met", "evidence": "QK-Clip: problem L43-L50 → alternatives and choice L49-L52 → formulas L80-L96 → numeric example L54/L108; RL: loss L300 → table example L308"},
+    "facts_once": {"status": "partly met", "evidence": "L284/L290 duplicate; L125/L250 K2 logit trajectory twice; token efficiency defined at L17, L41 and L139; MLA expanded at L17, L50, L187"},
+    "numbers_scoped": {"status": "partly met", "evidence": "most numbers carry setting (L31 'temperature 0.0, Avg@4', L392 single vs multi attempt); L217 '48만' misreadable; L396 overgeneralises 'Verified'; L406 mixed units"},
+    "nothing_invented": {"status": "partly met", "evidence": "worked examples labelled '가상' (L54, L98, L286, L306, L327); no invented formulas or code; L43 loss-spike embellishment"},
+    "writer_assessment": {"status": "met", "evidence": "L471 '이 글은 MuonClip을 ... 가장 먼저 참고할 부분으로 봅니다', L477 '이 글의 판단으로는', L482-L484 '언제 쓸 것인가'"},
+    "length_fit": {"status": "met", "evidence": "~29k chars for a long multi-part report; hard parts (MuonClip, RL loss, checkpoint engine) get most space"},
+    "type_shape": {"status": "met", "evidence": "## TL;DR with four questions L14-L31, no abstract/intro section after it, closes with '한계와 시사점' L465"},
+    "korean_style": {"status": "partly met", "evidence": "입니다 register held throughout; repeated figure-guide mould (L157, L209, L272, L345); signposts L260, L325; '가지고' L74"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 2,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numeric_claims": 11,
+    "examples": [
+      {"line": 43, "claim": "9B activated / 53B total MoE with vanilla Muon; max logit exceeds 1000", "verdict": "supported", "source": "§2.1: 'mid-scale 9B activated and 53B total parameters ... maximum attention logits quickly exceed a magnitude of 1000'"},
+      {"line": 43, "claim": "at that level large loss spikes usually occur and training sometimes diverges", "verdict": "unsupported", "source": "Fig. 2 caption: 'could lead to potential numerical instabilities and even training divergence' (no 'usually loss spikes')"},
+      {"line": 96, "claim": "alpha typically 0.5, equal scaling of query and key", "verdict": "supported", "source": "§2.1: 'α is a balancing parameter typically set to 0.5'"},
+      {"line": 104, "claim": "MLA: q^C,k^C scaled by sqrt(gamma_h), q^R by gamma_h, shared k^R untouched", "verdict": "supported", "source": "§2.1 bullet list (qC and kC each scaled by √γh; qR by γh; kR left untouched)"},
+      {"line": 127, "claim": "first 70000 steps: 12.7% of heads triggered QK-Clip; afterwards inactive", "verdict": "supported", "source": "Appendix D Self-deactivation"},
+      {"line": 173, "claim": "SimpleQA 23.76 / 27.39 / 28.94; corpora rephrased at most twice", "verdict": "supported", "source": "Table 1 and §2.2: 'each corpora is rephrased at most twice'"},
+      {"line": 217, "claim": "doubling heads: 0.5%-1.2% val loss reduction; sparsity 48; 64 heads", "verdict": "supported", "source": "§2.3: 'ranging from 0.5% to 1.2%', 'sparsity 48 already offers strong performance ... 64 attention heads'"},
+      {"line": 227, "claim": "16-way PP + 16-way EP + ZeRO-1; ~6 TB over 256 GPUs; ~30 GB per GPU; nodes multiple of 32; optimizer offload at 32 nodes", "verdict": "supported", "source": "§2.4.2"},
+      {"line": 243, "claim": "10T at 2e-4 after 500-step warm-up; 5.5T cosine 2e-4→2e-5; 400B 4k + 60B 32k at 2e-5→7e-6; 67M batch; wd 0.1", "verdict": "supported", "source": "§2.5 Training recipe"},
+      {"line": 274, "claim": "over 20,000 synthetic tools from hierarchical domain evolution; t-SNE visualisation", "verdict": "supported", "source": "§3.1.1: 'This evolution process produces over 20,000 synthetic tools'"},
+      {"line": 315, "claim": "Muon used in post-training because a Muon-pretrained checkpoint fine-tunes best with Muon", "verdict": "supported", "source": "§3.1: 'follows from the conclusion of our previous work [47]'"},
+      {"line": 345, "claim": "full-parameter broadcast regardless of sharding; full update under 30 seconds", "verdict": "supported", "source": "§3.3: 'complete a full parameter update for Kimi K2 with less than 30 seconds'"},
+      {"line": 375, "claim": "Claude 4 Opus 72.5 on SWE-bench Verified (agentic single attempt); Multilingual evaluated only on Sonnet due to Opus cost", "verdict": "supported", "source": "Table 3 row Agentic-Single-Attempt '72.5*' (Opus column); Fig. 1 note"},
+      {"line": 396, "claim": "on Verified K2 is below Claude 4 regardless of attempt count", "verdict": "unsupported", "source": "Table 3 Agentless-Single-Patch: K2 51.8 vs Claude 4 Sonnet 50.2 (Opus 53.0); true only for the agentic modes"},
+      {"line": 447, "claim": "Base leads 3 of 4 math benchmarks; CMATH 90.26 vs DeepSeek-V3-Base 90.53", "verdict": "supported", "source": "§4.2.2 Mathematical Reasoning"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 11,
+    "na": 6,
+    "repeated_ids": [],
+    "details": {
+      "rl-section-duplicated": "avoided — one RL heading (L292) and one RL infra heading (L333)",
+      "rl-subheading-levels": "avoided — RL subsections are H3 under the H2 RL heading (L296, L317, L323)",
+      "ppo-claim": "avoided — L294 'Kimi k1.5에서 도입한 정책 최적화 알고리즘을 바탕으로'",
+      "invented-budget-formula": "avoided — L327 per-task max token budget, truncation and penalty; no formula",
+      "invented-ptx-formula": "n/a — PTX not mentioned",
+      "invented-temperature-formula": "avoided — L329 prose only",
+      "invented-env-code": "avoided — no code block; L367 'OpenAI Gym에서 영감을 받은 통합 인터페이스'",
+      "invented-math-verifier": "n/a — math/STEM rewards not described",
+      "invented-logic-verifier": "n/a",
+      "invented-code-quality-eval": "n/a — RL coding rewards not described (L479 mentions sandboxes and test pass rates only)",
+      "invented-safety-monitoring": "n/a — post covers only the red-team evaluation, not the RL safety pipeline",
+      "invented-self-refine-loop": "avoided — L319 '모델이 자기 출력들을 쌍으로 비교해 판정'",
+      "invented-human-rubric-content": "n/a — no human-annotated rubric claim",
+      "rubric-limitation-garbled": "avoided — L478 '자기 단서 달기와 얼버무리는 표현을 감점 ... 모호한 영역에서도 확신을 과장'",
+      "invented-infra-mechanisms": "avoided — no progressive loading, hierarchical broadcast or debugging claims",
+      "missing-description": "avoided — L8 starts 'Kimi K2', 143 chars, numbers 15.5T/1.04T/66.1/65.8 all in TL;DR",
+      "arxiv-https": "avoided — L489 https"
+    }
+  },
+  "extras": {},
+  "top_issues": [
+    "Scope drift on results: L396 says K2 trails Claude 4 on SWE-bench Verified 'regardless of attempts' (Agentless 51.8 beats Sonnet 50.2); L449 heading calls Crescendo the attack K2 is most vulnerable to while L461 says it was not consistently the strongest",
+    "Repetition and stitching: rubric filtering stated twice (L284/L290), K2 logit trajectory twice (L125/L250), token efficiency defined three times; one formulaic figure-guide sentence per figure",
+    "Small unsupported or misleading details: L43 'usually large loss spikes', L217 '희소도 48만' reads as 480,000, '그림 1' references in L392/L396, infra design choice listed as an author-stated limitation (L480)"
+  ]
+}

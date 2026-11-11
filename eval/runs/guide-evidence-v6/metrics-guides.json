@@ -1,0 +1,61 @@
+{
+  "/tmp/eval-guide/guide-rayserve-v6.md": {
+    "prose_chars": 38064,
+    "errors": 0,
+    "warnings": 0,
+    "error_rules": [],
+    "sections": 14,
+    "mirrored_sections": [],
+    "distinct_numbers": 13,
+    "repeated_numbers": 2,
+    "repeated_share": 0.154,
+    "meta_sentences": [],
+    "visuals_per_10k": 10.25,
+    "images": 0,
+    "non_http_images": 0,
+    "tables": 12,
+    "display_math": 2,
+    "code_blocks": 25,
+    "undefined_macros": [],
+    "bare_bars_in_math": 0,
+    "math_commands": [
+      "times"
+    ],
+    "restate_per_1k": 0.21,
+    "intensifier_per_1k": 0.05,
+    "description_chars": 135
+  },
+  "/tmp/eval-guide/guide-strands-v6.md": {
+    "prose_chars": 41734,
+    "errors": 0,
+    "warnings": 0,
+    "error_rules": [],
+    "sections": 14,
+    "mirrored_sections": [],
+    "distinct_numbers": 8,
+    "repeated_numbers": 0,
+    "repeated_share": 0.0,
+    "meta_sentences": [],
+    "visuals_per_10k": 11.26,
+    "images": 0,
+    "non_http_images": 0,
+    "tables": 11,
+    "display_math": 11,
+    "code_blocks": 25,
+    "undefined_macros": [],
+    "bare_bars_in_math": 0,
+    "math_commands": [
+      "Delta",
+      "approx",
+      "frac",
+      "geq",
+      "left",
+      "right",
+      "sum",
+      "text"
+    ],
+    "restate_per_1k": 0.19,
+    "intensifier_per_1k": 0.02,
+    "description_chars": 131
+  }
+}

@@ -1,0 +1,279 @@
+{
+  "item": "survey-rlhf",
+  "post": "/tmp/eval-evidence/survey-rlhf-v13.md",
+  "judge_run": 1,
+  "sampling": "paragraphs numbered from the first body paragraph (prose blocks, list items and table rows; headings, images, captions and display-only math skipped; 248 total); run 1 samples paragraphs 1, 4, 7, ...; sources checked against arXiv PDF full text (pdftotext)",
+  "scores": {
+    "A": 6.5,
+    "B": 7.0,
+    "C": 7.0,
+    "D": 8.0,
+    "E": 6.5,
+    "F": 6.5
+  },
+  "type_scores": {
+    "S1": 6.5
+  },
+  "score_evidence": {
+    "A": [
+      "No body H1, no skipped levels, no da-form headings, two-level categories, use_math true, description 146 characters; no leaked process text (the v12 '반영하지 못한 요청' block is gone).",
+      "L252 `\\beta_{\\text{bo$n$}}`: single $ inside a $$ block (unchanged from v11/v12).",
+      "Bare | for conditionals and lengths: L120 `\\rho(y|x)`, L543/L547 `odds(y|x)`, L573/L577 `|y|`, `|y_w|` (L575 uses \\lvert\\rvert), L611 `(y\\succ y'|x)` and `\\mu(y|x)`.",
+      "Thin subsections (one paragraph each): L799 '### 구현이 가장 단순한 쪽이 치르는 대가', L803 '### 온-정책 탐색의 값', L807 '### 게임 이론 방법이 얻는 것', L845, L849, L853, L857; the two synthesis H2s are split into one-paragraph H3s."
+    ],
+    "B": [
+      "Register break in table cells (caps B at 7): L834 '... 7B 초과 규모와 다양한 도메인은 검증되지 않았다.' and L838 '... 안전성·정직성을 명시적으로 고려하지 않는다.' -> '...검증하지 않음' / '...고려하지 않음'.",
+      "Self-reference openers ×10: '이 글의 관점에서' L289, L355, L503, L793, L815; '이 글은 …' L591, L761, L859, L869; '이 글이 보기에' L680.",
+      "Noun/figure-intro frames: L67 '도식에서 눈여겨볼 곳은 사람이 정책을 직접 평가하지 않는다는 데 있습니다' -> '도식에서 사람은 정책을 직접 평가하지 않습니다'; L169 '이 그래프에서 확인할 것은 곡선의 모양입니다'; L660 '...꾸준히 오르는 추세가 핵심입니다'; L779 '비교할 대상은 ...입니다'.",
+      "English labels in Korean cells and prose: L823 'base / RS / online', L829 'harmless rate', L825 'helpfulness', L819 'vs', L587 'held-out 세트'."
+    ],
+    "C": [
+      "Running Reddit TL;DR pair threads every lineage (L19, L83, L125, L227, L375, L389, L469, L525, L553, L585, L599, L631, L654, L676, L694, L765, L847, L867); hand-offs are explicit (L57, L141, L173, L241, L507, L595).",
+      "Near-verbatim retelling instead of pointing back: L783 restates L629 (Online IPO stop-gradient, PM labels, Nash-MD equivalence, IPO-MD); L791 restates L670 (RLHF Workflow loop), L654 (DPO/KTO not iterative) and L741 (two RL iterations, first largest); L805 restates L688/L694 and L650 (O(K^2)).",
+      "Scope disclaimers repeated three times: NLHF/Online IPO/SPPO limits at L625/L631/L666, L680 and L813; zero-success no-signal at L761, L855, L869."
+    ],
+    "D": [
+      "Worked examples are correct and placed at hard steps: σ(0.8)≈0.69, −log≈0.37 (L83); 0.9×0.69+0.1×0.5≈0.67 (L85, fixed from v12's 0.05); KL penalty 0.2 (L125); BoN peak d=2, R=1 (L261); clamp 0.95→0.60 (L315); d-RLAIF 8.1 (L347); DPO margin 0.3, loss≈0.55, weight≈0.43 (L389); RRHF 0.3 (L525); odds 2.25 vs prob ratio 2 (L553); SimPO −1.5, loss≈1.7 (L585); intransitive 60% cycle (L599); SPPO ±0.3 (L654); GRPO ±1 (L702).",
+      "49 figures, most followed by a sentence restating the caption (L147, L215, L335, L445, L607, L789): padding on easy material."
+    ],
+    "E": [
+      "Timeline table (L30-53) and one comparison table (L817-839); display math placed where discussed; no source figure numbering.",
+      "Comparison-table cells that are setup, not results: L819 'MuJoCo 700 라벨 합성 피드백 vs 진짜 보상 RL; Atari 사람 피드백 5,500 질의' (the 'nearly match RL with 700 labels' outcome is missing), L824 '합성 비교쌍 100,000개', L825 PM data counts 135,296 / 182,831, L830 '장난감 실험 18000 스텝'.",
+      "L839 '스케일링 법칙 적합 RMSE 절반' drops the comparator (vs a quadratic fit in KL; 2406.02900 L257).",
+      "49 source figures; several are only narrated (L89-105 MuJoCo/Atari/ablation, L143-147 Stiennon workflow)."
+    ],
+    "F": [
+      "L847 '오프라인 반복 DPO와 IPO도 출력이 길어졌고': SPPO's DPO/IPO baselines are iterative runs on responses generated each round (2405.00675 L773-780 '(Iterative) DPO ... settings ... align with those used for SPPO'); 'offline' is wrong (−2).",
+      "L635 '응답마다 현재 정책을 상대로 한 승률에 비례해 확률을 늘립니다': the update multiplies by exp(η·P(y≻π_t)) (the post's own L637 formula; paper L367 'higher probability weight if it has a higher average advantage'); 'proportional to the win rate' misdescribes it (−1).",
+      "L757 '이 고정점은 언제나 p*(q)>p_ref(q)를 만족합니다': Theorem 3 assumes 0<p_ref<1 (2503.06639 L362); L855 later gives the boundary cases, so 'always' overstates the scope (−0.5).",
+      "L855 '참조 모델이 전혀 못 푸는 프롬프트는 그룹 안의 모든 출력이 실패해 학습 신호가 사라지고' credited to Mroueh: the paper says only that 0 is absorbing and GRPO does not create successes (L425-429, L513); the vanishing-signal mechanism is the writer's (−0.5).",
+      "L26 and L682 frame DeepSeekMath GRPO as verifiable-reward RL; DeepSeekMath trained and iteratively updated a reward model (L694 and L741 say so), so the framing fits Mroueh, not Shao et al. (−0.5)."
+    ],
+    "S1": [
+      "Limitations are the papers' own (L832 'KTO 과소적합 위험' = 2402.01306; L839 '해결책 미제시' = 2406.02900 L763; L834 = ORPO Limitations); no input-based false limitation.",
+      "Cells: setup phrases instead of results (L819, L824, L825, L830), 한다체 sentence cells (L834, L838), English label words (L823, L829); KTO row now a result (0.631), improved from v12.",
+      "Synthesis sections re-explain cards (L783-791 restate L629, L670, L654, L741; L805 restates L688, L650)."
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "Noun-phrase claim headings throughout (L59 '### 짧은 클립 비교로 보상 함수를 대신한 출발점', L491 '### 보상 모델 없이도 남는 과최적화'); no heading ends in 다."
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Reddit TL;DR pair introduced at L19 and reused in every lineage (L83, L125, L389, L525, L553, L585, L654, L676, L694, L765, L867); L26 states the example does not fit the verifiable-reward lineage."
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Full chain for Christiano (L69-85), Ziegler (L117-125), DPO (L363-389), RRHF (L517-525), ORPO (L529-553), SimPO (L571-585), SPPO (L635-654), GRPO (L688-702); KTO (L463-469) and RLHF Workflow (L670-676) give a TL;DR reading but no numbered example."
+    },
+    "facts_said_once": {
+      "status": "not met",
+      "evidence": "L783 retells L629, L791 retells L670/L654/L741, L805 retells L688/L650; scope disclaimers at L625/L631/L666, L680, L813; zero-success at L761, L855, L869."
+    },
+    "numbers_with_scope": {
+      "status": "partly met",
+      "evidence": "Body numbers mostly carry model and setting (L589 'Mistral-Base 7B ... 21.5%', L801 'Llama-3-Instruct(8B) ... 40.3%'); L839 drops the RMSE comparator; L851 '일부 일반 과제' leaves the benchmark (Open LLM Leaderboard) unnamed."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Hypothetical numbers are labelled '가상의' (L83, L125, L261, L315, L347, L389, L525, L553, L585, L599, L654, L702); L847 calls SPPO's iterative DPO/IPO 'offline'; L855 credits a vanishing-signal mechanism to Mroueh."
+    },
+    "own_assessment_at_end": {
+      "status": "met",
+      "evidence": "L859 and L869: the three bottlenecks map to estimator, regularization and data distribution; pick those axes before a method name."
+    },
+    "length_fitted": {
+      "status": "partly met",
+      "evidence": "About 145 KB and 49 figures; hard steps get worked examples, but caption narration and the retold synthesis sections (L763-815) pad it."
+    },
+    "type_specific_shape": {
+      "status": "partly met",
+      "evidence": "One comparison table (L817), but headline numbers also live only in the body (SPPO 8.81/3.42/3.62 L660, SimPO ablations L589, d-RLAIF 74%/66% L349, ORPO 6.35%/0.78% L567, Llama 2 0.15/0.89/0.55 L235) and several cells are setups."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "입니다 register in prose; table cells L834/L838 break into 한다체; ten '이 글…' openers and figure-intro frames (L67, L169, L660, L779)."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 12,
+    "supported": 13,
+    "unsupported": 0,
+    "wrong": 2,
+    "unverifiable": 0,
+    "whole_post_wrong_outside_sample": [
+      "L757 'always p*>p_ref' (scope, unsupported)",
+      "L855 vanishing-signal mechanism credited to Mroueh (unsupported)",
+      "L26/L682 DeepSeekMath GRPO framed as verifiable-reward RL (attribution scope)"
+    ],
+    "examples": [
+      {
+        "line": 133,
+        "claim": "Reward model trained a single epoch with dropout off; after the first training it was retrained 19 more times during RL",
+        "verdict": "supported",
+        "source": "1909.08593 'We use a single epoch to avoid overfitting to the small amount of human data, and turn off dropout'; 'then retrain it 19 more times at evenly spaced values'"
+      },
+      {
+        "line": 159,
+        "claim": "At similar lengths the 6.7B TL;DR human-feedback model nearly matches T5 on CNN/DM without news training",
+        "verdict": "supported",
+        "source": "2009.01325 Fig. 4 'At similar summary lengths, our 6.7B TL;DR human feedback model nearly matches T5 despite never being trained to summarize news articles'"
+      },
+      {
+        "line": 283,
+        "claim": "RM 12M: 6B and 1.2B policies peak at almost the same KL with almost the same proxy-gold gap; only two policy sizes explored",
+        "verdict": "supported",
+        "source": "2210.10760 'holding the RM size constant (12M) and evaluating two different policy sizes'; 'both gold scores peak at almost the same KL ... gap ... almost the same'; 'limited to only two policy sizes'"
+      },
+      {
+        "line": 349,
+        "claim": "d-RLAIF with PaLM 2 XS labeler preferred over SFT 74% (summarization); 66% on helpful dialogue with labeler and policy the same checkpoint",
+        "verdict": "supported",
+        "source": "2309.00267 'We use the smaller instruction-tuned PaLM 2 XS as our AI labeler'; Table 'd-RLAIF vs SFT 74% 66%'; 'win rate of 66% over the SFT baseline'"
+      },
+      {
+        "line": 439,
+        "claim": "IPO toy: 3-action softmax with θ∈R³, Adam lr 0.01, minibatch 9, 18,000 steps",
+        "verdict": "supported",
+        "source": "2310.12036 'softmax(θ)i using a vector θ ∈ R3 ... for 18000 steps using Adam ... learning rate 0.01 and mini-batch size 9'"
+      },
+      {
+        "line": 499,
+        "claim": "Under a loose KL constraint most DAA runs peak within the first 25% of the epoch, then degrade",
+        "verdict": "supported",
+        "source": "2406.02900 Fig. 2 'Under a lower KL constraint, most experiments reach their best performance in the first 25% of the epoch and degrade with additional training'"
+      },
+      {
+        "line": 587,
+        "claim": "Spearman ρ between average log-likelihood and length: SimPO w/o LN 0.82, DPO 0.59, SimPO 0.34",
+        "verdict": "supported",
+        "source": "2405.14734 Table 6 'ρ 0.82 0.59 0.34' (SimPO w/o LN, DPO, SimPO); Fig. 2b/2c"
+      },
+      {
+        "line": 635,
+        "claim": "Multiplicative-weights update raises each response's probability in proportion to its win rate against the current policy",
+        "verdict": "wrong",
+        "source": "2405.00675 eq. (4.1) π_{t+1}(y|x) ∝ π_t(y|x)·exp(η·P(y≻π_t|x)); L367 'a response y should have a higher probability weight if it has a higher average advantage'",
+        "note": "the weight is exponential in the win rate, as the post's own formula at L637 shows"
+      },
+      {
+        "line": 660,
+        "claim": "Llama-3-8B LC win rate +8.81, +3.42, +3.62 points = 15.85 total; Mistral-7B-SPPO Iter3 Arena-Hard 23.3; Open LLM average 66.75 (Mistral-7B) and 70.29 (Llama-3-8B)",
+        "verdict": "supported",
+        "source": "2405.00675 '8.81% (Llama-3-8B-Instruct → Iter1), 3.42% (Iter1 → Iter2), and 3.62% (Iter2 → Iter3), summing up to a total gain of 15.85%'; 'average score of 23.3'; 'state-of-the-art average score of 66.75 for Mistral-7B and 70.29 for Llama-3-8B'"
+      },
+      {
+        "line": 749,
+        "claim": "At temperature 0.7, RL raises Maj@K but not Pass@K",
+        "verdict": "supported",
+        "source": "2402.03300 Fig. 7 'The Maj@K and Pass@K of SFT and RL DeepSeekMath 7B on GSM8K and MATH (temperature 0.7). It was noted that RL enhances Maj@K but not Pass@K'"
+      },
+      {
+        "line": 801,
+        "claim": "In SimPO's Llama-3-Instruct (8B) setting DPO scores AlpacaEval 2 LC 40.3% and Arena-Hard 32.6%",
+        "verdict": "supported",
+        "source": "2405.14734 Table 4 'DPO ... 40.3 37.9 32.6'"
+      },
+      {
+        "line": 820,
+        "claim": "Ziegler: 60k RL vs supervised TL;DR 97%; style continuation human-feedback vs sentiment-classifier policy 77%",
+        "verdict": "supported",
+        "source": "1909.08593 Table 5 '60k fine-tuned vs. supervised 97%'; Table 2 '5k offline vs. mock 77%'",
+        "table": true
+      },
+      {
+        "line": 829,
+        "claim": "RLAIF vs SFT TL;DR 71% (RLHF 73%); RLAIF harmless rate 88%",
+        "verdict": "supported",
+        "source": "2309.00267 'preferred by human evaluators over the baseline SFT policy 71% and 73% of the time for summarization'; '(88%, 76%, and 64%, respectively)'",
+        "table": true
+      },
+      {
+        "line": 832,
+        "claim": "KTO vs DPO gap significant p<0.01 at Llama 7B/30B; Mistral-7B KTO (one y per x) win rate 0.631",
+        "verdict": "supported",
+        "source": "2402.01306 'gap is significant (p < 0.01) at 7B and 30B even after correcting for multiple comparisons'; 'Mistral-7B + KTO (one y per x) 0.631 ± 0.036'",
+        "table": true
+      },
+      {
+        "line": 847,
+        "claim": "Offline iterative DPO and IPO also lengthened outputs; SPPO's increase was only relatively smaller",
+        "verdict": "wrong",
+        "source": "2405.00675 L773-780 '(Iterative) DPO: ... settings and model selection schemes align with those used for SPPO' (responses generated by the current model each iteration); L968 'DPO and IPO training tend to significantly increase the average output length—2736 and 2654'",
+        "note": "the length result is the paper's, but the baselines are iterative on-policy runs, not offline"
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 5,
+    "na": 1,
+    "repeated_ids": [],
+    "items": [
+      {
+        "id": "grpo-card-unverified-figure",
+        "result": "avoided",
+        "evidence": "L751-761 state 2503.06639's results in words and quote no number or equation absent from the paper (contrastive loss weighted by p(q), fixed point determined by p_ref and regularization, p*>p_ref = Theorem 3). 'Always' at L757 overstates the 0<p_ref<1 condition but adds no figure."
+      },
+      {
+        "id": "copy-explains-preference",
+        "result": "avoided",
+        "evidence": "L135 '저자들은 이 모델이 참조 요약보다 선호된 결과가 라벨러의 휴리스틱을 악용한 결과일 수 있다고 봅니다' carries no 96%/84% figure and matches 1909.08593 ('may be exploiting the fact that labelers rely on simple heuristics')."
+      },
+      {
+        "id": "daa-no-quantification",
+        "result": "avoided",
+        "evidence": "L501 '이 연구는 문제와 이론적 근거를 제시할 뿐 해결책은 내놓지 않습니다' matches 2406.02900 L763; no claim that the paper lacks numbers, and the table cites its 25% and RMSE results (L839)."
+      },
+      {
+        "id": "grpo-row-reward",
+        "result": "n/a",
+        "evidence": "The comparison table (L817) has no reward column; the GRPO row is 'DeepSeekMath-RL 7B GSM8K 88.2%, MATH 51.7% | 기하·정리 증명 약세'. Prose frames the lineage as verifiable-reward RL (L26, L682), while L694/L741 note DeepSeekMath's reward model."
+      },
+      {
+        "id": "heading-da-form-offline",
+        "result": "avoided",
+        "evidence": "No heading ends in 다; the DAA heading is L491 '### 보상 모델 없이도 남는 과최적화'."
+      },
+      {
+        "id": "heading-da-form-judge",
+        "result": "avoided",
+        "evidence": "All ##/### lines checked: none is a 다-form sentence."
+      }
+    ]
+  },
+  "extras": {
+    "plan_papers_never_cited": [],
+    "thin_sections": [
+      "L799 '### 구현이 가장 단순한 쪽이 치르는 대가' (one paragraph)",
+      "L803 '### 온-정책 탐색의 값' (one paragraph)",
+      "L807 '### 게임 이론 방법이 얻는 것' (one paragraph)",
+      "L845 '### 어느 프록시로 바꿔도 남는 길이 편향' (one paragraph)",
+      "L849 '### 선호 점수와 일반 능력의 어긋남' (one paragraph)",
+      "L853 '### 참조 모델이 정하는 증폭의 천장' (one paragraph)",
+      "L857 '### 다음 연구가 향할 곳' (one paragraph)"
+    ],
+    "venue_issues": [
+      "L885 IPO venue spelled out as 'International Conference on Artificial Intelligence and Statistics' while other entries are abbreviated (NeurIPS, ICML, EMNLP, ICLR, TMLR); not wrong"
+    ],
+    "table_cells_prose_empty_or_dash": [
+      "L819 'MuJoCo 700 라벨 합성 피드백 vs 진짜 보상 RL; Atari 사람 피드백 5,500 질의' (setup; outcome missing)",
+      "L824 '합성 비교쌍 100,000개' (dataset size, not a result)",
+      "L825 'RL-CAI PM 데이터 인간 helpfulness 135,296 / AI 무해성 182,831' (data counts)",
+      "L830 '장난감 실험 18000 스텝' (step count)",
+      "L834, L838 limitation cells are full 한다체 sentences",
+      "L839 'RMSE 절반' (comparator missing)"
+    ],
+    "table_cells_results_not_setups": "partly: 17 of 21 result cells are results in the post's terms (e.g. L820 97%/77%, L827 61%/57%/58%, L832 p<0.01 and 0.631, L837 31.3 vs 22.5); 4 are setups (L819, L824, L825, L830) and 2 limitation cells break register (L834, L838).",
+    "leaked_process_text": [],
+    "leaked_process_text_note": "None found: no '반영하지 못한 요청' block, no evidence-scope phrases ('인용한 범위', '근거에는'), no [[E..]] markers."
+  },
+  "top_issues": [
+    "Wrong method details in the whole-post read: L847 calls SPPO's iterative DPO/IPO baselines 'offline' (they train on each round's generated responses, 2405.00675 L773-780); L635 says the multiplicative-weights update raises probability 'in proportion to' the win rate, though it multiplies by exp(η·P) (the post's own L637); L757 'always p*>p_ref' drops Theorem 3's 0<p_ref<1 condition and L855 credits a vanishing-signal mechanism to Mroueh.",
+    "Comparison table: setup cells instead of results (L819, L824, L825, L830), 한다체 sentence cells (L834, L838; caps B at 7), comparator-less 'RMSE 절반' (L839), English labels (L823, L829); headline numbers still also live only in the body.",
+    "Repetition and markup: L783/L791/L805 retell earlier cards nearly verbatim and the synthesis/open-problem H2s are seven one-paragraph H3s; `\\text{bo$n$}` at L252 and bare | for conditionals/lengths (L120, L543, L573, L611)."
+  ]
+}

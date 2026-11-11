@@ -1,0 +1,210 @@
+{
+  "item": "summary-lora",
+  "post": "/tmp/eval-paper/summary-lora-v5.md",
+  "judge_run": 3,
+  "sampling": "Body blocks (prose paragraphs, list items, tables, display equations; headings, images, rule and references excluded) numbered 1-22 from L16; started at block 3, every third, then wrapped. Block line order used: L22, L30, L38, L46, L54, L62, L75, L16, L26, L34, L40, L48, L58, L69, L77, L20, L28, L36, L44, L52, L60, L73. 8 of 15 claims are numbers. Whole post read for wrong claims outside the sample.",
+  "scores": {
+    "A": 8.0,
+    "B": 7.0,
+    "C": 7.5,
+    "D": 8.0,
+    "E": 7.5,
+    "F": 9.0
+  },
+  "type_scores": {
+    "U1": 7.0,
+    "U2": 7.0
+  },
+  "deductions": {
+    "A": [
+      "Headings are topic names, not claims: L18 '## 연구 배경', L24 '## 제안 방법', L42 '## 구현 방식', L50 '## 실험 결과', L71 '## 의의와 한계'. Front matter, $$ delimiters, blank lines around L30-32, the L62 table and L81 references render correctly.",
+      "Tag 'Subspace-Similarity-Analysis' (L10) names an analysis the body never covers; 'Rank-Decomposition-Matrices', 'Adapter-Inference-Latency' restate the abstract."
+    ],
+    "B": [
+      "Repeated '그래서' openers: L20 '그래서 기본 모델을 계산한 뒤', L40 '그래서 학습 효율과', L46 '그래서 저자들은' -> vary ('... 계산해야 하므로', '덕분에 학습 효율과').",
+      "Terminology mixing: L48 'MultiNLI' vs L16/L60 'MNLI'; L16 '파인튜닝' used before its gloss at L20 '전체 파인튜닝(fine-tuning)'; L16 '사전학습 가중치' glossed only at L26.",
+      "L75 '$$W$$ 자체도 랭크가 결손되어 있을 가능성' calques 'rank-deficient' -> '$$W$$ 자체도 랭크가 부족할(rank-deficient) 가능성'."
+    ],
+    "C": [
+      "L77 '매우 작은 랭크로 충분하다는 관찰이 주로 WikiSQL과 MNLI ...에서 나왔습니다' refers to a rank-sweep result (r=1/2 suffice) the post never presents; only the r=4 budget comparison at L48 is shown.",
+      "L52 repeats L16 almost verbatim ('Adam으로 전체 파인튜닝한 GPT-3 175B와 비교하면 학습 가능한 파라미터는 1만 배, GPU 메모리 요구량은 3배 줄어듭니다') and then L54-69 jump to prefix scaling and low data, so the results section opens with a restatement instead of the main comparison."
+    ],
+    "D": [
+      "Good: L36 numeric parameter example at GPT-3 scale (150M vs 98,304, 1/1,500); L46 explains why alpha/r removes retuning; L34 '원래 경로 옆에 작은 병렬 경로'.",
+      "L36 labels d=k=12,288 '가상의' although it is GPT-3's actual d_model, so the reader is not told this is the real magnitude; why a low rank suffices (subspace-similarity evidence) gets no explanation."
+    ],
+    "E": [
+      "No table for the headline GPT-3 175B comparison (WikiSQL / MNLI-m / SAMSum R1/R2/R; FT 73.8/89.5/52.0/28.0/44.5 vs LoRA 73.4/91.7/53.8/29.8/45.9); the L48 weight-type numbers are prose.",
+      "The only table (L62-67) is the secondary low-data result, copied verbatim; the scatter (L56) is described in words without paper numbering."
+    ],
+    "F": [
+      "No wrong or unsupported claim found. L36 '가상의 d=k=12,288' mislabels the real GPT-3 width as hypothetical; L52 '품질 손실 없이 이 정도로 비용을 줄일 수 있습니다' is stated without the Table 4 numbers that would show it."
+    ],
+    "U1": [
+      "Results omit the main GPT-3 175B Table 4 numbers for WikiSQL and SAMSum (MNLI-full 91.7 vs 89.5 appears only as the last column of the low-data table), all RoBERTa/DeBERTa/GPT-2 results, the 25% training speedup and 350GB->35MB checkpoint; the 10,000x/3x claim (L16, L52) is the only headline evidence."
+    ],
+    "U2": [
+      "TL;DR (L16) is four plain-prose sentences without math; grounded limitations at L75. Facts repeat: 1만 배/3배 and '세 데이터셋 모두 같거나 더' at L16 and L52 (near-verbatim), task swap at L16, L38, L73, Wq+Wv WikiSQL example at L36, L48, L52, L73; the distilled table is the low-data one, not the main results."
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "not met",
+      "evidence": "L18, L24, L42, L50, L71 are topic names (fixed summary sections)."
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "GPT-3 175B WikiSQL adaptation with Wq/Wv BA pairs at L36, tied to the weight-type result at L48, results at L52 and task swap WikiSQL->MNLI at L38/L73."
+    },
+    "mechanism_order": {
+      "status": "met",
+      "evidence": "L20-22 problem -> L26 hypothesis -> L30 formula -> L34 shapes -> L36 numeric example -> L38 deployment -> L46 init/scaling with reason."
+    },
+    "facts_once": {
+      "status": "not met",
+      "evidence": "L52 restates L16 near-verbatim (1만 배/3배, three datasets on par or better); task swap at L16, L38, L73."
+    },
+    "numbers_with_scope": {
+      "status": "met",
+      "evidence": "L48 names model, budget, rank, dataset and split; L60 states model, metric and evaluation set; L69 uses %p."
+    },
+    "nothing_invented": {
+      "status": "met",
+      "evidence": "L36 example labelled '가상의'; L77 labelled '이 글의 관점에서는'. All sampled claims supported."
+    },
+    "own_assessment": {
+      "status": "met",
+      "evidence": "L77 recommends trying several r and comparing with full fine-tuning for out-of-domain or other-language tasks."
+    },
+    "length_fit": {
+      "status": "met",
+      "evidence": "About 5,000 body characters, a five-minute read."
+    },
+    "type_shape": {
+      "status": "partly met",
+      "evidence": "TL;DR + fixed five sections, but the one distilled table is the low-data result, not the main comparison."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "'입니다' register held throughout; repeated '그래서' (L20, L40, L46), MultiNLI/MNLI mixing, '랭크가 결손되어' (L75)."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 22,
+        "claim": "GPT-2 medium, NVIDIA Quadro RTX8000, single forward pass averaged over 100 trials",
+        "verdict": "supported",
+        "source": "Appendix B: 'We measure the latency of a single forward pass on an NVIDIA Quadro RTX8000 by averaging over 100 trials.'"
+      },
+      {
+        "line": 22,
+        "claim": "slow-down over 30% in an online, short-sequence scenario",
+        "verdict": "supported",
+        "source": "Figure 5 caption: 'the slow-down can be as high as over 30% in an online, short-sequence-length scenario'"
+      },
+      {
+        "line": 22,
+        "claim": "Adapter^L is Lin et al.'s more efficient design",
+        "verdict": "supported",
+        "source": "Sec 5.1: 'Lin et al. (2020) proposed a more efficient design'"
+      },
+      {
+        "line": 30,
+        "claim": "h = W0x + BAx",
+        "verdict": "supported",
+        "source": "Sec 4.1 Eq. (3)"
+      },
+      {
+        "line": 38,
+        "claim": "deploy W=W0+BA; switch task by subtracting BA and adding B'A', quick with very little memory overhead",
+        "verdict": "supported",
+        "source": "Sec 4.1 No Additional Inference Latency"
+      },
+      {
+        "line": 46,
+        "claim": "A random Gaussian, B zero; scale by alpha/r; alpha set to the first r tried and not tuned",
+        "verdict": "supported",
+        "source": "Sec 4.1: 'We use a random Gaussian initialization for A and zero for B ... we simply set alpha to the first r we try and do not tune it.'"
+      },
+      {
+        "line": 54,
+        "claim": "scatter shows GPT-3 175B validation accuracy vs trainable parameters on WikiSQL and MNLI-matched",
+        "verdict": "supported",
+        "source": "Figure 2 caption"
+      },
+      {
+        "line": 54,
+        "claim": "prefix methods do not improve steadily as parameters grow, LoRA keeps high accuracy",
+        "verdict": "supported",
+        "source": "Sec 5.5 'not all methods benefit monotonically'; Fig. 2 caption 'LoRA exhibits better scalability'"
+      },
+      {
+        "line": 62,
+        "claim": "low-data table: FT 60.2/85.8/88.9/89.5, PrefixEmbed 37.6/75.2/79.5/88.6, PrefixLayer 48.3/82.5/85.9/89.6, LoRA 63.8/85.6/89.2/91.7",
+        "verdict": "supported",
+        "source": "Table 16, all 16 cells match"
+      },
+      {
+        "line": 75,
+        "claim": "small r not expected to work for every task; different-language task may favour full retraining",
+        "verdict": "supported",
+        "source": "Sec 7.2 footnote: 'we do not expect a small r to work for every task or dataset' and the thought experiment"
+      },
+      {
+        "line": 75,
+        "claim": "future work: combine with other methods, mechanism of fine-tuning, heuristic matrix choice, W may be rank-deficient",
+        "verdict": "supported",
+        "source": "Sec 8 items 1-4"
+      },
+      {
+        "line": 16,
+        "claim": "vs GPT-3 175B fine-tuned with Adam: 10,000x fewer trainable parameters, 3x less GPU memory",
+        "verdict": "supported",
+        "source": "Abstract: 'Compared to GPT-3 175B fine-tuned with Adam, LoRA can reduce the number of trainable parameters by 10,000 times and the GPU memory requirement by 3 times.'"
+      },
+      {
+        "line": 48,
+        "claim": "18M parameter budget on GPT-3 175B = r=8 for one weight type or r=4 for two, all 96 layers",
+        "verdict": "supported",
+        "source": "Sec 7.1"
+      },
+      {
+        "line": 48,
+        "claim": "Wq r=8 WikiSQL 70.4%, Wq+Wv r=4 73.7%",
+        "verdict": "supported",
+        "source": "Table 5 row WikiSQL: Wq 70.4, Wq,Wv 73.7"
+      },
+      {
+        "line": 48,
+        "claim": "MultiNLI 91.0% (Wq) vs 91.3% (Wq,Wv)",
+        "verdict": "supported",
+        "source": "Table 5 row MultiNLI: Wq 91.0, Wq,Wv 91.3"
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 0,
+    "na": 0,
+    "repeated_ids": [],
+    "note": "human_fixes.yaml has fixes: [] for summary-lora. The notes' generic defect (HTML entity leak '&amp;') does not occur; no edit or revision notes leaked into the body."
+  },
+  "extras": {
+    "description_chars": 132,
+    "main_gpt3_results_present": false,
+    "facts_repeat": true,
+    "edit_notes_leaked": false,
+    "taxonomy_X1": "Tag 'Subspace-Similarity-Analysis' names an analysis absent from the body; 'Rank-Decomposition-Matrices', 'Frozen-Pretrained-Weights', 'Adapter-Inference-Latency' restate the abstract rather than short reusable tags."
+  },
+  "top_issues": [
+    "Main GPT-3 175B results (Table 4: WikiSQL/MNLI/SAMSum, LoRA vs FT and other baselines) and the RoBERTa/DeBERTa/GPT-2 results are absent; only the 10,000x/3x claim and the secondary low-data table carry the results.",
+    "Facts repeat: L52 restates L16 near-verbatim (1만 배/3배, three datasets on par or better); task swap at L16/L38/L73.",
+    "Topic-name headings and taxonomy: L18-L71 headings are not claims; tag 'Subspace-Similarity-Analysis' covers nothing in the body; L77 cites a rank-sweep observation the post never shows."
+  ]
+}

@@ -1,0 +1,188 @@
+{
+  "item": "review-zep",
+  "kind": "review",
+  "source": "arXiv 2501.13956 (https://arxiv.org/html/2501.13956), checked with three targeted fetches of the HTML",
+  "criteria_note": "Criteria scored: A-F, G, X1, R1-R3 (ARTIFACT_RUBRIC.md anchors). Writing principles from docs/redesign.md 5.1 as listed in eval/JUDGE.md. Prose length counts characters (whitespace collapsed) of the body without front matter, headings, fenced code, display-math blocks, table rows, images and References.",
+  "X": {
+    "prose_length_chars": 27844,
+    "scores": {
+      "A": {"score": 8, "reason": "Coherent arc (TL;DR -> motivation -> 3-layer graph -> ingestion -> extraction -> invalidation -> communities -> retrieval -> DMR -> LongMemEval -> limits), clean $$ math, no H1, front matter complete. Deductions: some topic-name headings rather than claims (L89 '## 에피소드 수집과 이중 시간 모델', L363 '### 공통 실험 설정'); L467 '### 논문의 결론' only restates the paper's conclusion, overlapping L45 and L473."},
+      "B": {"score": 8, "reason": "Natural 입니다 register, consistent terms. Deductions: formulaic framing L103 '이 부분은 데이터베이스 분야의 개념을 알면 이해하기 쉽습니다' (-> '이중 시간 데이터베이스는 ...'); noun frames L343 '최근 대화를 검색에 끌어들인다는 점입니다' (-> '최근 대화를 검색에 끌어들입니다') and L475 '...썼다는 점, ...평가하지 않았다는 점, ...필요하다는 점도 남아 있습니다'; L128 '익숙한 부품으로 이루어져 있고' slightly loose."},
+      "C": {"score": 9, "reason": "Each section hands its output to the next (L176 '앞 단계에서 중복이 제거된 사실 엣지가 입력이고'); the Alice/Acme/Betacorp example runs from L75 through L319 and L343; concepts defined before use. Minor: L365 retrieval-count note (20 vs 10) interrupts setup without resolution."},
+      "D": {"score": 8, "reason": "Hard parts get concrete help exactly where needed: date arithmetic L99/L182, four-timestamp walkthrough L209-213, overlap counterexample L233-236, plurality example L268, BFS-vs-BM25 scenario L343, relative vs absolute L440. Deductions for padding the trivial for a competent reader: L51 '지식 그래프는 사물이나 개념을 노드로...', L158 explaining what Neo4j/Cypher are, L325 BM25 IDF tutorial, L351-352 RRF/MMR textbook explanations."},
+      "E": {"score": 8, "reason": "Good tables (subgraphs L61, timestamps L198, DMR L377, LongMemEval L427) copied cell-for-cell; template code block L304. Deductions: per-type table L446-455 is cut by rows but L457 then lists the omitted gpt-4o rows in prose, which a full 12-row table would have done better; writer-authored formulas not in the paper (L226 invalidation rule, L265 argmax, L437 Delta definitions) although each is labeled as the writer's rendering (L229 '풀어 쓴 것으로 ... 해석했습니다')."},
+      "F": {"score": 9, "reason": "All 26 checked claims supported or (2) unverifiable; numbers match Tables 1-3 cell for cell; relative gains kept relative and 18.3% vs 18.5% discrepancy flagged (L440); 20 vs 10 retrieval discrepancy reported faithfully (L365). Speculation is marked ('논문은 ... 밝히지 않습니다' L205, L246; '복사 오류일 가능성' L457). Small deduction: invented formalizations (L226, L265) and outside-paper claims (L103 bi-temporal use in finance/medicine) add unsourced material, labeled but extra."},
+      "G": {"score": 9, "reason": "use_math true with $$ present; description 158 chars, starts with 'Zep', numbers (94.8, 93.4, 18.5, 90) all in TL;DR; no \\( \\); no Liquid; fence info 'text'. Nit: description '지연 시간을 90% 줄였습니다' while TL;DR says '약 90%'."},
+      "X1": {"score": 8, "reason": "Category Retrieval-Augmented-Generation fits; specific tags in paper terms (Temporal-Knowledge-Graph, Bi-Temporal-Model, Edge-Invalidation). Seven tags with two broad controlled-type tags (Agentic-AI, Knowledge-Graph) plus Graph-Based-Retrieval is more than 'a few'."},
+      "R1": {"score": 9, "reason": "Very deep: covers appendix prompt rules for entity, fact and temporal extraction (L136-139, L162, L186-190), dedup scoping, invalidation, label propagation, retrieval formalism, full experimental setup (BGE-m3, gpt-4o-mini construction, 500x5x12 DMR, dates, location, judge), per-type results and limits."},
+      "R2": {"score": 8, "reason": "Layering intuition -> formalism -> worked example is consistent (bi-temporal L103-114, invalidation L217-238). Deduction: at ~27.8k prose characters it is long for a systems paper of moderate difficulty; the easy parts noted under D inflate it."},
+      "R3": {"score": 8, "reason": "TL;DR answers all four questions with settings (L29 'DMR(gpt-4-turbo)', L30 'LongMemEval_s(gpt-4o) ... 60.2%에서 71.2%'). Closing L473-479 names concrete gaps (ingestion cost unmeasured L475, structured data untested, only full-context baseline) and when to use it (L479). Deductions: L477 re-lists the paper's future work, and L467 '논문의 결론' restates the conclusion, which the principle says the closing should not do."}
+    },
+    "principles": {
+      "claim headings": {"verdict": "partly met", "evidence": "Claim headings L35, L174 '바뀐 사실을 지우지 않고 기록하기', L361 'MemGPT를 앞섰지만 너무 쉬운 벤치마크', L444 '이득이 고르지 않다'; topic headings L89, L363, L467."},
+      "running example": {"verdict": "met", "evidence": "Alice/Acme/Betacorp introduced L75, carried through timestamps L209-213, invalidation L236, communities L268, context string L319, BFS L343."},
+      "mechanism -> design choice and reason -> formula or code -> worked example": {"verdict": "met", "evidence": "Invalidation: mechanism L217-221, formula L226, reason for overlap L231, worked example L233-236, why not overwrite L240. Communities: Leiden vs label propagation L256-258, formula L265, example L268, cost L272."},
+      "facts said once": {"verdict": "partly met", "evidence": "DMR 94.8/93.4 appears L29, L45, L388; LongMemEval 18.5%/90% in L30, L45, L440-442; L469 restates L45; limits in L473-475 repeat L124, L272, L365."},
+      "numbers with variant, scope and unit": {"verdict": "met", "evidence": "L29 'DMR(gpt-4-turbo)', L30 'LongMemEval_s(gpt-4o)', L388 %p with arrows, L440 relative vs absolute, L442 per-model latency percentages."},
+      "nothing invented": {"verdict": "partly met", "evidence": "All examples are flagged ('날짜 값은 예시를 위해 정한 것입니다' L99, '설명용 예시입니다' L268, '논문에 없는 설명용 예시입니다' L343), but writer-built formulas L226 and L265 are not in the paper (labeled as interpretation)."},
+      "the writer's own assessment at the end": {"verdict": "met", "evidence": "L473 '실무에서 가장 쓸모 있는 기여는 ...', L475 unreported ingestion cost, L479 when to use and when not; marred by restating future work L477."},
+      "length fitted to difficulty": {"verdict": "partly met", "evidence": "27,844 prose chars; hard parts (bi-temporal, invalidation) earn the space but trivial background (L51, L158, L325, L351) is padded."},
+      "type-specific shape": {"verdict": "met", "evidence": "Review shape: TL;DR with four questions, no 초록 section, section-by-section method, experiments, '## 한계와 시사점'."},
+      "Korean style": {"verdict": "partly met", "evidence": "입니다 register held, Korean headings; repeated '> **핵심:**' boxes (L114, L170, L238) and noun frames L343, L475."}
+    },
+    "claims": {
+      "checked": 26,
+      "numbers_checked": 17,
+      "supported": 24,
+      "unsupported": 0,
+      "wrong": 0,
+      "error_rate": 0.0,
+      "items": [
+        {"line": 29, "claim": "DMR gpt-4-turbo: Zep 94.8% vs MemGPT 93.4%, full context 94.4%", "verdict": "supported", "source": "Table 1: MemGPT† gpt-4-turbo 93.4%, Full-conversation 94.4%, Zep 94.8%"},
+        {"line": 30, "claim": "LongMemEval_s gpt-4o 60.2% -> 71.2%, authors report up to 18.5% relative", "verdict": "supported", "source": "Table 2; 'gpt-4o showed an 18.5% improvement'"},
+        {"line": 30, "claim": "latency 28.9 s -> 2.58 s; context 115k -> 1.6k tokens", "verdict": "supported", "source": "Table 2 gpt-4o rows"},
+        {"line": 132, "claim": "n=4 previous messages, two conversation turns; speaker always extracted", "verdict": "supported", "source": "'n=4, providing two complete conversation turns'; 'the speaker is automatically extracted as an entity'"},
+        {"line": 149, "claim": "entity names embedded into 1024-dim vectors", "verdict": "supported", "source": "'embeds each entity name into a 1024-dimensional vector space'"},
+        {"line": 158, "claim": "predefined Cypher queries instead of LLM-generated queries", "verdict": "supported", "source": "'using predefined Cypher queries'"},
+        {"line": 162, "claim": "relation_type all-caps e.g. LOVES, IS_FRIENDS_WITH, WORKS_FOR", "verdict": "supported", "source": "fact extraction prompt"},
+        {"line": 190, "claim": "ISO 8601, date-only -> 00:00:00, year-only -> Jan 1, always offset, Z for UTC; do not infer dates", "verdict": "supported", "source": "temporal extraction prompt rules"},
+        {"line": 182, "claim": "2024-03-04 minus two weeks = 2024-02-19 (illustrative)", "verdict": "supported", "source": "arithmetic check; labeled illustrative"},
+        {"line": 244, "claim": "Graphiti consistently prioritizes new information along T'", "verdict": "supported", "source": "'Graphiti consistently prioritizes new information when determining edge invalidation'"},
+        {"line": 256, "claim": "GraphRAG uses Leiden; Zep uses label propagation for simple dynamic extension", "verdict": "supported", "source": "Section 2.3"},
+        {"line": 323, "claim": "cosine and BM25 use Neo4j's Lucene implementation", "verdict": "supported", "source": "Section 3.1"},
+        {"line": 335, "claim": "developed independently, parallels LightRAG high-level key search; hybrid is promising future work", "verdict": "supported", "source": "'While developed independently, our community search approach parallels ... LightRAG'"},
+        {"line": 339, "claim": "BFS over KGs rare in RAG except AriGraph and Distill-SynthKG", "verdict": "supported", "source": "'notable exception' citing AriGraph and Distill-SynthKG"},
+        {"line": 365, "claim": "setup says 20 retrieved items; DMR says top 10", "verdict": "supported", "source": "'retrieve the 20 most relevant edges ...' and 'retrieve the top 10 most relevant nodes and edges'"},
+        {"line": 367, "claim": "BGE-m3 for embedding and reranking; gpt-4o-mini for graph construction", "verdict": "supported", "source": "Section 4.1"},
+        {"line": 371, "claim": "DMR: 500 conversations, 5 sessions, up to 12 messages per session", "verdict": "supported", "source": "Section 4.2"},
+        {"line": 392, "claim": "only 60 messages per conversation", "verdict": "supported", "source": "'each conversation contains only 60 messages'"},
+        {"line": 406, "claim": "LongMemEval_s averages ~115,000 tokens; within frontier context windows", "verdict": "supported", "source": "Section 4.3"},
+        {"line": 419, "claim": "experiments Dec 2024-Jan 2025 from Boston to AWS us-west-2; network latency added to Zep only", "verdict": "supported", "source": "Section 4.3"},
+        {"line": 440, "claim": "8.4/55.4 ~ 15.2%; 11.0/60.2 ~ 18.3% vs paper's 18.5%", "verdict": "supported", "source": "computed from Table 2"},
+        {"line": 442, "claim": "latency -89.8% (mini), -91.1% (4o); IQR 8.76->1.31 s, 6.01->0.684 s", "verdict": "supported", "source": "Table 2 and arithmetic"},
+        {"line": 448, "claim": "per-type values incl. gpt-4o preference 20.0->56.7 (184%), assistant 94.6->80.4 (17.7% down)", "verdict": "supported", "source": "Table 3"},
+        {"line": 459, "claim": "36.7 pp is the largest absolute gain; temporal +17.6/+17.3 pp; multi-session +6.8/+13.6 pp", "verdict": "supported", "source": "Table 3 arithmetic"},
+        {"line": 141, "claim": "paper does not publish the reflection prompt or number of iterations", "verdict": "unverifiable", "source": "not confirmable from fetched text"},
+        {"line": 205, "claim": "paper does not state how t'_created/t'_expired are filled", "verdict": "unverifiable", "source": "absence claim, not confirmable from fetched text"}
+      ]
+    },
+    "checklist": {
+      "repeated": 0,
+      "avoided": 6,
+      "na": 0,
+      "repeated_ids": [],
+      "details": {
+        "inline-math-delimiters": {"verdict": "avoided", "evidence": "No \\( \\) or \\[ \\]; inline math is $$...$$, e.g. L20 '$$t_{\\text{invalid}}$$'."},
+        "longmemeval-tldr-relative": {"verdict": "avoided", "evidence": "L30 '저자들은 이를 상대 개선율로 최대 18.5%라고 보고합니다'."},
+        "longmemeval-results-relative": {"verdict": "avoided", "evidence": "L440 '55.4%에서 63.8%로 ... 상대 개선율은 8.4/55.4 ≈ 15.2%', '60.2%에서 71.2%로'; no '%포인트'."},
+        "longmemeval-baseline-misattributed": {"verdict": "avoided", "evidence": "L30 'LongMemEval_s(gpt-4o)에서 정확도가 전체 컨텍스트 기준선의 60.2%에서 71.2%로'."},
+        "longmemeval-185-arithmetic": {"verdict": "avoided", "evidence": "L440 '11.0/60.2 ≈ 18.3%로, 논문의 18.5%와 조금 다른데'."},
+        "missing-description": {"verdict": "avoided", "evidence": "L8 description starts 'Zep은 시간 인식 지식 그래프 엔진 Graphiti로', numbers from TL;DR."}
+      }
+    },
+    "top_issues": [
+      "Length (~27.8k prose chars) inflated by textbook explanations of easy background (knowledge graph L51, Neo4j/Cypher L158, BM25 L325, RRF/MMR L351-352).",
+      "Repetition of headline numbers and a closing that restates the paper's conclusion and future work (L45/L469 '논문의 결론', L477 future-work list).",
+      "Per-type table truncated (L446-455) and the omitted rows then written as prose (L457); writer-built formulas (L226, L265) not from the paper, though labeled."
+    ]
+  },
+  "Y": {
+    "prose_length_chars": 17499,
+    "scores": {
+      "A": {"score": 8, "reason": "Claim headings throughout, review shape correct, clean $$ math, full front matter. Deductions: one-sentence orphan paragraphs closing sections (L300 'LongMemEval의 이득은 \"적게 넣어 빠르고, 골라 넣어 정확한\" 결과입니다.', L335) and L89 '### 원본을 지우지 않는 갱신' is a recap of the motivation section placed inside the graph-structure section."},
+      "B": {"score": 7, "reason": "Mostly natural 입니다 prose. Deductions: L288 'running example에 대입해 보면' leaks a meta English term (-> '앞의 고객 지원 예로 보면'); L286 ends with a non-sequitur '앞서 본 검색·리랭커·생성기의 합성이 질의를 LLM용 컨텍스트 문자열로 바꾸는 단계입니다.'; noun frame L259 '...반영하지 못한다는 것입니다' (-> '...반영하지 못합니다'); L339 opens with the writer's verdict then '저자들은 ... 결론짓습니다' in reversed order; L146 repeats the hallucination point twice in one paragraph."},
+      "C": {"score": 7, "reason": "Customer-support running example carries through (L41, L75, L122, L176, L212, L232, L288). Deductions: L89 restates L39-L43 ('정적 문서 검색에 머문 기존 RAG와 대비됩니다 ... 기업 응용에') in the wrong place; L286 last sentence and L298 last sentence read as stitched fragments; L304 '앞서 본 전체 정확도 향상도 유형별로 나눠 보면 이렇게 고르지 않습니다' repeats the sentence two lines earlier."},
+      "D": {"score": 8, "reason": "Well calibrated: hard parts get worked examples (invalidation interval [3/1, 3/20) L122, plurality example L176, three retrievers on one query L212), easy parts not padded (RRF/MMR left to a table L218-224). Deduction: bi-temporal model gets only a one-line example (L99) and the temporal-extraction rules (valid_at/invalid_at) are skipped, so the T vs T' distinction is never worked through on the four timestamps."},
+      "E": {"score": 8, "reason": "Full 12-row per-type table copied verbatim (L308-321), Table 1/2 cell-correct, reranker table L218 aids comparison, timestamp table L103. Deduction: argmax formula L172 is the writer's, not the paper's (introduced as '식으로 옮기면', acceptable but extra); no code/template block for the context string where X shows one (L230 describes it in prose)."},
+      "F": {"score": 8, "reason": "Numbers all match the paper; relative gains labeled relative (L284, L306). Deduction (-2): chi is called '생성기' (generator) at L26, L186 heading '검색·리랭크·생성의 합성 함수', L188 and L196, but the paper names it 'Constructor'; '생성기' suggests LLM generation, which the step does not do. L284 '이 값은 기준 정확도 대비 상대 향상입니다' pairs 18.5% with 60.2->71.2 without noting the computed ratio is ~18.3% (attributed to the authors, so not a full error)."},
+      "G": {"score": 9, "reason": "use_math true; description 132 chars, starts with 'Zep', numbers 94.8/18.5/90 all in TL;DR; no \\( \\); no Liquid. Nit: trailing whitespace L114, L267."},
+      "X1": {"score": 8, "reason": "Category fits; specific tags Temporal-Knowledge-Graph, Bi-Temporal-Modeling, Edge-Invalidation, Community-Subgraph in paper terms; two broad tags (Knowledge-Graph, Agentic-AI) make seven in total."},
+      "R1": {"score": 7, "reason": "Method core covered (layers, bi-temporal, invalidation, dedup scoping, label propagation, retrieval, rerankers). Missing depth a reader would expect: temporal extraction step and its rules (valid_at/invalid_at, ISO 8601, no inference) absent; fact extraction (relation_type) absent; experimental setup thin (no BGE-m3, no gpt-4o-mini graph-construction model, no DMR size 500x5x12, no LLM judge for LongMemEval, no experiment dates); BFS exceptions omit Distill-SynthKG."},
+      "R2": {"score": 8, "reason": "Intuition first via the customer-support story, then formal definition, then worked example (L114-122, L170-176). Length (17.5k chars) fits a moderate paper. Deduction: the hardest idea (two timelines) gets the thinnest layering (L99-110)."},
+      "R3": {"score": 8.5, "reason": "TL;DR concrete with setting (L29 '대화당 메시지가 60개뿐', L30 '(상대 향상)', L31 'gpt-4o-mini ... 네 곳'). Closing has an explicit '### 이 글의 판단' (L348-356) separating the writer's view from the authors': network-latency asymmetry, single baseline, labeled hypothesis for the assistant drop, ingestion cost, when to use. Deduction: L346 folds future work into the limitations list, and L339 restates the authors' conclusion."}
+    },
+    "principles": {
+      "claim headings": {"verdict": "met", "evidence": "L35, L93 '이중 시간 모델과 엣지 무효화로 유지하는 사실의 타임라인', L234, L265, L302 '여러 세션을 종합해야 하는 질문 유형에 몰린 이득'; each opens with a one-line thesis (L37, L95, L236)."},
+      "running example": {"verdict": "met", "evidence": "Customer-support contact change 김 과장 -> 이 대리 from L41 through L122, L176, L212, L232, L261, L288, L352."},
+      "mechanism -> design choice and reason -> formula or code -> worked example": {"verdict": "met", "evidence": "Communities: Leiden vs label propagation and reason L164-166, formula L172, example L176, cost L180. Invalidation: mechanism L120, worked interval L122."},
+      "facts said once": {"verdict": "partly met", "evidence": "Motivation said in L17, L39, L43 and again L89; 60 messages L29 and L257; '90%' L30, L267, L292, L350; L304 repeats its own preceding sentence."},
+      "numbers with variant, scope and unit": {"verdict": "met", "evidence": "L284 '이 값은 기준 정확도 대비 상대 향상입니다', L306 '상대 변화이며 %p 차이가 아닙니다', model named on each number."},
+      "nothing invented": {"verdict": "met", "evidence": "Examples flagged '가상의' (L41, L75, L122, L176); hypothesis flagged 'L352 이 글은 하락 원인을 이렇게 추정합니다'; only the L172 argmax rendering is the writer's."},
+      "the writer's own assessment at the end": {"verdict": "met", "evidence": "L348 '### 이 글의 판단' with latency-condition argument L350, assistant-drop risk L352, write-path cost L354, when to use L356."},
+      "length fitted to difficulty": {"verdict": "met", "evidence": "17,499 prose chars; background kept short, but some hard steps (temporal extraction) are cut rather than shortened."},
+      "type-specific shape": {"verdict": "met", "evidence": "TL;DR four questions, no 초록 section, method then experiments then '## 한계와 시사점'."},
+      "Korean style": {"verdict": "partly met", "evidence": "입니다 register held; 'running example' leak L288, noun frame L259, repeated '> **핵심:**' boxes L45, L91, L126."}
+    },
+    "claims": {
+      "checked": 26,
+      "numbers_checked": 15,
+      "supported": 25,
+      "unsupported": 0,
+      "wrong": 1,
+      "error_rate": 0.038,
+      "items": [
+        {"line": 29, "claim": "DMR Zep 94.8% vs MemGPT 93.4%; 60 messages per conversation", "verdict": "supported", "source": "Table 1; 'each conversation contains only 60 messages'"},
+        {"line": 30, "claim": "LongMemEval up to 18.5% higher (relative), latency -90% vs full context", "verdict": "supported", "source": "abstract and Section 4.3.2"},
+        {"line": 31, "claim": "gpt-4o-mini improved in four of six categories; largest in preference, multi-session, temporal reasoning", "verdict": "supported", "source": "'showed improvements in four of the six categories'"},
+        {"line": 31, "claim": "gains pronounced in cross-session synthesis and long-term context maintenance", "verdict": "supported", "source": "abstract 'enterprise-critical tasks such as cross-session information synthesis and long-term context maintenance'"},
+        {"line": 43, "claim": "literature insufficiently addresses cost/latency; latency benchmarks included to begin addressing the gap", "verdict": "supported", "source": "'We have included latency benchmarks for our retrieval mechanisms to begin addressing this gap'"},
+        {"line": 81, "claim": "separate episodic/semantic subgraphs draw from AriGraph", "verdict": "supported", "source": "'draws from similar approaches in AriGraph'"},
+        {"line": 134, "claim": "n=4, two conversation turns; speaker automatically an entity; reflexion-inspired step", "verdict": "supported", "source": "Section 2.2.1"},
+        {"line": 140, "claim": "1024-dim name embeddings plus full-text search on names and summaries; LLM updates name and summary on duplicates", "verdict": "supported", "source": "Section 2.2.1"},
+        {"line": 146, "claim": "predefined Cypher queries for schema consistency and less hallucination", "verdict": "supported", "source": "Section 2.2.1"},
+        {"line": 150, "claim": "edge dedup search limited to same entity pair, reducing complexity", "verdict": "supported", "source": "Section 2.2.2"},
+        {"line": 120, "claim": "t_invalid of old edge set to t_valid of new edge on temporally overlapping contradictions; new information prioritized via T'", "verdict": "supported", "source": "Section 2.2.3"},
+        {"line": 164, "claim": "label propagation instead of Leiden for simple dynamic extension", "verdict": "supported", "source": "Section 2.3"},
+        {"line": 184, "claim": "community names from key terms embedded for cosine search; summaries via iterative map-reduce", "verdict": "supported", "source": "'we generate community names containing key terms and relevant subjects'"},
+        {"line": 196, "claim": "chi is a '생성기' (generator)", "verdict": "wrong", "source": "paper names it 'Constructor (χ)'"},
+        {"line": 202, "claim": "cosine and BM25 use Neo4j's Lucene; fields fact/name/community name", "verdict": "supported", "source": "Section 3.1"},
+        {"line": 210, "claim": "BFS n-hop expansion, recent episodes as seeds, rare in RAG except AriGraph-like systems", "verdict": "supported", "source": "'particularly valuable when using recent episodes as seeds'"},
+        {"line": 216, "claim": "five rerankers RRF, MMR, episode-mentions, node distance, cross-encoder", "verdict": "supported", "source": "Section 3.2"},
+        {"line": 240, "claim": "DMR retrieves top 10 nodes and edges; MemGPT not reproduced with gpt-4o-mini", "verdict": "supported", "source": "Section 4.2"},
+        {"line": 244, "claim": "DMR table values 35.3/78.6/93.4/94.4/94.8/88.0/98.0/98.2", "verdict": "supported", "source": "Table 1"},
+        {"line": 271, "claim": "full-context baseline averages 115k tokens; MemGPT archival-history workaround failed", "verdict": "supported", "source": "Section 4.3.1"},
+        {"line": 277, "claim": "Table 2 values (55.4/63.8/60.2/71.2; 31.3/3.20/28.9/2.58 s; IQR 8.76/1.31/6.01/0.684; 115k/1.6k)", "verdict": "supported", "source": "Table 2"},
+        {"line": 284, "claim": "authors report 18.5% (gpt-4o) and 15.2% (gpt-4o-mini) relative improvement", "verdict": "supported", "source": "Section 4.3.2"},
+        {"line": 292, "claim": "~90% latency reduction attributed to reduced prompt size", "verdict": "supported", "source": "'The reduced prompt size also led to significant latency cost reductions'"},
+        {"line": 308, "claim": "full per-type table, 12 rows", "verdict": "supported", "source": "Table 3"},
+        {"line": 327, "claim": "full-context baselines below 50% on temporal reasoning and multi-session for both models", "verdict": "supported", "source": "Table 3: 36.5, 45.1, 40.6, 44.3"},
+        {"line": 344, "claim": "Zep latency measured from a Boston laptop to AWS, adding network latency absent in baseline", "verdict": "supported", "source": "Section 4.3"}
+      ]
+    },
+    "checklist": {
+      "repeated": 0,
+      "avoided": 6,
+      "na": 0,
+      "repeated_ids": [],
+      "details": {
+        "inline-math-delimiters": {"verdict": "avoided", "evidence": "No \\( \\) or \\[ \\]; e.g. L61 '$$\\mathcal{G}_{e}$$'."},
+        "longmemeval-tldr-relative": {"verdict": "avoided", "evidence": "L30 '정확도가 최대 18.5% 높았고(상대 향상)'."},
+        "longmemeval-results-relative": {"verdict": "avoided", "evidence": "L284 '71.2% ... 60.2% ... 18.5% 향상 ... 이 값은 기준 정확도 대비 상대 향상입니다'; 55.4 for gpt-4o-mini only in the table at L277, not in the sentence; no '%포인트'."},
+        "longmemeval-baseline-misattributed": {"verdict": "avoided", "evidence": "L273 '답변 모델은 gpt-4o-mini와 gpt-4o 두 가지입니다'; L30 '전체 컨텍스트 기준 구현보다'."},
+        "longmemeval-185-arithmetic": {"verdict": "avoided", "evidence": "L284 '저자들은 이 차이를 18.5% 향상이라고 보고합니다' marks it as the paper's figure; weaker than ideal because the next sentence presents it as the plain relative ratio (computed ~18.3%)."},
+        "missing-description": {"verdict": "avoided", "evidence": "L8 'Zep은 시간 인식 지식 그래프 엔진 Graphiti로 ...', numbers from TL;DR."}
+      }
+    },
+    "top_issues": [
+      "Thinner method and setup coverage: temporal extraction step, fact extraction, embedding/reranker models, graph-construction model, DMR dataset size, judge and experiment dates all missing (R1).",
+      "Flow and style seams: misplaced recap paragraph L89, non-sequitur L286, 'running example' leak L288, orphan summary lines L300/L335, and chi mislabeled '생성기' instead of the paper's 'Constructor' (L26, L186, L196)."
+    ]
+  },
+  "preference": {
+    "overall": "X",
+    "per_criterion": {
+      "A": "tie",
+      "B": "X",
+      "C": "X",
+      "D": "tie",
+      "E": "tie",
+      "F": "X",
+      "G": "tie",
+      "X1": "tie",
+      "R1": "X",
+      "R2": "Y",
+      "R3": "Y"
+    },
+    "reason": "X is more complete and more precise: it covers the temporal-extraction and fact-extraction steps with the paper's prompt rules, gives the full experimental setup, works the four-timestamp model through one example, flags the 18.3% vs 18.5% and 20-vs-10 discrepancies, and has no factual error in 26 checks. Y is shorter and better fitted to difficulty and has a cleaner, explicitly labeled writer's assessment, but it leaves out key method and setup details, has visible stitching seams (L89, L286, L288) and mislabels chi as a generator. X's main weakness is length and repeated numbers, which costs less than Y's gaps."
+  }
+}

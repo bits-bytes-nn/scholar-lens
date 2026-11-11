@@ -1,0 +1,111 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-security.json",
+  "title": "LLM Agent Security: From Prompt Injection to MCP and CaMeL",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-security-of-llm-based-ai-agents-prompt-injection-jailbreak-rag-poisoning-tool/2026-11-03-securing-llm-agents-from-prompt-injection-to-mcp-and-defenses.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-03-securing-llm-agents-from-prompt-injection-to-mcp-and-defenses.md",
+  "pr_url": null,
+  "warnings": [
+    "Figures arXiv does not serve were left out: https://arxiv.org/html/2503.00061v2/tex/figures/asr_defense_adaptive_attack_bar_spaced.png, https://arxiv.org/html/2503.00061v2/tex/figures/system.png",
+    "Evidence that misstates its quote was left out: E83 (Quote row is 'Real delim.' (real delimiters), but claim/cell describe similar/close delimiters (유사/근접 구분자).)",
+    "Section '안전 학습의 두 실패 모드와 토큰 최적화에서 의미 수준으로 옮겨간 자동 탈옥': check 1 sentence(s) the evidence may not support: PAIR는 사람이 읽을 수 있는 의미 수준 프롬프트로 이 방어의 효과를 크게 줄였습니다. (unsupported: E58 shows SmoothLLM still reduces PAIR's ASR (2x on Vicuna/GPT-4, 29x on GPT-3.5). The evidence does not show PAIR greatly reducing the defense's effectiveness or being designed to counter SmoothLLM.)",
+    "Section '안전 학습의 두 실패 모드와 토큰 최적화에서 의미 수준으로 옮겨간 자동 탈옥' still has: papers ['2307.02483', '2307.15043', '2310.03684', '2310.08419'] belong to this section but no sentence cites their evidence: cover each | the section stops mid-sentence: finish it",
+    "Section '지시 없이 지식만으로 에이전트를 조종하는 검색·메모리·백도어 오염' still has: ['2.7'] already stated in '목표 탈취에서 적응형 공격까지 무너진 지시와 데이터의 경계': refer back without repeating: NQ, HotpotQA, MS-MARCO에서 PoisonedRAG와 InstruInject 공격을 대상으로 평가했을 때, RAGForensics의 탐지 정확도(DACC)는 97.4%를 넘었고 오탐률(FPR)은 2.7% 미만, 미탐률(FNR)은 3.2% 미만이었습니다 .",
+    "Section '도구 설명과 에이전트 간 메시지로 번지는 공급망형 인젝션' still has: papers ['2502.14847', '2506.01333', '2506.02040', '10.14722/ndss.2026.230675'] belong to this section but no sentence cites their evidence: cover each | the section stops mid-sentence: finish it",
+    "Section '모델 학습에서 시스템 설계로 이동한 프롬프트 인젝션 방어': check 9 sentence(s) the evidence may not support: 세 방법 모두 수동 공격에는 거의 완벽하지만, 최적화 공격에는 낮아진 공격 성공률이 남습니다 [[E77, E177]]. (unsupported: Evidence shows near-zero manual-attack ASR only for StruQ; nothing shows the instruction hierarchy (gains up to 63%) or SecAlign is near-perfect against manual attacks.) | 실험에서는 GPT-3.5 Turbo를 SFT와 RLHF로 미세조정했습니다. (numbers not in its evidence) | 괄호 안은 $$0.2+1.0=1.2$$이고 손실은 $$-\\log\\sigma(1.2)\\approx 0.26$$입니다. (numbers not in its evidence) | 불안전한 출력을 $$-40$$까지 밀어내면 괄호 안이 $$4.2$$가 되고 손실은 약 $$0.015$$로 줄어듭니다. (numbers not in its evidence) | Llama-7B에서 StruQ는 불안전한 출력의 평균 로그 확률을 -140까지만 낮췄습니다. (numbers not in its evidence)",
+    "Section '모델 학습에서 시스템 설계로 이동한 프롬프트 인젝션 방어' still has: ['97'] already stated in 'LLM 시뮬레이션에서 환경 상태 검사로 옮겨간 에이전트 보안 측정': refer back without repeating: Llama-7B에서 TAP는 97%에서 9%로, GCG는 97%에서 58%로 내려갑니다 . | ['100', '36', '56'] already stated in 'LLM 시뮬레이션에서 환경 상태 검사로 옮겨간 에이전트 보안 측정': refer back without repeating: Mistral-7B에서는 TAP가 100%에서 36%로, GCG가 99%에서 56%로 줄어듭니다 . | numbers ['3.5'] without evidence: 실험에서는 GPT-3.5 Turbo를 SFT와 RLHF로 미세조정했습니다. | ['3.5'] already stated in 'LLM 시뮬레이션에서 환경 상태 검사로 옮겨간 에이전트 보안 측정': refer back without repeating: 실험에서는 GPT-3.5 Turbo를 SFT와 RLHF로 미세조정했습니다. | ['34'] already stated in '목표 탈취에서 적응형 공격까지 무너진 지시와 데이터의 경계': refer back without repeating: 학습에서 일부러 뺀 탈옥, 비밀번호 추출, 도구 기반 인젝션에도 효과가 옮겨 가서 견고성이 최대 34% 올랐습니다 .",
+    "Section '탈옥 최적화가 인젝션 방어를 다시 여는 적응형 공격의 고리' still has: ['0.74'] already stated in '지시 없이 지식만으로 에이전트를 조종하는 검색·메모리·백도어 오염': refer back without repeating: 퍼플렉시티 기반 탐지인 PPL과 PPL-W도 악성 문서 대부분을 놓쳤고, AUC는 각각 0.64와 0.74에 그쳤습니다 . | a standard section needs at least 1 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '공격 성공률 숫자 뒤에 숨은 위협 모델과 비용의 차이' still has: ['3.5'] already stated in 'LLM 시뮬레이션에서 환경 상태 검사로 옮겨간 에이전트 보안 측정': refer back without repeating: 대상 모델도 7B급 오픈 모델, GPT-3.5 Turbo, Claude 3.5 Sonnet으로 흩어져 있습니다 .",
+    "Section '유능할수록 취약해지는 에이전트와 아직 열린 설계 과제' still has: evidence ['E234'] was already referred back to twice; do not restate it again: 사용자 질의에서 제어 흐름을 먼저 고정하고, 값마다 출처와 허용된 수신자를 붙여 유출 경로를 차단합니다 .",
+    "Section '모델 신뢰가 아닌 흐름 통제로 수렴하는 에이전트 보안' still has: 1,973 characters of prose for a target of 1,000: cut background, repetition and minor detail",
+    "[references] line 657: cited only in a table: https://arxiv.org/abs/2310.03684"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2369.5,
+  "input_tokens": 1599927,
+  "output_tokens": 265403,
+  "estimated_cost_usd": 11.5266,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 76,
+      "failed_calls": 0,
+      "input_tokens": 20315,
+      "output_tokens": 265403,
+      "cache_read_tokens": 382789,
+      "cache_write_tokens": 1196823,
+      "cost_usd": 11.526541
+    },
+    "by_stage": {
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 14399,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 57170,
+        "cost_usd": 0.573846
+      },
+      "verify": {
+        "calls": 32,
+        "failed_calls": 0,
+        "input_tokens": 128,
+        "output_tokens": 50609,
+        "cache_read_tokens": 322428,
+        "cache_write_tokens": 570255,
+        "cost_usd": 3.992941
+      },
+      "draft": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 52,
+        "output_tokens": 61239,
+        "cache_read_tokens": 31236,
+        "cache_write_tokens": 266327,
+        "cost_usd": 2.569115
+      },
+      "review": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 24900,
+        "cache_read_tokens": 12069,
+        "cache_write_tokens": 47155,
+        "cost_usd": 0.738775
+      },
+      "fix": {
+        "calls": 17,
+        "failed_calls": 0,
+        "input_tokens": 68,
+        "output_tokens": 112973,
+        "cache_read_tokens": 17056,
+        "cache_write_tokens": 255916,
+        "cost_usd": 3.546128
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 20019,
+        "output_tokens": 1283,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.105736
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 76,
+        "failed_calls": 0,
+        "input_tokens": 20315,
+        "output_tokens": 265403,
+        "cache_read_tokens": 382789,
+        "cache_write_tokens": 1196823,
+        "cost_usd": 11.526541
+      }
+    }
+  }
+}

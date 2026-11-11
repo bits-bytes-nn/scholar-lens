@@ -1,0 +1,112 @@
+{
+  "item": "survey-security",
+  "post": "/tmp/eval-evidence/survey-security-v11.md",
+  "judge_run": 3,
+  "scores": {"A": 8.0, "B": 7.5, "C": 7.5, "D": 8.0, "E": 7.5, "F": 7.0},
+  "deductions": {
+    "A": [
+      "L336: orphan AgentDojo overview figure placed after the benchmark-limits subsection, captioned with the paper's numbering: '그림 1: AgentDojo는 동적 도구 호출 환경에서 ... 평가한다.'",
+      "L666 announces '아래 비교표' but the table only arrives at L682, after three subsections that already interpret its columns",
+      "L626-662: the 'transfer' section re-introduces ToolHijacker (L632 restates L616) and AgentPoison's perplexity result (L648 restates L506)"
+    ],
+    "B": [
+      "L336 caption register break: '... 평가한다.' in a 입니다 post",
+      "Formulaic hedges repeated 18 times ('이는 글쓴이의 해석입니다', '이 글의 판단으로는', '이 예시는 글쓴이가 든 가상의 사례입니다'), e.g. L290, L318, L334",
+      "L640 meta talk about the writer's input: '같은 설정에서 측정한 PoisonedRAG 자체의 ASR 값은 여기서 옮기지 않았으므로' (the paper's table gives 0.97); L634 '... 이 결과와 함께 제시되지 않았습니다'",
+      "L306 '22.6 하락한 수치입니다' has no unit (%p)"
+    ],
+    "C": [
+      "L542 broken back-reference: '메모리 중요도 점수를 거의 최댓값까지 끌어올린다는 결과는 앞 절에서 수치와 함께 다뤘습니다' - no earlier passage mentions importance scores",
+      "L674 '비교표의 해당 행을 보면 ... Travel 영역에서는 떨어지고, 텍스트 대 텍스트 공격은 막는 범위 밖' - the CaMeL row (L702) says '데이터 의존 행동 과제 실패' and mentions neither Travel nor text-to-text attacks"
+    ],
+    "D": [
+      "Good: SecAlign loss worked example (L394), PoisonedRAG black-box example (L468), CaMeL policy walk-through (L414)",
+      "GCG is defined twice (L123, L506); the running example is attached to nearly every paragraph, often as filler (L632, L640, L674)"
+    ],
+    "E": [
+      "48 figures, many narrated by generic sentences ('위 그림은 ... 보여줍니다', L276, L282, L306) without adding information",
+      "Second numeric table L652-658 duplicates body numbers (L634, L640, L636) and uses '—' cells",
+      "Comparison-table cells keep raw identifiers: 'GPT-4 combination_3 Bad Bot 0.94' (L687)"
+    ],
+    "F": [
+      "L306 wrong comparison basis: the -22.6 is against the generic baseline 'the model, the user' (45.8%), not the correct name ('the model, Bob' 46.1%)",
+      "L542 claims a result was given 'with numbers' in an earlier section that does not exist",
+      "L674 misdescribes the comparison table's CaMeL row",
+      "L701 '미세조정 탐지기 탐지율 61%→1%' omits that this is Vicuna-7B (Llama3-8B is 61→10)"
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L48 '사용자 입력에서 검색 데이터로, 다시 방어 우회로 옮겨 간 인젝션 공격', L664 '싸게 이기는 공격과 비싸게 막는 방어의 비대칭'"},
+    "running_example": {"status": "met", "evidence": "Email/calendar/bank assistant and '주소록을 공격자에게 전달하라' from L13 to L731; overused in places"},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "SecAlign L386-394 (DPO loss + numeric example), PoisonedRAG L454-468, AgentPoison L484-508"},
+    "facts_said_once": {"status": "partly met", "evidence": "ToolHijacker StruQ/SecAlign 84.6-97.5% at L634, L654, L674; Marking 76% at L554 and L674; CaMeL 'not vulnerable' at L420, L636, L658, L674; GCG/PI 0.02/0.62 at L640 and L655-656"},
+    "numbers_with_scope_unit": {"status": "partly met", "evidence": "L306 '22.6 하락' without unit or correct baseline; L701 61%→1% without the model; L705 96.7% without the shadow-LLM setting"},
+    "nothing_invented": {"status": "partly met", "evidence": "L542 invented back-reference; L674 table-row description that the table does not hold"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L723-739 open problems and the one-sentence judgment"},
+    "length_fitted": {"status": "partly met", "evidence": "137 KB, 48 figures; many figure-narration paragraphs and repeated restatements"},
+    "type_specific_shape": {"status": "partly met", "evidence": "Timeline table L21, lineages, cross-lineage and synthesis sections exist, but numbers are spread across every paper card plus a second numeric table L652, so the comparison table does not own the numbers"},
+    "korean_style": {"status": "partly met", "evidence": "Natural overall; repeated hedge formulas; L336 '~한다' caption"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 71, "claim": "text-ada-001 goal hijacking 13.8%", "verdict": "supported", "source": "2211.09527 Table: 'text-ada-001 | 13.8±2.2'"},
+      {"line": 117, "claim": "10 vendors including Notion confirmed HouYi's findings", "verdict": "supported", "source": "2306.05499: '10 vendors have validated our discoveries, including Notion'"},
+      {"line": 141, "claim": "Direct harm, Llama3-8B: defense mean ASR 0.05±0.04, adaptive 0.87±0.10", "verdict": "supported", "source": "2503.00061 Table 4"},
+      {"line": 186, "claim": "LLaMA-2-7B-Chat held-out behaviors: GCG 84%, AutoPrompt 35%", "verdict": "supported", "source": "2307.15043: 'achieving 35% success rate on held-out test behaviors, compared to 84% for our method'"},
+      {"line": 250, "claim": "PIQA q=5, N=20: Llama2 76.7→70.3, Vicuna 77.4→71.9", "verdict": "supported", "source": "2310.03684 (patch perturbations; the post omits 'patch')"},
+      {"line": 268, "claim": "1,054 cases, 17 user tools, 62 attacker tools", "verdict": "supported", "source": "2403.02691: 'InjecAgent comprises 1,054 test cases covering 17 different user tools and 62 attacker tools.'"},
+      {"line": 306, "claim": "GPT-4o wrong user name 23.2%, 22.6 lower than with the correct name", "verdict": "wrong", "source": "2406.13352 Table 2: baseline 'the model, the user' 45.8%; '+ wrong user' 23.2% (-22.6%); '+ correct user' 46.1%. The drop is against the generic baseline, not the correct name."},
+      {"line": 364, "claim": "AlpacaEval Llama 67.2→67.6, Mistral 80.0→78.7; Mistral TAP →36%, GCG 99→56%", "verdict": "supported", "source": "2402.06363 Tables 2-3"},
+      {"line": 470, "claim": "ReAct agent black-box ASR NQ 0.72, HotpotQA 0.58, MS-MARCO 0.52", "verdict": "supported", "source": "2402.07867: 'Our black-box attack achieves 0.72, 0.58, and 0.52 ASR, respectively.'"},
+      {"line": 508, "claim": "AgentPoison benign drop 0.74%, retrieval 81.2%, target action 59.4%, impact 62.6%", "verdict": "supported", "source": "2407.12784 Section 4.2"},
+      {"line": 596, "claim": "20 participants, 75% chose at least one malicious server, one identified all", "verdict": "supported", "source": "2506.02040: '15 participants (75.0%) choosing at least one malicious server'; 'only one participant (P04) identifies all four'"},
+      {"line": 719, "claim": "CaMeL 2.82x input, 2.73x output tokens, median AgentDojo task, Claude 3.5 Sonnet", "verdict": "supported", "source": "2503.18813 Figure 13 and text"},
+      {"line": 686, "claim": "Table: HouYi 31 of 36 apps vulnerable", "verdict": "supported", "source": "2306.05499: '36 actual LLM-integrated applications and discern 31 applications susceptible'"},
+      {"line": 698, "claim": "Table: global messaging self-replication gain GPT-4o +13.92%, GPT-3.5 +209%; Instruction Defense+Tagging 3%", "verdict": "supported", "source": "2410.07283 'Global messaging ... 13.92% higher ... 209% more effective'; 'Instruction Defense + LLM Tagging reduces the attack success rate to just 3%'"},
+      {"line": 702, "claim": "Table: CaMeL 77% tasks (84% undefended); 0 successful attacks vs tool filter 8", "verdict": "supported", "source": "2503.18813 abstract and Section 6.3"}
+    ],
+    "extra_observations": [
+      "L701 table cell '61%→1%' is Vicuna-7B only (2503.00061 Table 2); Llama3-8B is 61→10",
+      "L705 'GPT-4o MetaTool ASR 96.7%' is with a Llama-3.3-70B shadow LLM, gradient-free (2504.19793); setting not stated",
+      "L420 'Gemini 2.5 Pro 300→0 without policies' supported (2503.18813: 'here we install no security policy')"
+    ]
+  },
+  "checklist": {
+    "repeated": 1,
+    "avoided": 9,
+    "na": 3,
+    "repeated_ids": ["multiagent-integrity-overgeneralized"],
+    "items": {
+      "houyi-sentence-grammar": {"status": "n/a", "evidence": "HouYi paragraph (L111-119) has no pilot-study sentence"},
+      "heading-english-tool": {"status": "avoided", "evidence": "L520 '## 도구 설명과 에이전트 간 메시지로 번지는 공급망형 공격'"},
+      "etdi-translationese": {"status": "avoided", "evidence": "L606-612 has no '실무에 바로 대응됩니다'"},
+      "multiagent-integrity-overgeneralized": {"status": "repeated", "evidence": "L725 field-wide gaps not scoped to the reviewed papers: '분리의 비용을 줄일 정책 자동화가 아직 없습니다', '적응형 공격을 기본 평가 조건으로 삼는 벤치마크도 아직 드뭅니다' (L334 is scoped: '이 벤치마크 패밀리가')"},
+      "secalign-taskshield-repeated-verb": {"status": "n/a", "evidence": "No Task Shield; SecAlign paragraph L386 does not repeat 옮겼습니다"},
+      "lightweight-defense-practice-claim": {"status": "avoided", "evidence": "No claim about what practitioners deploy first; L438 is framed as '이 글의 판단으로는'"},
+      "injecagent-finetuned-variants": {"status": "avoided", "evidence": "L692 '파인튜닝 에이전트 ASR 3.8%/6.6%'"},
+      "agentdojo-utility-restated": {"status": "n/a", "evidence": "69.00%/50.08% not given; L298 uses '10%–25%'"},
+      "agentdojo-baseline-defenses": {"status": "avoided", "evidence": "L308 '데이터 구분자, BERT 기반 인젝션 탐지기, 프롬프트 샌드위치, 도구 필터' - no dual-LLM"},
+      "benchmark-conclusion-flip": {"status": "avoided", "evidence": "No '결론이 뒤집히' phrasing anywhere"},
+      "jailbroken-cell-duplicated": {"status": "avoided", "evidence": "L687 'GPT-4 combination_3 Bad Bot 0.94'"},
+      "toolhijacker-limitation-column": {"status": "avoided", "evidence": "L705 limitation 'gradient-based 가독성 저하', not the defense-failure finding (no-box scope still not stated)"},
+      "prompt-infection-venue": {"status": "avoided", "evidence": "L759 no 'Lecture notes in computer science' (venue left empty rather than arXiv)"}
+    }
+  },
+  "extras": {
+    "plan_papers_uncited": [],
+    "thin_sections": ["L676 '평가 조건의 비대칭' - two sentences of evidence plus a judgment paragraph"],
+    "venue_issues": ["Indirect PI (L745), AgentDojo (L756), Prompt Infection (L759) have no venue; none garbled"],
+    "table_cells_prose_empty_dash": ["L655 and L656 defense column '—' (secondary numeric table)", "L685 'Bing Chat 공격 다수 모드에서 성공(정성적)' is prose, not a number"],
+    "table_limitations_not_papers_own": ["L685 '정량적 성공률 평가 부재' and L687 '비공개 모델에 의한 간접 검증' read as reviewer critiques"]
+  },
+  "top_issues": [
+    "Cross-references that point to nothing: L542 claims importance-score numbers were given 'in an earlier section', and L674 attributes Travel and text-to-text limits to the CaMeL table row, which says neither",
+    "The comparison table does not own the numbers: figures sit in every card, a second numeric table (L652) repeats them, and ToolHijacker 84.6-97.5%, Marking 76% and CaMeL 'not vulnerable' recur 2-4 times",
+    "Number scope slips: AgentDojo -22.6 measured against the wrong baseline and with no unit (L306), 61%→1% without the model (L701); plus meta talk about the writer's input (L634, L640) and 18 formulaic hedges"
+  ]
+}

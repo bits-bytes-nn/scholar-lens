@@ -1,0 +1,741 @@
+{
+ "item": "guide-vllm",
+ "kind": "guide",
+ "source": {
+  "urls": [
+   "https://docs.vllm.ai/en/latest/getting_started/quickstart.html"
+  ],
+  "reference_urls": [
+   "https://arxiv.org/abs/2309.06180",
+   "https://blog.vllm.ai/2023/06/20/vllm.html"
+  ]
+ },
+ "criteria_note": "Scored A-F, G, X1 and guide criteria T1-T3 (R*, U*, S1 do not apply). Claims checked against docs.vllm.ai/en/latest (quickstart, installation gpu/cpu, engine_args, arch_overview, prefix_caching, metrics, v1_guide, helm), docs v0.6.4 engine args, arXiv 2309.06180 HTML, the 2023 launch blog, V1 alpha and Anatomy blogs, ScaleOps and Unsloth pages (downloaded to /tmp/exp5/judge/vllm-scratch). Code read, not executed. Prose length: body characters excluding front matter, headings, code, tables, images and Sources, newlines removed.",
+ "X": {
+  "prose_length_chars": 28999,
+  "scores": {
+   "A": {
+    "score": 7,
+    "reason": "Balanced fences (44) and valid front matter, but L147 '### V1에서 기본으로 켜지는 해시 기반 프리픽스 캐싱' has a one-sentence body (L149) and never explains hash-based caching or the default; L573 heading '### GPU와 다른 블록 크기와 배치 기본값' never gives the CPU block size (docs: 128); L605 '위 그림은 vLLM의 Helm 배포 아키텍처를 나타냅니다.' is a filler caption paragraph."
+   },
+   "B": {
+    "score": 8,
+    "reason": "Natural Korean, consistent terms. Nits: L296 '우선순위가 낮다는 점을 착각하기 쉬우므로' (noun frame; '숫자가 클수록 우선순위가 낮아 헷갈리기 쉬우므로'); L62 '키·값 벡터를 따로 가집니다' (가지다 default verb; '따로 있습니다'); 8 uses of '할 수 있습니다', e.g. L56 '따로 진행할 수 있습니다' for what simply happens."
+   },
+   "C": {
+    "score": 7,
+    "reason": "Mostly coherent arc problem->PagedAttention->sharing->V1->scheduler->install->args->CPU->Helm->choice. Broken back-references: L537 '텐서 병렬을 켜면 앞서 본 것처럼 `|`로 rank마다 코어 구간을 나눕니다' (the `|` syntax never appears earlier); L575 '앞서 소개한 `world_size` 배수 값' (4096*/2048*world_size never introduced); L241 '앞서 본 프리픽스 캐싱' points to the empty L147 subsection."
+   },
+   "D": {
+    "score": 8,
+    "reason": "Good worked examples at the hard spots: L35 2048/300-token waste, L122 500-token/4-sample block count (35 blocks), L249-285 toy token-budget scheduler, L193-213 process counter. Some padding in CPU thread binding (L555) and Helm details."
+   },
+   "E": {
+    "score": 8,
+    "reason": "Useful tables (OS/PagedAttention mapping L47, policy table L291, process table L176, comparison L687); figures placed where discussed and described, not by number. L80/L106 GIFs fine. Missing a table for observability (none covered); L605 figure caption is perfunctory."
+   },
+   "F": {
+    "score": 9,
+    "reason": "30 checked claims, none wrong. Minor simplification: L480 '기본값은 `0.92`' omits the docs' '1.0 with the extensible KV cache' case. Old-version facts (v0.6.4) are named as such (L100, L316, L480)."
+   },
+   "G": {
+    "score": 9,
+    "reason": "use_math true with $$ math; description 124 chars, starts with vLLM; Liquid wrapped in raw at L629; fence info strings single words. Title in English while body Korean (blog convention appears to allow)."
+   },
+   "X1": {
+    "score": 8,
+    "reason": "Category Tech Guides/Language-Models; 7 tags, mostly reusable (PagedAttention, Prefix-Caching, Model-Serving); 'vLLM-V1-Engine' and 'Helm-Deployment' are narrow; 'Efficient-Attention' is loose."
+   },
+   "T1": {
+    "score": 8.5,
+    "reason": "Runnable install (L334-339), offline (L351-370), server + curl + openai client (L380-430), source build, Docker, engine-arg examples in Python and CLI (L490-513), CPU env exports, Helm install/uninstall/values/unittest. Code read: toy scheduler and process counter produce the stated outputs."
+   },
+   "T2": {
+    "score": 8,
+    "reason": "Covers the paper/blog core in sensible order plus quickstart; Helm and CPU sections are well sourced from the docs. Prefix caching (a key V1 mechanism) is a heading with no content (L147-149)."
+   },
+   "T3": {
+    "score": 7,
+    "reason": "Strong internals on PagedAttention, CoW, beam search, V1 processes, TP step, scheduler/preemption. Gaps: no automatic prefix caching mechanism (hash, eviction) despite the heading; no observability/metrics at all; system integration limited to Helm, with the CPU-only HPA critiqued (L670) but no alternative signal named."
+   }
+  },
+  "principles": {
+   "claim_headings": {
+    "status": "met",
+    "evidence": "Headings are claims: L88 '블록 크기 16이 기본값인 까닭', L229 '커널이 아니라 CPU 오버헤드에서 나온 V1의 처리량 향상'."
+   },
+   "running_example": {
+    "status": "met",
+    "evidence": "facebook/opt-125m used throughout (L362, L381, L460, L509, L544, Helm L625); Qwen used only for chat at L418 with reason."
+   },
+   "mechanism_reason_formula_example": {
+    "status": "met",
+    "evidence": "Block attention formula L58-60 -> figure L64 -> block table walk-through L74-78 -> waste bound L86; scheduler budget L241 -> code L251 -> output L285."
+   },
+   "facts_once": {
+    "status": "partly",
+    "evidence": "20.4–38.2% repeated (L13, L35); 55%/2.2x repeated (L15, L137); test-convenience default note repeated (L517, L575); -cc equivalence of enforce-eager recalled at L625."
+   },
+   "numbers_with_scope": {
+    "status": "met",
+    "evidence": "L687-694 table gives comparison target and condition per number; L231 states V0 baseline without multi-step."
+   },
+   "nothing_invented": {
+    "status": "met",
+    "evidence": "No wrong claims found among 30 checked; hypothetical numbers labelled ('가상의 예' L35, L122, L533)."
+   },
+   "own_assessment_at_end": {
+    "status": "met",
+    "evidence": "L714 '이 글의 판단으로는 다음 경우에 vLLM을 고릅니다…' with when-not-to-choose and first ops checks."
+   },
+   "length_fitted": {
+    "status": "partly",
+    "evidence": "Long CPU/Helm sections (L525-677) are close to docs transcription while prefix caching gets one sentence (L149)."
+   },
+   "type_specific_shape": {
+    "status": "partly",
+    "evidence": "Opens with TL;DR (L11) and architecture first (L43, L151); TL;DR lacks when-to-choose, which only appears at L679."
+   },
+   "korean_style": {
+    "status": "partly",
+    "evidence": "Natural overall; minor noun frames and '할 수 있습니다' overuse (L56, L112, L349)."
+   }
+  },
+  "claims": {
+   "checked": 29,
+   "numbers_checked": 21,
+   "supported": 29,
+   "unsupported": 0,
+   "wrong": 0,
+   "unverifiable": 0,
+   "error_rate": 0.0,
+   "items": [
+    {
+     "line": 13,
+     "claim": "FT/Orca use only 20.4%-38.2% of KV cache memory for token states",
+     "verdict": "supported",
+     "source": "arXiv 2309.06180 HTML: 'only 20.4% - 38.2% of the KV cache memory is used to store the actual token states'",
+     "number": true
+    },
+    {
+     "line": 27,
+     "claim": "13B on 40GB A100: ~65% weights, close to 30% KV cache",
+     "verdict": "supported",
+     "source": "arXiv 2309.06180 HTML: 'Approximately 65% of the memory is allocated for the model weights... Close to 30%'",
+     "number": true
+    },
+    {
+     "line": 86,
+     "claim": "waste only in last block, under 4%",
+     "verdict": "supported",
+     "source": "blog.vllm.ai 2023-06-20: 'a mere waste of under 4%'",
+     "number": true
+    },
+    {
+     "line": 90,
+     "claim": "block size 16 default; Alpaca 16/32 work well, larger degrade",
+     "verdict": "supported",
+     "source": "arXiv 2309.06180 HTML §7.2 block size ablation",
+     "number": true
+    },
+    {
+     "line": 137,
+     "claim": "sharing cuts memory up to 55%, throughput up to 2.2x",
+     "verdict": "supported",
+     "source": "blog.vllm.ai 2023-06-20: 'cutting their memory usage by up to 55%... up to 2.2x improvement in throughput'",
+     "number": true
+    },
+    {
+     "line": 167,
+     "claim": "VLLM_MEDIA_LOADING_THREAD_COUNT default 8",
+     "verdict": "supported",
+     "source": "design/arch_overview: 'controlled by VLLM_MEDIA_LOADING_THREAD_COUNT, default 8'",
+     "number": true
+    },
+    {
+     "line": 189,
+     "claim": "-tp=2 -dp=4 on 8 GPUs = 17 processes",
+     "verdict": "supported",
+     "source": "arch_overview: '4 API servers + 4 engine cores + 8 GPU workers + 1 DP coordinator = 17 processes'",
+     "number": true
+    },
+    {
+     "line": 231,
+     "claim": "V1 up to 1.7x over V0 without multi-step; ShareGPT, Llama 3.1 8B / 3.3 70B; Qwen2-VL on VisionArena larger",
+     "verdict": "supported",
+     "source": "vllm.ai/blog/2025-01-27-v1-alpha-release",
+     "number": true
+    },
+    {
+     "line": 243,
+     "claim": "Inside vLLM blog: V1 mixes prefill/decode in a step, V0 only one kind",
+     "verdict": "supported",
+     "source": "vllm.ai/blog/2025-09-05-anatomy-of-vllm: 'the V0 engine could only process either prefill or decode at once'",
+     "number": false
+    },
+    {
+     "line": 289,
+     "claim": "--scheduling-policy fcfs|priority, default fcfs; lower priority value earlier",
+     "verdict": "supported",
+     "source": "docs.vllm.ai/en/latest/configuration/engine_args --scheduling-policy",
+     "number": false
+    },
+    {
+     "line": 314,
+     "claim": "swap vs recompute comparable for block sizes 16-64",
+     "verdict": "supported",
+     "source": "arXiv 2309.06180 HTML: 'For medium block sizes from 16 to 64, the two methods exhibit comparable end-to-end performance'",
+     "number": true
+    },
+    {
+     "line": 316,
+     "claim": "v0.6.4 allowed preemption recompute or swap",
+     "verdict": "supported",
+     "source": "docs v0.6.4 engine_args --preemption-mode",
+     "number": false
+    },
+    {
+     "line": 320,
+     "claim": "--async-scheduling / --no-async-scheduling reduce GPU gaps",
+     "verdict": "supported",
+     "source": "docs.vllm.ai/en/latest/configuration/engine_args --async-scheduling",
+     "number": false
+    },
+    {
+     "line": 328,
+     "claim": "Linux, Python 3.11-3.14",
+     "verdict": "supported",
+     "source": "installation/gpu: 'Python: 3.11 -- 3.14'",
+     "number": true
+    },
+    {
+     "line": 341,
+     "claim": "vllm download-kernels fetches FlashInfer precompiled kernels; else minutes at startup on Hopper+/Blackwell",
+     "verdict": "supported",
+     "source": "installation/gpu: 'can add several minutes on Hopper and newer GPUs, especially Blackwell, and logs a warning'",
+     "number": false
+    },
+    {
+     "line": 345,
+     "claim": "ROCm wheel: Python 3.12, ROCm 7.0, glibc>=2.35",
+     "verdict": "supported",
+     "source": "quickstart: 'It currently supports Python 3.12, ROCm 7.0 and glibc >= 2.35'",
+     "number": true
+    },
+    {
+     "line": 432,
+     "claim": "--api-key / VLLM_API_KEY, multiple keys for rotation",
+     "verdict": "supported",
+     "source": "quickstart: 'You can pass multiple keys after --api-key...'",
+     "number": false
+    },
+    {
+     "line": 480,
+     "claim": "--gpu-memory-utilization default 0.92, per-instance",
+     "verdict": "supported",
+     "source": "docs.vllm.ai/en/latest/configuration/engine_args: 'If unspecified, 1.0 with the extensible KV cache ... and 0.92 otherwise' (post omits the 1.0 case)",
+     "number": true
+    },
+    {
+     "line": 480,
+     "claim": "v0.6.4: global limit; 50% used + 0.9 -> 40%",
+     "verdict": "supported",
+     "source": "docs v0.6.4 engine_args --gpu-memory-utilization",
+     "number": true
+    },
+    {
+     "line": 488,
+     "claim": "--enforce-eager default False; equivalent to -cc.mode=none -cc.cudagraph_mode=none",
+     "verdict": "supported",
+     "source": "docs.vllm.ai/en/latest/configuration/engine_args --enforce-eager",
+     "number": false
+    },
+    {
+     "line": 523,
+     "claim": "--distributed-executor-backend choices external_launcher, mp, ray, uni; TPU only Ray",
+     "verdict": "supported",
+     "source": "docs.vllm.ai/en/latest/configuration/engine_args",
+     "number": false
+    },
+    {
+     "line": 533,
+     "claim": "VLLM_CPU_KVCACHE_SPACE default 0, exitcode 9 beyond NUMA node, legacy -> --kv-cache-memory-bytes",
+     "verdict": "supported",
+     "source": "installation/cpu FAQ",
+     "number": true
+    },
+    {
+     "line": 575,
+     "claim": "CPU --max-num-seqs 256*world_size offline, 128*world_size online",
+     "verdict": "supported",
+     "source": "installation/cpu: 'Offline Inference: 256 * world_size / Online Serving: 128 * world_size'",
+     "number": true
+    },
+    {
+     "line": 668,
+     "claim": "Helm probes: liveness 15s/10s/3, readiness 5s/5s/3",
+     "verdict": "supported",
+     "source": "deployment/frameworks/helm values table",
+     "number": true
+    },
+    {
+     "line": 670,
+     "claim": "HPA 1-100 replicas, CPU 80%, disabled by default",
+     "verdict": "supported",
+     "source": "helm: {'enabled':false,'maxReplicas':100,'minReplicas':1,'targetCPUUtilizationPercentage':80}",
+     "number": true
+    },
+    {
+     "line": 690,
+     "claim": "up to 22x request rate vs FasterTransformer",
+     "verdict": "supported",
+     "source": "arXiv 2309.06180 HTML: 'up to 22x higher request rates'",
+     "number": true
+    },
+    {
+     "line": 696,
+     "claim": "OPT-13B 2.2x more requests than Orca (Oracle), 4.3x than Orca (Max)",
+     "verdict": "supported",
+     "source": "arXiv 2309.06180 HTML",
+     "number": true
+    },
+    {
+     "line": 704,
+     "claim": "LMSYS: up to 5x more traffic, GPUs -50%, 30K avg / 60K peak daily",
+     "verdict": "supported",
+     "source": "blog.vllm.ai 2023-06-20",
+     "number": true
+    },
+    {
+     "line": 482,
+     "claim": "Unsloth: float8 KV cache reduces memory 50%",
+     "verdict": "supported",
+     "source": "unsloth vllm-engine-arguments: 'Use fp8 for float8 KV cache to reduce memory usage by 50%'",
+     "number": true
+    }
+   ]
+  },
+  "checklist": {
+   "note": "guide-vllm has no human fixes (fixes: []); the notes' generic local-run defects are used as checks.",
+   "items": [
+    {
+     "check": "Cross-references to non-existent chapters ('14장', '17장')",
+     "result": "avoided",
+     "evidence": "No numbered chapter references; back-references are descriptive (e.g. L41 '뒤의 PagedAttention과 블록 테이블 설명에서')."
+    },
+    {
+     "check": "Tag remnants like '</path></name>'",
+     "result": "avoided",
+     "evidence": "None found."
+    },
+    {
+     "check": "HTML entity leaks like '&gt;'",
+     "result": "avoided",
+     "evidence": "Only '&#124;' in Sources link titles (L728-731), which renders as '|'; not a leak in body."
+    },
+    {
+     "check": "Unclosed code fence",
+     "result": "avoided",
+     "evidence": "44 fence lines, all paired."
+    },
+    {
+     "check": "Stale third-party CLI flags",
+     "result": "avoided",
+     "evidence": "Flags match current docs; v0.6.4 behaviour named as v0.6.4 (L316, L480)."
+    },
+    {
+     "check": "Install/usage-centric coverage with little on internals",
+     "result": "avoided",
+     "evidence": "Internals occupy L21-321 before installation at L322."
+    }
+   ],
+   "repeated": 0,
+   "avoided": 6,
+   "na": 0
+  },
+  "extras": {
+   "architecture_first_line": 15,
+   "internals_section_first_line": 43,
+   "installation_first_line": 322,
+   "sources_total": 14,
+   "non_official_sources": "5/14 (36%) not on docs.vllm.ai: paper, 3 vLLM blog posts, Unsloth; third-party only (Unsloth) 1/14 (7%)",
+   "opens_with_problem": "yes: L21-41 contiguous pre-allocation waste",
+   "closes_with_choice_and_failure_modes": "partly: L679-714 when to choose, conditions where the gain shrinks (L698-700), platform/version limits (L706-710); runtime failure modes (preemption storms, OOM at startup) are not discussed"
+  },
+  "structure_defects": [
+   "L147-149: subsection '### V1에서 기본으로 켜지는 해시 기반 프리픽스 캐싱' has one sentence; heading promise unmet",
+   "L537: orphaned back-reference '앞서 본 것처럼 `|`로' (never shown earlier)",
+   "L575: orphaned back-reference '앞서 소개한 `world_size` 배수 값' (values never given)",
+   "L573: heading promises CPU block size that the body omits",
+   "L605: one-sentence figure caption paragraph '위 그림은 vLLM의 Helm 배포 아키텍처를 나타냅니다.'",
+   "L482: '--block-size' sentence misplaced in the GPU-memory-ratio subsection"
+  ],
+  "top_issues": [
+   "Automatic prefix caching, a core V1 mechanism, is only a heading plus one sentence (L147-149), while later text relies on it (L241, L306).",
+   "No observability or metrics coverage at all; production integration is Helm only, and the CPU section has orphaned references (L537, L575)."
+  ],
+  "mean_score": 7.95
+ },
+ "Y": {
+  "prose_length_chars": 29350,
+  "scores": {
+   "A": {
+    "score": 7,
+    "reason": "Balanced fences (44). Defects: L366-370 three images duplicated from L304/L321/L337 (latest vs stable URLs) dumped after the section's prose; L654 heading '먼저 볼 다섯 가지 신호' over a six-row table (L660-665); L616 a one-sentence paragraph on -pp with no context; duplicate source entry (L757 and L760); stray leading spaces L234, L462."
+   },
+   "B": {
+    "score": 8,
+    "reason": "Natural engineer prose. Nits: L368 alt text '블록이 역순으로 tail에 추가된다.' (register break inside a 입니다 post); L280 '추가 해시로 가집니다' (가지다); L192 'iteration' left in English mid-sentence; '할 수 있습니다' 9 times, e.g. L554 '정할 수 있습니다'."
+   },
+   "C": {
+    "score": 7,
+    "reason": "Clear arc, with concepts set up before use (continuous batching L96 -> scheduler L178; LRU L242 -> metrics L675). Breaks: L168 tangent '참고로 v0.7.3 문서에서는…mp' at the end of the TP section; L225 'v0.8.3에도 fcfs와 priority 정책이 이미 있었습니다' non sequitur; L364 v0.8.3 hash options after the current table; L708 '같은 글은' with an unclear referent (previous paragraph is about histogram flags)."
+   },
+   "D": {
+    "score": 8.5,
+    "reason": "Hard parts get worked examples: 512-token budget table L180-188, hash-chain diagram L254-260, 10-block allocation/eviction walk-through L325-339 with free-queue states, duplicated-block case L343, preemption effects on interval metrics L685-691. Trivial parts kept short."
+   },
+   "E": {
+    "score": 7,
+    "reason": "Good tables (HF/TGI L41, process table L148, hash algo L351, ScaleOps sweep L626, metrics L658, version table L227) and docs figures placed where discussed. Deductions: L366-370 duplicated figures; L48 blog chart fine. One header row each, equal cell counts."
+   },
+   "F": {
+    "score": 8.5,
+    "reason": "27 checked claims, none wrong; L708 attributes VRAM/autoscaling advice to '같은 글' that is not in the ScaleOps article (unverifiable attribution). Minor: L622 0.92 default omits the 1.0 extensible-KV case; L663 'vllm:num_preemptions' vs L710 'vllm:num_preemptions_total' without saying the _total suffix is the Prometheus counter name."
+   },
+   "G": {
+    "score": 9,
+    "reason": "use_math true with $$; description 135 chars starting with vLLM; fences single-word info strings (text/json/bash/python); no Liquid."
+   },
+   "X1": {
+    "score": 8.5,
+    "reason": "6 reusable tags (PagedAttention, Prefix-Caching, KV-Cache-Management, Continuous-Batching, OpenAI-Compatible-Server, Model-Serving), all used by the post."
+   },
+   "T1": {
+    "score": 8.5,
+    "reason": "Runnable uv install, offline chat batch (valid llm.chat on a list of conversations), serve + curl + openai client for both endpoints, source build, Docker, ROCm/TPU, CPU wheel/env, Metal, engine-arg CLI, cache_salt JSON, hash-algo flag, metrics curl, histogram bucket flag. No Kubernetes manifest despite the K8s autoscaling section."
+   },
+   "T2": {
+    "score": 8,
+    "reason": "Covers paper/blog plus V1 guide, APC design, metrics; sensible order. Padding with old-version trivia (v0.4.1 quantization choices L612, block-size choices L618, swap 4GiB L230, v0.8.3 hash options L364) that the current-docs reader does not need."
+   },
+   "T3": {
+    "score": 8.5,
+    "reason": "Explains mechanisms and why: PagedAttention, CoW, V1 redesign goals, unified scheduler, preemption by recompute and why swap was removed, APC hash chain/free queue/eviction order, multi-tenant salt and hash-collision trade-off, metrics design (counters for hit rate), interval metrics, autoscaling signals, failure modes (L746-748). Design advice framed as recommendation (L633, L712)."
+   }
+  },
+  "principles": {
+   "claim_headings": {
+    "status": "met",
+    "evidence": "L240 '해시 체인과 LRU free queue로 KV 블록을 재사용하는 Automatic Prefix Caching', L341 'append-only 블록 테이블이 남기는 중복 블록'. L654 heading count is wrong (5 vs 6)."
+   },
+   "running_example": {
+    "status": "met",
+    "evidence": "Qwen/Qwen2.5-1.5B-Instruct across offline (L408), serve (L431), Docker (L530), CPU (L559), engine args (L602), salt JSON (L270), hash algo (L361), histograms (L700)."
+   },
+   "mechanism_reason_formula_example": {
+    "status": "met",
+    "evidence": "Hash key definition L246-250 -> chain diagram L254 -> KVCacheBlock code L286-300 -> allocation steps L310-317 -> 10-block example L325-339."
+   },
+   "facts_once": {
+    "status": "partly",
+    "evidence": "2-4x/accuracy repeated L13, L37, L734; prompt-logprobs bypass repeated L347 and L740; prefix-caching figures repeated L366-370."
+   },
+   "numbers_with_scope": {
+    "status": "met",
+    "evidence": "L39 states GPU/model/dataset for the HF/TGI table; L624 states L4, v0.8.5 for the ScaleOps sweep."
+   },
+   "nothing_invented": {
+    "status": "partly",
+    "evidence": "No wrong claim among 27; L708 '같은 글은' attributes advice to a source that does not contain it."
+   },
+   "own_assessment_at_end": {
+    "status": "met",
+    "evidence": "L750 '이 글의 판단으로는…vLLM이 기본 선택입니다' plus when to look elsewhere."
+   },
+   "length_fitted": {
+    "status": "partly",
+    "evidence": "Depth matches difficulty for APC and scheduling; old-version trivia (L168, L225, L364, L612, L618) adds length without value."
+   },
+   "type_specific_shape": {
+    "status": "met",
+    "evidence": "TL;DR (L11-15) gives architecture, mechanism and when to choose/avoid; internals before install (L372); closes with choice and failure modes (L714-750)."
+   },
+   "korean_style": {
+    "status": "partly",
+    "evidence": "Natural overall; L368 alt-text '추가된다.' register break; some English mid-sentence ('iteration' L192)."
+   }
+  },
+  "claims": {
+   "checked": 26,
+   "numbers_checked": 16,
+   "supported": 25,
+   "unsupported": 0,
+   "wrong": 0,
+   "unverifiable": 1,
+   "error_rate": 0.0,
+   "items": [
+    {
+     "line": 13,
+     "claim": "existing systems waste 60-80% of memory",
+     "verdict": "supported",
+     "source": "blog.vllm.ai 2023-06-20: 'existing systems waste 60% – 80% of memory due to fragmentation and over-reservation'",
+     "number": true
+    },
+    {
+     "line": 13,
+     "claim": "2-4x throughput vs FT/Orca without affecting accuracy; SOSP 2023",
+     "verdict": "supported",
+     "source": "arXiv 2309.06180 HTML intro",
+     "number": true
+    },
+    {
+     "line": 21,
+     "claim": "LLaMA-13B up to 1.7GB per sequence",
+     "verdict": "supported",
+     "source": "blog.vllm.ai 2023-06-20: 'Takes up to 1.7GB for a single sequence in LLaMA-13B'",
+     "number": true
+    },
+    {
+     "line": 43,
+     "claim": "single output: 14-24x HF, 2.2-2.5x TGI; 3 parallel: 8.5-15x HF, 3.3-3.5x TGI",
+     "verdict": "supported",
+     "source": "blog.vllm.ai 2023-06-20",
+     "number": true
+    },
+    {
+     "line": 50,
+     "claim": "LMSYS 30x vs initial HF backend; GPUs -50%; 30K/60K",
+     "verdict": "supported",
+     "source": "blog.vllm.ai 2023-06-20",
+     "number": true
+    },
+    {
+     "line": 58,
+     "claim": "paper maps requests to processes, blog maps sequences",
+     "verdict": "supported",
+     "source": "arXiv 2309.06180 HTML: 'requests as processes'; blog.vllm.ai 2023-06-20: 'sequences as processes'",
+     "number": false
+    },
+    {
+     "line": 136,
+     "claim": "VLLM_MEDIA_LOADING_THREAD_COUNT default 8",
+     "verdict": "supported",
+     "source": "design/arch_overview",
+     "number": true
+    },
+    {
+     "line": 132,
+     "claim": "V1 keeps models/kernels/utilities, re-architects scheduler, KV cache manager, worker, sampler, API server; four goals",
+     "verdict": "supported",
+     "source": "usage/v1_guide",
+     "number": false
+    },
+    {
+     "line": 188,
+     "claim": "chunked prefill on by default in V1 whenever possible; Concurrent Partial Prefills In Progress",
+     "verdict": "supported",
+     "source": "usage/v1_guide: 'Chunked prefill is enabled by default whenever possible'",
+     "number": false
+    },
+    {
+     "line": 192,
+     "claim": "1k=1000, 1K=1024 for --max-num-batched-tokens",
+     "verdict": "supported",
+     "source": "docs.vllm.ai/en/latest/configuration/engine_args",
+     "number": true
+    },
+    {
+     "line": 223,
+     "claim": "paper: after preemption vLLM stops accepting new requests until preempted sequences complete",
+     "verdict": "supported",
+     "source": "arXiv 2309.06180 HTML: 'vLLM stops accepting new requests until all preempted sequences are completed'",
+     "number": false
+    },
+    {
+     "line": 225,
+     "claim": "V1 feature table: GPU<>CPU KV cache swapping Removed",
+     "verdict": "supported",
+     "source": "usage/v1_guide feature table",
+     "number": false
+    },
+    {
+     "line": 266,
+     "claim": "cache_salt injected into first block hash, prevents timing attacks",
+     "verdict": "supported",
+     "source": "design/prefix_caching",
+     "number": false
+    },
+    {
+     "line": 280,
+     "claim": "block size 16, 41 placeholders -> blocks 0-3 carry the image hash",
+     "verdict": "supported",
+     "source": "design/prefix_caching (block 0 holds 8 text + 8 placeholders, so 41 placeholders end in block 3)",
+     "number": true
+    },
+    {
+     "line": 343,
+     "claim": "V1 append-only block table, [0,3] cannot become [0,1]",
+     "verdict": "supported",
+     "source": "design/prefix_caching duplicated blocks",
+     "number": false
+    },
+    {
+     "line": 349,
+     "claim": "v0.11 default sha256 addresses collision risk",
+     "verdict": "supported",
+     "source": "design/prefix_caching: 'As of v0.11, the default hashing algorithm is sha256'",
+     "number": true
+    },
+    {
+     "line": 355,
+     "claim": "xxhash is 128-bit, needs optional xxhash",
+     "verdict": "supported",
+     "source": "docs.vllm.ai/en/latest/configuration/engine_args --prefix-caching-hash-algo",
+     "number": true
+    },
+    {
+     "line": 389,
+     "claim": "download-kernels; minutes at startup on Hopper+",
+     "verdict": "supported",
+     "source": "installation/gpu",
+     "number": false
+    },
+    {
+     "line": 544,
+     "claim": "x86 CPU wheels since 0.17.0",
+     "verdict": "supported",
+     "source": "installation/cpu: 'available since version 0.17.0'",
+     "number": true
+    },
+    {
+     "line": 622,
+     "claim": "--gpu-memory-utilization default 0.92",
+     "verdict": "supported",
+     "source": "docs.vllm.ai/en/latest/configuration/engine_args (omits the 1.0 extensible-KV case)",
+     "number": true
+    },
+    {
+     "line": 628,
+     "claim": "ScaleOps L4: 33,616/42,640/48,048 tokens at 0.90/0.95/0.98; 0.99 crash; v0.8.5; 23 GiB",
+     "verdict": "supported",
+     "source": "scaleops.com/blog/vllm-kubernetes",
+     "number": true
+    },
+    {
+     "line": 639,
+     "claim": "--logprobs-mode four modes, default raw_logprobs",
+     "verdict": "supported",
+     "source": "docs.vllm.ai/en/latest/configuration/engine_args --logprobs-mode",
+     "number": false
+    },
+    {
+     "line": 697,
+     "claim": "request-latency histograms smallest default boundary 0.3s",
+     "verdict": "supported",
+     "source": "usage/metrics: 'whose smallest default boundary is 0.3s'",
+     "number": true
+    },
+    {
+     "line": 708,
+     "claim": "'같은 글' (ScaleOps) advises autoscaling on kv_cache_usage_perc/num_requests_waiting and never alerting on VRAM",
+     "verdict": "unverifiable",
+     "source": "Not found in the ScaleOps article (it scales on num_requests_waiting via KEDA); the referent of '같은 글' is unclear",
+     "number": false
+    },
+    {
+     "line": 710,
+     "claim": "num_preemptions_total 0->887; cold start 6.3 min pod, ~11 min end to end",
+     "verdict": "supported",
+     "source": "scaleops.com/blog/vllm-kubernetes",
+     "number": true
+    },
+    {
+     "line": 744,
+     "claim": "ScaleOps guide dated 2026-06-29: --enforce-eager lowers memory and start time, slower steady state",
+     "verdict": "supported",
+     "source": "scaleops.com: 'Jun 29, 2026'; quick reference row",
+     "number": true
+    }
+   ]
+  },
+  "checklist": {
+   "note": "guide-vllm has no human fixes (fixes: []); the notes' generic local-run defects are used as checks.",
+   "items": [
+    {
+     "check": "Cross-references to non-existent chapters ('14장', '17장')",
+     "result": "avoided",
+     "evidence": "Back-references are descriptive (L378 '이어지는 하드웨어별 설치 경로에서')."
+    },
+    {
+     "check": "Tag remnants like '</path></name>'",
+     "result": "avoided",
+     "evidence": "None found."
+    },
+    {
+     "check": "HTML entity leaks like '&gt;'",
+     "result": "avoided",
+     "evidence": "Only '&#124;' in Sources titles (L767, L770)."
+    },
+    {
+     "check": "Unclosed code fence",
+     "result": "avoided",
+     "evidence": "44 fence lines, all paired."
+    },
+    {
+     "check": "Stale third-party CLI flags",
+     "result": "avoided",
+     "evidence": "Current flags used; old-version options named with versions (L612, L618, L364), though they add clutter."
+    },
+    {
+     "check": "Install/usage-centric coverage with little on internals",
+     "result": "avoided",
+     "evidence": "Internals L17-371 before Quickstart L372; metrics internals L646-712."
+    }
+   ],
+   "repeated": 0,
+   "avoided": 6,
+   "na": 0
+  },
+  "extras": {
+   "architecture_first_line": 13,
+   "internals_section_first_line": 52,
+   "installation_first_line": 372,
+   "sources_total": 19,
+   "non_official_sources": "5/19 (26%) not on docs.vllm.ai: paper, launch blog, ScaleOps, thegoodshell, Elastic; third-party only 3/19 (16%). Note the Automatic Prefix Caching page is listed twice (stable and latest).",
+   "opens_with_problem": "yes: L17-50 KV cache waste problem",
+   "closes_with_choice_and_failure_modes": "yes: L714-750 when to choose/avoid, removed V1 features, CUDA graph trade-off, failure modes (preemption build-up, startup OOM, CPU float16, import errors)"
+  },
+  "structure_defects": [
+   "L366-370: three figures duplicated from L304/L321/L337, orphaned after the section prose",
+   "L654: heading '다섯 가지 신호' over a six-metric table",
+   "L616: one-sentence paragraph on --pipeline-parallel-size with no link to surrounding text",
+   "L168: off-topic v0.7.3 'mp' aside appended to the TP-workers section",
+   "L708: '같은 글은' with an unclear referent",
+   "L728: heading ending in a conditional clause ('…비교하면'), sentence-shaped fragment",
+   "Sources L757/L760: duplicate entry for Automatic Prefix Caching"
+  ],
+  "top_issues": [
+   "Duplicated prefix-caching figures (L366-370) and old-version trivia scattered through the text (L168, L225, L230, L364, L612, L618) break the flow and pad length.",
+   "Attribution slip at L708 ('같은 글은' advice not in ScaleOps) and the heading/table mismatch at L654; no Kubernetes deployment manifest despite the autoscaling section."
+  ],
+  "mean_score": 8.05
+ },
+ "preference": {
+  "overall": "Y",
+  "per_criterion": {
+   "A": "tie",
+   "B": "tie",
+   "C": "tie",
+   "D": "Y",
+   "E": "X",
+   "F": "X",
+   "G": "tie",
+   "X1": "Y",
+   "T1": "tie",
+   "T2": "tie",
+   "T3": "Y"
+  },
+  "reason": "Both posts are factually clean and share the same paper/blog/architecture core almost line for line. Y is preferred, narrowly, for depth where X is thin: Y explains automatic prefix caching (hash chain, free queue, eviction order, salt, hash algorithms, worked 10-block example) and observability (metrics, interval semantics, autoscaling signals, failure modes). X leaves prefix caching as an empty heading and has no metrics coverage. X is cleaner on visuals and sourcing (no duplicated figures, no unclear attribution) and adds Helm and fuller CPU coverage, but has orphaned back-references. Y loses points for duplicated figures and old-version clutter. The margin is small."
+ }
+}

@@ -1,0 +1,324 @@
+{
+ "item": "review-dpo",
+ "post": "/tmp/eval-paper/review-dpo-v3.md",
+ "judge_run": 3,
+ "source_checked": "https://arxiv.org/html/2305.18290v3",
+ "sampling": "body prose paragraphs (headings, display math, images, tables, list items, blockquotes excluded) numbered from line 15; paragraph 3 and every third after (3,6,...,87 = L45..L357); 15 claims drawn from these and the tables they introduce",
+ "scores": {
+  "A": 8.0,
+  "B": 7.5,
+  "C": 7.5,
+  "D": 8.0,
+  "E": 7.5,
+  "F": 8.0
+ },
+ "type_scores": {
+  "R1": 9.0,
+  "R2": 8.5,
+  "R3": 8.5
+ },
+ "deductions": {
+  "A": [
+   "L140 single '$' inside display math: '\\text{increase likelihood of $y_{w}$}' and '\\text{decrease likelihood of $y_{l}$}' (rubric: no single $ next to TeX)",
+   "L139 bare '\\\\' line break inside $$...$$ outside an aligned/split environment ('=\\\\' then newline) may not render as intended",
+   "L175 sentence-form heading '### 프롬프트 함수만큼 다른 보상은 구별되지 않습니다' (§5.1 forbids sentence headings); L365 English '### References' nested under '## 한계와 시사점'",
+   "L11 tags restate the title/method ('Direct-Preference-Optimization', 'KL-Constrained-Reward-Maximization', 'RL-Free-Preference-Learning', 'Implicit-Reward-Model') rather than few reusable tags"
+  ],
+  "B": [
+   "L291 '논문이 직접 서술하지는 않았지만 그림을 눈으로 읽어 보면' meta/pipeline framing in reader text; rewrite: '산점도에서 DPO 점들은 그려진 KL 범위 전체에서 다른 방법보다 위에 있습니다.'",
+   "L295 'PPO 기반 인간 피드백 기반 강화학습(RLHF)' double 기반 and re-expansion of an acronym defined at L43; rewrite: 'PPO 기반 RLHF'",
+   "L89 '정책 네트워크 하나가 언어 모델 역할과 암묵적 보상 역할을 함께 맡게 됩니다' English default 역할을 맡다; rewrite: '정책 네트워크 하나가 언어 모델이자 암묵적 보상 모델입니다.'",
+   "L117 heading '정책에 대한 최대우도' and L119 '정책 $$\\pi_\\theta$$에 대한 최대우도 목적' particle calque; rewrite: '정책의 최대우도'",
+   "L171 heading '순위 데이터로의 확장' calque; rewrite: '순위 데이터로 넓히기'",
+   "L173 '이 손실이 실제로는 없다는 것을 보여 줍니다' noun frame; rewrite: '실제로는 잃는 것이 없습니다.'",
+   "L249 '이유 가운데 하나가 이렇게 진단됩니다' passive hiding the actor; rewrite: '이 틀로 RLHF가 불안정한 이유 하나를 설명할 수 있습니다.'",
+   "L359 quotes its own section title as \"'간결함과 의도 파악에서 드러나는 DPO 생성물의 질적 특성' 섹션에서 본\" — mechanical cross-reference; rewrite: '앞의 예시 출력 가운데'"
+  ],
+  "C": [
+   "The same pipeline image is shown twice (L47 and L91) with near-identical captions (L49 and L93), so the derivation section re-reads the intro",
+   "'Z(x) is not needed for the ratio' is restated at L79, L83, L85 (one-line paragraph), L115 and again at L213/L237",
+   "DPO is defined twice (L24 TL;DR is fine, but L41 and L43 both introduce it in body), RLHF re-expanded at L295"
+  ],
+  "D": [
+   "Good calibration overall: worked loss example L127 and gradient-weight table L154-L159 at the hard step",
+   "Partition-function cancellation explained 5+ times (L23, L57, L83, L111, L115, L213, L237) — over-explaining a point already landed",
+   "L81 partition-function cost given only as '어휘 크기가 수만이고 길이가 수십 토큰' without stating |V|^L/exponential growth, the one quantitative intuition the reader needs there"
+  ],
+  "E": [
+   "Duplicated figure: '/assets/images/...-1.png' at L47 and L91",
+   "L323 CNN/DailyMail numbers 0.36/0.26 given without the temperature (paper's Table 1: Temp 0 column; 0.31/0.23 at 0.25) — a two-row table would have carried the scope",
+   "Tables otherwise copy source cells verbatim (L309-L317 match the paper's human-study table, incl. '-' cell)"
+  ],
+  "F": [
+   "L291 says the paper does not state the frontier result directly ('논문이 직접 서술하지는 않았지만 그림을 눈으로 읽어 보면'); the paper does, in Figure 2's caption ('DPO provides the highest expected reward for all KL values') and §6.1 text — false attribution about the source (-2)"
+  ],
+  "R1": [
+   "Covers derivation, gradient, equivalence classes/theorem with projection proof, Plackett-Luce, actor-critic instability, full setup, all three tasks, human study and qualitative examples"
+  ],
+  "R2": [
+   "Intuition -> formula -> numeric example layering in §2-§4; some sections over-layered with repeated Z(x) recaps"
+  ],
+  "R3": [
+   "TL;DR answers four questions with settings (61%/57% at temp 0.0, Best of 128); closing gives writer's judgment and grounded checks (L353, L359-L361); L357 limitations match paper but omit other modalities"
+  ]
+ },
+ "principles": {
+  "claim_headings": {
+   "status": "partly met",
+   "evidence": "L39, L55, L87, L131, L171, L221, L251, L281, L297, L325, L341 are claim noun phrases; L175 and L185 '각 동치류의 유일한 대표원' — L175 is a sentence heading; topic heading '한계와 시사점' L351"
+  },
+  "running_example": {
+   "status": "met",
+   "evidence": "IMDb '이 영화는 처음엔' pair from L45 used through L79, L127, L161, L183, L219, L233, L261, L285, L329, L355; forced in L329"
+  },
+  "mechanism_design_formula_example": {
+   "status": "met",
+   "evidence": "L57-L81 problem (Z(x)), L97-L115 reparameterization and cancellation, L121 loss, L127 numeric example; gradient L139 with table L154"
+  },
+  "facts_said_once": {
+   "status": "partly met",
+   "evidence": "pipeline figure twice L47/L91; Z(x)-cancels restated L79/L83/L85/L115/L213/L237; pi_ref rule at L28, L253, L255, L277; 'RLHF complex and often unstable' L18, L41, L45"
+  },
+  "numbers_with_scope": {
+   "status": "partly met",
+   "evidence": "61%/57% with temperature (L34, L301), human table with baseline 'PPO 온도 0' (L309); but CNN/DM 0.36/0.26 without temperature (L323), TL;DR '사람 평가 58%' without DPO temp 0.25 (L34)"
+  },
+  "nothing_invented": {
+   "status": "partly met",
+   "evidence": "hypothetical numbers labelled (L79 '수치는 모두 가상입니다', L152, L183); speculation labelled (L167); but L291 wrongly says the paper does not state the frontier result"
+  },
+  "writer_assessment_at_end": {
+   "status": "met",
+   "evidence": "L353 '이 포스트의 판단으로는 ... 먼저 시도할 기본값', L359 judge-validity caveat for dialogue, L361 three concrete checks"
+  },
+  "length_fitted_to_difficulty": {
+   "status": "partly met",
+   "evidence": "derivation/theory sections deep as warranted; Z(x) cancellation over-repeated; qualitative section (L343-L349) long relative to its weight"
+  },
+  "type_specific_shape": {
+   "status": "met",
+   "evidence": "## TL;DR four-question block L15-L35, method then setup then results then 한계와 시사점, References"
+  },
+  "korean_style": {
+   "status": "partly met",
+   "evidence": "입니다 register held; calques L117/L119/L171, 역할 L89, double 기반 L295, passive L249, meta framing L291/L359"
+  }
+ },
+ "claims": {
+  "checked": 15,
+  "supported": 14,
+  "unsupported": 0,
+  "wrong": 1,
+  "unverifiable": 0,
+  "numbers": 10,
+  "examples": [
+   {
+    "para": 3,
+    "line": 45,
+    "claim": "paper calls the RLHF procedure 'complex and often unstable'",
+    "type": "attribution",
+    "verdict": "supported",
+    "source": "Abstract: 'RLHF is a complex and often unstable procedure'"
+   },
+   {
+    "para": 6,
+    "line": 53,
+    "claim": "contextual dueling bandits get preference labels online, DPO learns from a fixed offline batch; PbRL first estimates the latent scoring function then optimizes it",
+    "type": "comparison",
+    "verdict": "supported",
+    "source": "§2: 'in the CDB setting, preference labels are given online ... fixed batch of offline preference-annotated action pairs'; 'first explicitly estimating the latent scoring function (i.e. the reward model)'"
+   },
+   {
+    "para": 30,
+    "line": 157,
+    "claim": "hypothetical weights: sigma(-0.5)≈0.38 -> 0.038, sigma(0.5)≈0.62 -> 0.062, sigma(-3.0)≈0.047 -> 0.005 at beta 0.1",
+    "type": "number",
+    "verdict": "supported",
+    "source": "arithmetic: sigma(-0.5)=0.3775, sigma(0.5)=0.6225, sigma(-3)=0.0474; x0.1"
+   },
+   {
+    "para": 36,
+    "line": 179,
+    "claim": "lemma 1 is the well-known under-specification of Plackett-Luce models, requiring identifiability constraints for MLE guarantees",
+    "type": "attribution",
+    "verdict": "supported",
+    "source": "§5.1: 'well-known under-specification issue with the Plackett-Luce family ... additional identifiability constraints'"
+   },
+   {
+    "para": 39,
+    "line": 187,
+    "claim": "theorem assumes pi_ref(y|x)>0 for all pairs and beta>0; each equivalence class has exactly one reward of the form beta log pi/pi_ref",
+    "type": "method",
+    "verdict": "supported",
+    "source": "Appendix A.6 Lemma 2: 'pi_ref(y|x)>0 for all pairs ... beta>0. Then every equivalence class ... has a unique reward function'"
+   },
+   {
+    "para": 48,
+    "line": 231,
+    "claim": "normalization term in f is the soft value function of pi_ref; omitting it gives high-variance policy gradients; learned value function hard to optimize; human-completion baseline is a single-sample Monte Carlo estimate",
+    "type": "method",
+    "verdict": "supported",
+    "source": "§5.2 'soft value function of the reference policy ... high variance ... single sample Monte-Carlo estimate'"
+   },
+   {
+    "para": 60,
+    "line": 275,
+    "claim": "IMDb prompts are prefixes of 2-8 tokens",
+    "type": "number",
+    "verdict": "supported",
+    "source": "App. C.1 'prefixes from the IMDB dataset of length 2-8 tokens'"
+   },
+   {
+    "para": 60,
+    "line": 275,
+    "claim": "gpt2-large SFT on an IMDb subset for 1 epoch",
+    "type": "number",
+    "verdict": "supported",
+    "source": "App. C.1 'supervised fine-tuning on a subset of the IMDB data for 1 epoch'"
+   },
+   {
+    "para": 60,
+    "line": 275,
+    "claim": "4 completions for 25000 prefixes, 6 preference pairs per prefix from the ground-truth classifier",
+    "type": "number",
+    "verdict": "supported",
+    "source": "App. C.1 'sample 4 completions for 25000 prefixes and create 6 preference pairs for each prefix'"
+   },
+   {
+    "para": 60,
+    "line": 275,
+    "claim": "RLHF reward model initialised from gpt2-large, trained 3 epochs, best validation-accuracy checkpoint",
+    "type": "number",
+    "verdict": "supported",
+    "source": "App. C.1 'initialized from the gpt2-large model and trained for 3 epochs ... highest validation set accuracy'"
+   },
+   {
+    "para": 66,
+    "line": 291,
+    "claim": "the paper does not directly state that DPO points lie above all others; the post reads it off the figure",
+    "type": "attribution",
+    "verdict": "wrong",
+    "source": "Figure 2 caption: 'DPO provides the highest expected reward for all KL values'; §6.1 'DPO produces by far the most efficient frontier'"
+   },
+   {
+    "para": 72,
+    "line": 307,
+    "claim": "each respondent completed 25 judgments",
+    "type": "number",
+    "verdict": "supported",
+    "source": "Figure 5 caption 'Each respondent completed 25 similarly-formatted judgments'"
+   },
+   {
+    "para": 72,
+    "line": 311,
+    "claim": "human-study table: N respondents 272/122/199; GPT-4 (S) win 47/27/13; GPT-4 (C) win 54/32/12",
+    "type": "number",
+    "verdict": "supported",
+    "source": "Table 2, cell for cell"
+   },
+   {
+    "para": 72,
+    "line": 314,
+    "claim": "human win 58/43/17; GPT-4(S)-H agree 70/77/86; GPT-4(C)-H agree 67/79/85; H-H agree 65/-/87",
+    "type": "number",
+    "verdict": "supported",
+    "source": "Table 2, cell for cell"
+   },
+   {
+    "para": 87,
+    "line": 357,
+    "claim": "models evaluated up to 6B; scaling to models orders of magnitude larger left as future work",
+    "type": "number",
+    "verdict": "supported",
+    "source": "§7 Limitations: 'while we evaluate models up to 6B parameters, exploration of scaling DPO to state-of-the-art models orders of magnitude larger'"
+   }
+  ],
+  "also_checked_outside_sample": [
+   "L327/L331 DPO only computationally efficient method improving over preferred completions; similar or better than Best of 128 — supported (§6.2)",
+   "L349 7+2 example: GT answer '11' wrong, GPT-4 chose GT — supported (Table 10)",
+   "L323 CNN/DM 0.36/0.26 — supported for Temp 0 only; temperature scope missing"
+  ]
+ },
+ "checklist": {
+  "repeated": 0,
+  "avoided": 11,
+  "na": 6,
+  "repeated_ids": [],
+  "details": {
+   "implementation-fragment": {
+    "result": "avoided",
+    "evidence": "no broken fragment; L28 and L253-L259 explain pi_ref = pi^SFT or MLE on (x, y_w) before minimizing the loss"
+   },
+   "beta-tldr": {
+    "result": "avoided",
+    "evidence": "L29 '기본 설정은 β=0.1'; L269 '0.1 (TL;DR 요약은 0.5)'; no 'all experiments'"
+   },
+   "future-work-ranking-invented": {
+    "result": "avoided",
+    "evidence": "L357 lists 6B scaling, OOD, over-optimization, GPT-4 prompt dependence; no 'conditional preferences' (omits other modalities)"
+   },
+   "plackett-luce-not-future": {
+    "result": "avoided",
+    "evidence": "L129 '플래킷-루스 모델을 써도 같은 유도가 가능하다고 밝힙니다'; L205-L219 PL loss given as derived"
+   },
+   "ppo-clip-objective": {
+    "result": "n/a",
+    "evidence": "no PPO clipped objective in the post"
+   },
+   "partition-function-size": {
+    "result": "n/a",
+    "evidence": "L81 '어휘 크기가 수만이고 길이가 수십 토큰인 문장 공간' — no size formula, neither |V|^L nor quadratic"
+   },
+   "cnn-dm-prompt-variant": {
+    "result": "n/a",
+    "evidence": "L323 gives the CNN/DM win rates but names no GPT-4 prompt"
+   },
+   "human-study-columns": {
+    "result": "avoided",
+    "evidence": "L309 '지표 (기준: PPO 온도 0) | DPO | SFT | PPO-1'"
+   },
+   "human-study-respondents": {
+    "result": "avoided",
+    "evidence": "L311 '응답 수 | 272 | 122 | 199'"
+   },
+   "multi-judgment-comparisons": {
+    "result": "avoided",
+    "evidence": "L303 'DPO 대 PPO 비교에서는 비교마다 두 사람을 배정'; L319 'SFT 대결에는 비교마다 평가자를 한 명만'"
+   },
+   "overoptimization-figure-ref": {
+    "result": "n/a",
+    "evidence": "L357 names over-optimization as open but not the late-training drop"
+   },
+   "gradient-u-definition": {
+    "result": "n/a",
+    "evidence": "L146 mentions grouping the sigmoid argument as u but gives no definition"
+   },
+   "gradient-sigma-argument": {
+    "result": "avoided",
+    "evidence": "L140 and L150 use sigma(r_hat(y_l) - r_hat(y_w)); table L154-L159 consistent"
+   },
+   "best-of-n-invented": {
+    "result": "avoided",
+    "evidence": "L337 '약 64~128 샘플에서 포화' only"
+   },
+   "excluded-participant": {
+    "result": "n/a",
+    "evidence": "25 participants not mentioned (L307 is 25 judgments per respondent)"
+   },
+   "missing-description": {
+    "result": "avoided",
+    "evidence": "L9 starts 'DPO는', 120 chars, numbers 61%/57% appear in TL;DR L34"
+   },
+   "arxiv-https": {
+    "result": "avoided",
+    "evidence": "L366 https://arxiv.org/pdf/2305.18290v3"
+   }
+  }
+ },
+ "extras": {},
+ "top_issues": [
+  "L291 falsely says the paper does not state the reward-KL frontier result and frames it as the post's own figure reading; Figure 2 caption and §6.1 state it (F, B)",
+  "Duplicated pipeline figure (L47 and L91) with near-identical captions, plus the Z(x)-cancels point restated 5+ times (E, C, D)",
+  "Markup and style: single '$' inside display math L140, bare '\\\\' break L139, sentence heading L175; calques L117/L119/L171, 'PPO 기반 인간 피드백 기반 강화학습' L295; CNN/DM 0.36/0.26 without temperature L323"
+ ]
+}

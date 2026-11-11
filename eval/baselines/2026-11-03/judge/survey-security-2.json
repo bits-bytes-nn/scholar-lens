@@ -1,0 +1,107 @@
+{
+  "item": "survey-security",
+  "judge_run": 2,
+  "post": "eval/baselines/2026-11-03/out/survey-security.md",
+  "scores": {"A": 5, "B": 7.5, "C": 6, "D": 7.5, "E": 7, "F": 6, "S1": 6},
+  "score_evidence": {
+    "A": "Several lineage sections are cut off or hollow: L63-67 PromptInject has two paragraphs and no results; L162-164 PoisonedRAG is one paragraph before the next H2 at L166; L170-179 'Prompt Infection과 AiTM' ends mid-description after a four-item list and never covers AiTM; HouYi, Greshake, BadAgent, RAGForensics, MCP attack vectors, ETDI and ToolHijacker get no subsection although L168 promises 'MCP 생태계(2025년), 도구 선택 단계(2026년)'. PoisonedRAG is introduced twice (L162 and L444). L515 heading is a sentence ('학습한 경계는 다시 최적화의 표적이 됩니다'). Markdown/math/front matter render-safe.",
+    "B": "Mostly natural 입니다 register. Deductions: L51 table cell '침해할 수 있다는 점을 보입니다' (noun frame; rewrite '침해할 수 있음을 실험으로 보였습니다' -> better '…만으로 시스템 전체를 장악합니다'); L241 '보안을 맡긴다는 점은 바뀌지 않았습니다' (-> '세 방어 모두 보안을 모델이 학습한 경향에 맡깁니다'); L235 '어떤 손실을 정확히 쓰는지는 여기서 단정하지 않습니다' (writer-process leak; SecAlign states it uses DPO); L36 '제어할 수 있습니다' for a demonstrated fact; repeated figure-lead pattern '…에서는 …를 보면 됩니다' (L195, L225, L251, L286).",
+    "C": "Truncated sections break the arc (L179 -> L181 jumps from an unfinished Prompt Infection list into defenses). L444 re-introduces PoisonedRAG from scratch ('PoisonedRAG는 RAG의 지식 데이터베이스에 악성 텍스트 몇 개를 주입해…') after L164. L373 gives GPT-4o 'important message' ASR 47.69% while L375 gives 57.7% and L377 57.69% for the same attack without reconciling (the paper's Tables 3 and 5 disagree; the post should say so).",
+    "D": "Strong where present: InjecAgent ASR-valid denominator explanation (L321-323), AgentDojo metric denominators (L367), CaMeL capability pseudo-code labeled as illustrative (L258-276). Over-explained: full DPO symbol walkthrough for a formula the post says it will not attribute (L235-239); speculative GCG/PAIR design readings (L101, L143). Under-explained: MCP, tool selection and multi-agent attacks get no mechanism at all.",
+    "E": "Figures referred to descriptively and placed where discussed; useful defense (L294-299) and benchmark (L411-418) comparison tables. Comparison table (L494-511): '-' result cells for Greshake (L497) and ToolHijacker (L511), nested double parentheses in the GCG cell (L498), model repeated in sentence and parenthetical (L504, L507), prose sentences in the Prompt Infection result cell (L506).",
+    "F": "One wrong method detail: L452 '문단 바꿔쓰기 방어' — PoisonedRAG's paraphrasing defense paraphrases the target question, not passages (paper §7.1: 'we use an LLM to paraphrase it [the question] before retrieving… we do not paraphrase texts in the knowledge database'). Venue strings wrong (L545 'CISPA Helmholtz Center', L554 'Proceedings of the conference - Association for Computational Linguistics. Meeting.', L555 'Zenodo (CERN European Organization for Nuclear Research)', L556 'neural information processing systems', L558 'Lecture notes in computer science'). L511 ToolHijacker limitation cell is a finding about other defenses, not the paper's limitation. Unflagged 47.69%/57.69% conflict (L373 vs L377). All 14 other sampled numbers matched."
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Some claim headings (L426 '목표 출력을 바꾼 재사용…', L519 '판단을 모델 밖으로 옮기는 대가'), but topic-name H2s ('## RAG, 메모리, 백도어 오염' L158, '## 핵심 연구 비교' L480) and a sentence heading L515."},
+    "running_example": {"status": "not met", "evidence": "Local examples only (CaMeL email L258-276, AgentDojo rent transfer L345-363); no example carried through the survey."},
+    "mechanism_choice_formula_example": {"status": "partly met", "evidence": "GCG (L75-93), StruQ (L201-207), CaMeL (L251-278), adaptive attack (L428-439) follow it; MCP/ToolHijacker/AiTM/ETDI/BadAgent have no mechanism."},
+    "facts_said_once": {"status": "not met", "evidence": "CaMeL 0 vs tool filter 8 at L286 and L474; CaMeL 2.82x/2.73x at L288 and L488; StruQ AlpacaEval 67.2->67.6/80.0->78.7 at L207 and L488; '8개 방어를 모두 우회' at L19, L52, L301, L517, L533; CaMeL capability description at L53, L521, L535; lethal trifecta at L15, L488, L521."},
+    "numbers_with_scope": {"status": "partly met", "evidence": "Most numbers carry model/setting (L323, L401, L452). 47.69% vs 57.69% for GPT-4o no-defense 'important message' unexplained (L373/L377); '향상폭 63%' (L503) does not say relative or absolute."},
+    "nothing_invented": {"status": "partly met", "evidence": "Pseudo-code labeled as illustrative (L258, L344). Paraphrasing defense misdescribed (L452); garbled/wrong venues (L545-L558); unsourced practice claim L484 '실무에서는 화이트박스 최적화 공격보다 이쪽이 더 현실적인 위협일 수 있습니다'."},
+    "own_assessment_at_end": {"status": "partly met", "evidence": "L513-529 gives trade-offs and open problems; 맺음말 L533-539 mostly recaps papers (PromptInject, Greshake, StruQ, SecAlign, CaMeL, ToolHijacker) and ends with generic direction."},
+    "length_fitted": {"status": "not met", "evidence": "GCG gets three equations and long speculation (L75-109) while the MCP, tool-selection and multi-agent lineage is a single paragraph plus an unfinished list (L166-179)."},
+    "type_specific_shape": {"status": "not met", "evidence": "Survey-numbers-in-one-table violated: nearly every table number is first given in the body (L99, L145, L207, L323, L373, L401, L452, L464, L484) and repeated in the table (L496-511); synthesis section L480-490 re-describes cards rather than comparing lineages only."},
+    "korean_style": {"status": "partly met", "evidence": "Generally natural; repeated figure-lead pattern ('…를 보면 됩니다' L195, L225, L251, L286, L399) and several '…다는 점' frames (L51, L143, L241)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"n": 1, "line": 286, "claim": "Gemini 2.5 Pro successful attacks: tool-calling API 300, CaMeL without policies 0", "verdict": "supported", "source": "2503.18813 §6.2: 'the number of successful attacks for Gemini 2.5 Pro drops from 300 without to 0 with CaMeL' (no security policy installed)"},
+      {"n": 2, "line": 286, "claim": "Claude 3.5 Sonnet defense comparison: CaMeL 0, next best tool filter 8, out of 949 AgentDojo attacks", "verdict": "supported", "source": "2503.18813 §6.3: 'number of successful attacks with CaMeL is 0, … next best defense (tool filter) is 8'; Fig. 11 'total number of attacks is 949'"},
+      {"n": 3, "line": 509, "table": true, "claim": "CaMeL 77% task success with provable security vs 84% undefended (AgentDojo)", "verdict": "supported", "source": "2503.18813 abstract: 'solving 77% of tasks with provable security (compared to 84% with an undefended system) in AgentDojo'"},
+      {"n": 4, "line": 288, "claim": "CaMeL median token use 2.82x input, 2.73x output vs native tool calling (Claude 3.5 Sonnet)", "verdict": "supported", "source": "2503.18813 Fig. 13 / §6: 'CaMeL requires 2.82× input tokens and 2.73× more output tokens for the median task'"},
+      {"n": 5, "line": 502, "table": true, "claim": "InjecAgent ReAct-prompted GPT-4 ASR-valid 23.6% base, 47.0% enhanced", "verdict": "supported", "source": "2403.02691 Table 3, Prompted GPT-4 Total: 23.6 (base), 47.0 (enhanced)"},
+      {"n": 6, "line": 323, "claim": "Fine-tuned GPT-4 6.6% base, 7.1% enhanced", "verdict": "supported", "source": "2403.02691 Table 3, Fine-tuned GPT-4 Total: 6.6 / 7.1 (the paper's prose assigns 3.8%/6.6% to GPT-4/GPT-3.5, but the table rows match the post)"},
+      {"n": 7, "line": 323, "claim": "ReAct Llama2-70B 86.9% base, 88.2% enhanced; 30 agents evaluated", "verdict": "supported", "source": "2403.02691 Table 3 Llama2-70B Total 86.9 / 88.2; 'We evaluate 30 LLM agents'"},
+      {"n": 8, "line": 504, "table": true, "claim": "AgentDojo GPT-4o benign utility 69.00%, utility under attack 50.08%, targeted ASR 47.69%; Claude 3.5 Sonnet 78.22% / 33.86%; 97 tasks, 629 cases", "verdict": "supported", "source": "2406.13352 Table 3 rows GPT-4o 69.00/50.08/47.69, Claude 3.5 Sonnet 78.22/51.19/33.86; '97 realistic tasks and 629 security test cases'"},
+      {"n": 9, "line": 377, "claim": "GPT-4o targeted ASR with defenses: none 57.69%, tool filter 6.84%, PI detector 7.95%, repeat prompt 27.82%, delimiters 41.65%", "verdict": "supported", "source": "2406.13352 Table 5 Targeted ASR row: 57.69 / 41.65 / 7.95 / 27.82 / 6.84. Note: conflicts with Table 3's 47.69% for the same model and attack; the post repeats both without comment (L373 vs L377)"},
+      {"n": 10, "line": 507, "table": true, "claim": "AgentHarm GPT-4o harm 48.4%->72.7%, refusal 48.9%->13.6%; Claude 3.5 Sonnet 13.5%->68.7%, 85.2%->16.7%; Mistral Large 2 82.2% harm with 1.1% refusal", "verdict": "supported", "source": "2410.09024 §4 'increasing its harm score from 48.4% to 72.7% and decreasing refusal rate from 48.9% to 13.6%; Claude 3.5 Sonnet … 13.5% to 68.7% … 85.2% to 16.7%'; 'Mistral Large 2 refuses just 1.1% … 82.2%'"},
+      {"n": 11, "line": 403, "claim": "Non-refusal harm under template: Claude 3.5 Sonnet 81.9% vs benign 82.0%; GPT-4o 84.2% vs 89.9%", "verdict": "supported", "source": "2410.09024: 'Claude 3.5 Sonnet scores a 81.9% non-refusal harm score … its non-refusal score of 82% on the benign tasks; … GPT-4o scores a 84.2% … 89.9%'"},
+      {"n": 12, "line": 440, "claim": "Adaptive attack: all defenses >50% ASR; Vicuna-7B adversarial finetuning 56%->12%; fine-tuned detector 61%->1%; two-stage GCG vs paraphrasing 53->79 (Vicuna), 8->54 (Llama3-8B); 100 InjecAgent cases", "verdict": "supported", "source": "2503.00061 §5.2 'all ASR-adaptive attack … exceed 50% … from 56% … 12% with adversarial finetuning'; Table 2 Fine-tuned detector Vicuna-7B DR-o 61 DR-a 1; Table 3 Paraphrasing 53/79, 8/54; '100 test cases'"},
+      {"n": 13, "line": 452, "claim": "PoisonedRAG under '문단 바꿔쓰기 방어' keeps black-box ASR NQ 0.87, HotpotQA 0.93, MS-MARCO 0.79 (vs 0.97/0.99/0.91)", "verdict": "wrong", "source": "2402.07867 Table 12 numbers match, but §7.1 says the defense paraphrases the target question before retrieval and 'we do not paraphrase texts in the knowledge database'; calling it passage paraphrasing misdescribes the defense"},
+      {"n": 14, "line": 510, "table": true, "claim": "MCP attack vectors: average ASR 93.33% / 59.33% / 6.67% (external resources / tool poisoning / puppet); overall 53.11% ASR, 4.67% refusal; user study 15 of 20 (75.0%) picked a malicious server", "verdict": "supported", "source": "2506.02040 Table 2 Average row 59.33/…/6.67/…/93.33/…/53.11/4.67; 'Exploitation via Malicious External Resources achieves the highest ASR at 93.33%'; '15 participants (75.0%) choosing at least one malicious server'"},
+      {"n": 15, "line": 506, "table": true, "claim": "Prompt Infection global messaging: self-replicating 13.92% higher (GPT-4o), 209% more effective (GPT-3.5); local messaging about 20% lower", "verdict": "supported", "source": "2410.07283 §4: 'for GPT-4o, Self-Replicating infection achieves a 13.92% higher success rate, while for GPT-3.5, it is 209% more effective'; 'about 20% lower in local messaging'"}
+    ],
+    "additional_checked_supported": [
+      "L503 Instruction Hierarchy 63% / up to 34% / jailbreak >30% (2404.13208 abstract and §4)",
+      "L464 AgentPoison 81.2% ASR-r, 62.6% ASR-t, 0.74% benign drop, 62.0% with one poisoned instance (2407.12784)",
+      "L496 PromptInject 58.6±1.6 goal hijacking, 23.6±2.7 prompt leaking, text-davinci-002, 35 base prompts (2211.09527)",
+      "L478 ToolHijacker: StruQ, SecAlign and detection defenses insufficient (2504.19793 abstract)"
+    ]
+  },
+  "checklist": {
+    "repeated": 4,
+    "avoided": 5,
+    "na": 4,
+    "repeated_ids": ["multiagent-integrity-overgeneralized", "jailbroken-cell-duplicated", "toolhijacker-limitation-column", "prompt-infection-venue"],
+    "details": {
+      "houyi-sentence-grammar": {"result": "n/a", "evidence": "No HouYi pilot-study sentence; HouYi only named at L19, L37, L61."},
+      "heading-english-tool": {"result": "avoided", "evidence": "L166 '## 도구 악용, MCP, 멀티 에이전트 공격'."},
+      "etdi-translationese": {"result": "n/a", "evidence": "No ETDI paragraph; ETDI only in one-line mentions (L25, L56, L525)."},
+      "multiagent-integrity-overgeneralized": {"result": "repeated", "evidence": "L521 '시스템 수준 통제를 바탕에 두고 모델 수준 방어를 두 번째 층으로 겹치는 방법은 아직 열린 문제입니다.' is a field-wide gap claim, not scoped to the reviewed papers (CaMeL itself says it 'can and should be used in conjunction with other defenses'). L529 is scoped correctly."},
+      "secalign-taskshield-repeated-verb": {"result": "n/a", "evidence": "No SecAlign/Task Shield sentence pair; '옮겼습니다' appears once (L521)."},
+      "lightweight-defense-practice-claim": {"result": "n/a", "evidence": "No lightweight-defense section. Related unsourced practice claim at L484 ('실무에서는 … 더 현실적인 위협일 수 있습니다') is about threats, not deployment order."},
+      "injecagent-finetuned-variants": {"result": "avoided", "evidence": "L323 '도구 사용용으로 미세 조정한 GPT-4는 기본 6.6%, 강화 7.1%' matches Table 3's Fine-tuned GPT-4 row."},
+      "agentdojo-utility-restated": {"result": "avoided", "evidence": "L373 states 69.00%/50.08% once and follows with '공격이 들어오자 유용성이 떨어지는 동시에…' without restating (the drop is not given as ~20%p)."},
+      "agentdojo-baseline-defenses": {"result": "avoided", "evidence": "L377 lists tool filter, ProtectAI DeBERTa detector, prompt repeat, Spotlighting-style delimiters; no dual-LLM."},
+      "benchmark-conclusion-flip": {"result": "avoided", "evidence": "L375 '공격 문구에 따라 성공률이 열 배 넘게 달라집니다'."},
+      "jailbroken-cell-duplicated": {"result": "repeated", "evidence": "Jailbroken itself is not cited, but the same cell defect recurs: L504 'GPT-4o 공격 없는 유틸리티, …: 69.00%, … (GPT-4o, 97개 사용자 과제…)', L507 'GPT-4o 템플릿 공격 전후 …: … (GPT-4o, 공개 테스트 세트, …)', L505 '(AgentPoison, Agent-Driver·…)'."},
+      "toolhijacker-limitation-column": {"result": "repeated", "evidence": "L511 'StruQ, SecAlign 같은 예방 기반 방어와 탐지 기반 방어가 모두 충분하지 않았습니다. 효과적인 방어책은 제시되지 않았습니다.'"},
+      "prompt-infection-venue": {"result": "repeated", "evidence": "L558 '… within Multi-Agent Systems](https://arxiv.org/abs/2410.07283). Lecture notes in computer science.'"}
+    }
+  },
+  "extras": {
+    "survey": {
+      "plan_papers_not_cited": ["2307.02483 (Jailbroken: How Does LLM Safety Training Fail?)"],
+      "thin_or_heading_only_sections": [
+        "L63 '### 직접 주입의 체계화: PromptInject' — two paragraphs, no results",
+        "L162 '### PoisonedRAG: 검색 조건과 생성 조건을 나눠 만족시키기' — one paragraph (topic covered again at L444)",
+        "L158 '## RAG, 메모리, 백도어 오염' — intro plus the one-paragraph PoisonedRAG card; BadAgent and RAGForensics never get a card",
+        "L166 '## 도구 악용, MCP, 멀티 에이전트 공격' / L170 Prompt Infection과 AiTM — ends after a four-item list; AiTM, MCP attack vectors, ETDI, ToolHijacker get no card",
+        "L59 '## 프롬프트 주입…' — Greshake and HouYi get no card"
+      ],
+      "wrong_venues": [
+        "L545 Greshake et al.: 'CISPA Helmholtz Center' (an institution)",
+        "L554 BadAgent: 'Proceedings of the conference - Association for Computational Linguistics. Meeting.' (garbled index name)",
+        "L555 AgentDojo: 'Zenodo (CERN European Organization for Nuclear Research)'",
+        "L556 AgentPoison: 'neural information processing systems' (lowercase)",
+        "L558 Prompt Infection: 'Lecture notes in computer science'"
+      ],
+      "table_cells_prose_empty_or_dash": [
+        "L497 Greshake result cell '-'",
+        "L511 ToolHijacker result cell '-' (the paper has quantitative results)",
+        "L506 Prompt Infection result cell is a prose sentence ('GPT-3.5는 209% 더 효과적입니다')",
+        "Limitation column is full sentences throughout (L496-511)"
+      ]
+    }
+  },
+  "top_issues": [
+    "Hollow survey: the tool/MCP/multi-agent lineage and the RAG poisoning section are cut short (L162-179); AiTM, MCP vectors, ETDI, ToolHijacker, BadAgent, RAGForensics, HouYi and Greshake get no card; PoisonedRAG is covered twice (L162, L444); Jailbroken (2307.02483) is never cited.",
+    "Facts and numbers repeated: body numbers are copied again into the comparison table, and CaMeL 0-vs-8, 2.82x/2.73x, StruQ AlpacaEval and 'all 8 defenses bypassed' each appear 2-5 times; GPT-4o 47.69% vs 57.69% for the same attack goes unexplained (L373/L377).",
+    "Integrity slips: PoisonedRAG's paraphrasing defense misdescribed as passage paraphrasing (L452); five wrong or garbled venues (L545-L558, including the Prompt Infection 'Lecture notes'); ToolHijacker limitation cell holds a finding about other defenses, and its result cell is '-' (L511)."
+  ]
+}

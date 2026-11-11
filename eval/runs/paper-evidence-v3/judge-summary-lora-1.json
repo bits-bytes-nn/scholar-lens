@@ -1,0 +1,89 @@
+{
+  "item": "summary-lora",
+  "post": "/tmp/eval-paper/summary-lora-v3.md",
+  "judge_run": 1,
+  "sampling": "Body blocks (prose paragraphs, tables, display equations; headings and images excluded) numbered 1-29 from L16; took blocks 1,4,7,...,28, then wrapped to 2,5,...,23. Claims drawn from L16, L26, L34, L42, L64, L72, L80-85, L93, L99, L66, L87, L36.",
+  "scores": {"A": 8.5, "B": 7.5, "C": 6.5, "D": 7.5, "E": 7.5, "F": 7.0},
+  "type_scores": {"U1": 7.0, "U2": 7.5},
+  "deductions": {
+    "A": ["Headings are topic names, not claims: L18 '## 연구 배경', L28 '## 제안 방법', L46 '## 구현 방식', L68 '## 실험 결과' (fixed 5-section summary shape otherwise fine; markup, math and front matter render correctly)."],
+    "B": [
+      "L42 three consecutive '그래서' sentences: '그래서 α가 학습률과 같은 역할을 합니다. 그래서 저자들은 ...' -> 'α는 학습률과 같은 구실을 하므로, 저자들은 처음 시도한 r 값을 α로 정하고 따로 튜닝하지 않았습니다.'",
+      "Terminology mixing: L93 'r=8과 그보다 큰 rank', '더 큰 rank로' vs '랭크' everywhere else; L40 '단일 forward' vs L22 '단일 순전파'.",
+      "English default verbs: L42 '학습률과 같은 역할을 합니다', L97 '모델이 원래 가진 표현' -> '학습률과 같은 효과를 냅니다', '모델에 이미 있는 표현'.",
+      "Noun frame L70 '... 이 정도 성능이 나온다는 뜻입니다'."
+    ],
+    "C": [
+      "Wrong cross-reference L78: '저자들은 연구 배경에서 소개한 MNLI 저데이터 과제를 썼습니다' - the 연구 배경 section (L18-26) never mentions the MNLI low-data task.",
+      "Dangling back-reference L70: '앞서 든 예처럼 GPT-3를 WikiSQL에 맞춘다면' - no earlier WikiSQL example exists.",
+      "L40 re-explains adapters and repeats the GPT-2 medium / Quadro RTX8000 / '30% 넘게' latency measurement already given at L22 and L26, so the method section reads stitched."
+    ],
+    "D": [
+      "L44 '규모를 가늠하기 위해 가상의 계산을 해 보겠습니다' stays symbolic (d+k, (d+k)/(dk)) and never plugs in d=k=12,288, so the scale is not actually shown.",
+      "Good: α/r scaling (L42) and the subspace-similarity formula (L91-93) get symbol definitions at the point of use."
+    ],
+    "E": [
+      "No table for the headline GPT-3 175B comparison (FT 73.8/89.5/52.0-28.0-44.5 vs LoRA 73.4-74.0/91.6-91.7/53.4-53.8...), while L70 claims '같거나 더 높은 성능' without a single number.",
+      "Figures (L24, L38, L74) are referred to descriptively and placed where discussed; tables L54-62 and L80-85 copy cells verbatim."
+    ],
+    "F": [
+      "L26 'LoRA는 모듈을 병렬로 붙이는 구조라서 이런 지연이 생기지 않습니다' - the paper's reason is merging W=W0+BA at deployment ('we can explicitly compute and store W=W0+BA ... this guarantees that we do not introduce any additional latency'); an unmerged parallel branch still adds compute. L48 later gives the right reason.",
+      "L70 'W_q와 W_v에 붙인 작은 A·B만 학습해도 이 정도 성능이 나온다' - the Table 4 LoRA rows (4.7M, 37.7M) are not stated as W_q,W_v; Table 15 shows 4.7M/73.4/91.7 is r_v=2 (W_v only). Outside the claim sample.",
+      "L97 'W_q·W_v에 붙인 랭크 1~4의 작은 행렬도 ... SQL 생성에 필요한 방향을 증폭할 뿐입니다' - the amplification analysis (Section 7.3, H.3) is on W_q of layer 48 and says nothing about SQL directions; the writer's extrapolation is stated as fact. Outside the claim sample."
+    ],
+    "U1": ["Covers motivation, method, implementation and significance, but results lack the headline numbers (GPT-3 Table 4), the 10,000x trainable-parameter reduction, and any RoBERTa/DeBERTa/GPT-2 E2E results beyond the optimal-rank remark (L66)."],
+    "U2": ["TL;DR (L16) is plain prose, no math, with grounded numbers; grounded limitations at L99. Repetition (L40 vs L22/L26; 3x at L16 and L50; 12,288 / r=1-2 at L16 and L44) costs concision; no distilled main-results table."]
+  },
+  "principles": {
+    "claim_headings": {"status": "not met", "evidence": "L18 '연구 배경', L28 '제안 방법', L46 '구현 방식', L68 '실험 결과', L95 '의의와 한계' are topic names."},
+    "running_example": {"status": "partly met", "evidence": "GPT-3 on WikiSQL threads through L70, L97, L101, but L70 refers to an example ('앞서 든 예처럼') that was never set up."},
+    "mechanism_order": {"status": "partly met", "evidence": "L30 assumption -> L34 formula -> L42 initialization/scaling reason -> L44 example, but the example has no numbers."},
+    "facts_once": {"status": "not met", "evidence": "Latency measurement at L22/L26 and again L40; '최대 3배' L16 and L50; '12,288 ... r이 1이나 2' L16 and L44."},
+    "numbers_with_scope": {"status": "met", "evidence": "Tables state model and metric (L54, L80 'GPT-3 175B, MNLI-matched 검증 정확도 %'); L66 names GPT-2 Medium E2E NLG. Minor: L97 '랭크 1~4' has no source scope."},
+    "nothing_invented": {"status": "partly met", "evidence": "L26 latency reason; L70 W_q,W_v attribution; L97 SQL-direction extrapolation stated as fact."},
+    "own_assessment": {"status": "met", "evidence": "L101 '이 글의 관점에서는 ... 일반화하려면 검증이 더 필요합니다 ... 랭크를 바꿔 가며 직접 확인하는 편이 안전합니다.'"},
+    "length_fit": {"status": "met", "evidence": "About 6,000 body characters, roughly a five-minute read."},
+    "type_shape": {"status": "partly met", "evidence": "TL;DR + fixed five sections present; no distilled main-results table."},
+    "korean_style": {"status": "partly met", "evidence": "'입니다' register held throughout; L42 triple '그래서', L93 'rank'/'랭크' mixing, L42 '역할을 합니다'."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 0,
+    "unverifiable": 1,
+    "examples": [
+      {"line": 16, "claim": "GPT-3 175B: full rank 12,288, r of 1 or 2 suffices", "verdict": "supported", "source": "Sec 1: 'a very low rank (i.e., r in Figure 1 can be one or two) suffices even when the full rank (i.e., d) is as high as 12,288'"},
+      {"line": 16, "claim": "hardware requirement cut up to 3x with adaptive optimizers", "verdict": "supported", "source": "Sec 1: 'lowers the hardware barrier to entry by up to 3 times when using adaptive optimizers'"},
+      {"line": 16, "claim": "GPT-3 matches or exceeds full fine-tuning on all three datasets", "verdict": "supported", "source": "Sec 5.5: 'LoRA matches or exceeds the fine-tuning baseline on all three datasets'"},
+      {"line": 26, "claim": "adapter latency can exceed +30% vs no-adapter baseline in small-batch, short-sequence online setting", "verdict": "supported", "source": "Fig 5 caption: 'the slow-down can be as high as over 30% in an online, short-sequence-length scenario'"},
+      {"line": 26, "claim": "LoRA has no such latency because its module is attached in parallel", "verdict": "unsupported", "source": "Sec 4.1 'No Additional Inference Latency': latency-free because W=W0+BA is computed and stored; parallel structure alone is not the stated reason"},
+      {"line": 34, "claim": "h = W0x + ΔWx = W0x + BAx", "verdict": "supported", "source": "Eq. 3"},
+      {"line": 42, "claim": "A random Gaussian, B zero, ΔWx scaled by α/r, α set to the first r tried and not tuned", "verdict": "supported", "source": "Sec 4.1: 'We use a random Gaussian initialization for A and zero for B ... scale ΔWx by α/r ... simply set α to the first r we try and do not tune it'"},
+      {"line": 36, "claim": "B ∈ R^{d×r}, A ∈ R^{r×k}, r ≪ min(d,k); outputs summed coordinate-wise", "verdict": "supported", "source": "Sec 4.1"},
+      {"line": 64, "claim": "W_q,W_v at r=4 (73.7/91.3) best two-matrix config, close to all four at r=2 (73.7/91.7); rank 4 captures enough", "verdict": "supported", "source": "Table 5 and text: 'even a rank of four captures enough information in ΔW'"},
+      {"line": 66, "claim": "GPT-2 Medium E2E NLG optimal rank 4-16 depending on metric", "verdict": "supported", "source": "H.2: 'The optimal rank for GPT-2 Medium is between 4 and 16 depending on the metric used'"},
+      {"line": 72, "claim": "fine-tuning appears as a single point at the right end of the scatter plot", "verdict": "unverifiable", "source": "Figure 2 visual only; not stated in text"},
+      {"line": 80, "claim": "Low-data MNLI table: FT 60.2/85.8/88.9/89.5, PrefixEmbed 37.6/75.2/79.5/88.6, PrefixLayer 48.3/82.5/85.9/89.6, LoRA 63.8/85.6/89.2/91.7", "verdict": "supported", "source": "Table 16, all 16 cells match"},
+      {"line": 87, "claim": "LoRA beats FT at 100 and full data; comparable at 1k/10k given ±0.3 seed variance; PrefixEmbed near random", "verdict": "supported", "source": "F.3: 'LoRA achieves better performance than fine-tuning on both MNLI-100 and MNLI-Full, and comparable results on MNLI-1k and MNLI-10K considering the (±0.3) variance'; 'only slightly better than random chance (37.6% vs. 33.3%)'"},
+      {"line": 93, "claim": "48th of 96 layers; right-singular vectors; only the top direction overlaps; other directions likely noise", "verdict": "supported", "source": "Sec 7.2: 'right-singular unitary matrices', 'We only look at the 48th layer (out of 96)', 'other directions potentially contain mostly random noises accumulated during training'"},
+      {"line": 99, "claim": "Open problems: heuristic choice of matrices, combining with other methods, ΔW rank deficiency hinting W rank deficiency; small r may fail for a different-language task", "verdict": "supported", "source": "Sec 8 items 1, 3, 4; different-language point is Sec 7.2's thought experiment (paper text, though not in the future-work list)"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 0,
+    "na": 0,
+    "repeated_ids": [],
+    "note": "human_fixes.yaml has fixes: [] for summary-lora. The notes' generic defect (HTML entity leak '&amp;') does not occur in the post."
+  },
+  "extras": {
+    "description_chars": 127,
+    "taxonomy_X1": "Tags 'No-Inference-Latency', 'Frozen-Pretrained-Weights', 'Rank-Decomposition-Matrices' restate the abstract rather than short reusable tags."
+  },
+  "top_issues": [
+    "Main GPT-3 175B result is asserted ('같거나 더 높은 성능', L16/L70) with no numbers or table; RoBERTa/DeBERTa/GPT-2 results and the 10,000x parameter reduction are absent.",
+    "Unsupported causal/attribution claims: L26 credits the parallel branch (not weight merging) for zero latency; L70 attributes Table 4 results to W_q,W_v; L97 states an SQL-direction amplification the paper never shows.",
+    "Flow and repetition: wrong cross-reference L78 ('연구 배경에서 소개한 MNLI 저데이터 과제'), dangling '앞서 든 예처럼' L70, adapter latency repeated at L40, triple '그래서' at L42."
+  ]
+}

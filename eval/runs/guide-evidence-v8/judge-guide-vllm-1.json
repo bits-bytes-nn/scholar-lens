@@ -1,0 +1,96 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/eval-guide/guide-vllm-v8.md",
+  "judge_run": 1,
+  "sampling": "body blocks after front matter (prose paragraphs, tables, code fences, lists, images; headings excluded): 178 blocks; blocks 1,4,7,... (60 sampled, L13 to L640); 15 claims drawn from sampled blocks P1-P169 (L13-L603), 10 of them numbers",
+  "sources_checked": "arXiv 2309.06180 PDF (pdftotext); vLLM blog 2023-06-20 (vllm.ai/blog/2023-06-20-vllm); vLLM V1 alpha blog 2025-01-27 (cited in the post at L226/L273 but missing from its Sources); vLLM v0.8.1 docs/source/getting_started/v1_user_guide.md (GitHub tag); vllm-project/vllm main @82aeedf (2026-11-05) sparse checkout: docs/getting_started/quickstart.md, installation/gpu.md + gpu.cuda/rocm.inc.md, cpu.md + cpu.x86.inc.md, docs/cli/README.md, docs/deployment/docker.md, vllm/config/cache.py, scheduler.py, model.py, observability.py, vllm/engine/arg_utils.py, vllm/entrypoints/llm.py, entrypoints/common/cli_args.py; docs.vllm.ai/en/latest/getting_started/installation/gpu/ (rendered, to confirm the ROCm finding); gingerlabs.ai and introl.com blogs (fetched)",
+  "scores": {"A": 8.5, "B": 8.0, "C": 8.5, "D": 9.0, "E": 8.5, "F": 7.0, "T1": 9.0, "T2": 8.5, "T3": 9.0},
+  "score_evidence": {
+    "A": "Arc is TL;DR (L11), problem (L17), PagedAttention (L35), sharing (L91), scheduler/preemption (L142), V1 (L203), prefix caching (L239), install (L295), serve/CLI (L347), engine args (L412), containers (L480), production stack (L547), when to choose (L589). No body H1, no skipped levels, 38 fence lines (balanced), $$ math only, use_math true. Deductions: '### Sources' (L639) is an H3 under the last H2 after '- - -'; several subheadings are topic labels, not claims: L423 '### 선택 기준', L438 '### 예제 모델에 적용하기', L484 '### GPU: `vllm/vllm-openai` 이미지'.",
+    "B": "Mostly natural 입니다 prose that keeps English terms. Deductions: L15 '시스템 프롬프트처럼 반복되는 앞부분을 다시 계산하지 않게 해 주는 기능은 이 중 프리픽스 캐싱입니다' -> '이 중 시스템 프롬프트 같은 반복 앞부분의 재계산을 없애는 것은 프리픽스 캐싱입니다'; L251 '... 예로 들어 보겠습니다. 예를 들어 모든 요청이 ...' (예 repeated in back-to-back sentences); L267 '이 정책은 SGLang의 RadixAttention과 같은 정책이 됩니다' -> 'SGLang의 RadixAttention도 같은 정책을 씁니다'; the same figure-intro frame recurs: L29 '그림에서 눈여겨볼 곳은', L101 '그림에서 눈여겨볼 곳은', L148 '볼 곳은 화살표 방향입니다', L599 '그래프에서는 ... 보면 됩니다'.",
+    "C": "Back-references are accurate and named (L455 '앞서 CLI 절에서 본 크기 접미사 규칙', L245, L289). Deductions: L414 scopes the engine-args explanation '(vLLM v0.9.2 기준)' while the table at L422-428 uses current-main fields and defaults (kv_cache_memory_bytes, the 0.92 resolution), so the version baseline shifts within the section; L226 and L273 rest on 'V1을 소개한 vLLM 블로그 글'/'V1 블로그', which the Sources list never gives.",
+    "D": "Hard parts get worked examples at the point of use: the 7-token/block-size-4 table (L69-73), the CoW refcount timeline (L103-107), beam-search block table (L123-128), the A/B/C continuous-batching timeline (L171-177), the 512-token budget for chunked prefill (L213-218) and the 40-token hash chain (L253-259); all illustrative numbers are labelled. Minor: the CPU section (L506-545) spends many lines on env-var details compared with the shorter disaggregated-serving explanation.",
+    "E": "Tables are real and well placed; figures referred to by content; ASCII timelines aid the hard parts. Deductions: the engine-args table L424-428 has vague or empty cells: '테스트 편의용 값' twice instead of the class defaults (2048 and 128 in scheduler.py) and '—' for max_model_len; '0.92' for gpu_memory_utilization omits that the declared default is None and resolves to 1.0 with the extensible KV cache (cache.py L216-227).",
+    "F": "All 15 sampled claims are supported. Found outside the sample: (1) L316 'AMD GPU는 ... 현재 Python 3.12, ROCm 7.0, `glibc >= 2.35`만 지원합니다' is wrong against the current official GPU page, which says 'Pre-built wheels are available for ROCm 10.0' and lists rocm700 only for vLLM 0.14.0-0.18.0 (rocm100 is the nightly default); (2) L425 states the gpu_memory_utilization default as 0.92, while cache.py declares None -> '1.0 with the extensible KV cache ... and 0.92 otherwise' (partly wrong). Lesser: the 'saved compute ≈ h × p' formula (L279) is the writer's own heuristic, presented without a source or an 'author's estimate' label; L561 says kv_cache_metrics can be passed as an offline constructor argument but does not mention that LLM sets disable_log_stats=True by default (llm.py), which the metric needs turned off; the V1 blog numbers (L226, L273) are correct but uncited in Sources.",
+    "T1": "The running example is paste-ready: uv install (L305-310, matches quickstart), offline LLM script (L322-341, quickstart verbatim with model swapped), vllm serve + curl /v1/models + chat completions with valid JSON (L351-375), --port/--uds/--config YAML (L383-475), Docker GPU and CPU runs with flags that match the docs. All Python blocks parse, all bash blocks pass bash -n. Minor: no openai-client snippet, though L377 points to it.",
+    "T2": "Covers the topics the sources support in a sensible order (internals, then install, serve, args, deploy, operate, choose). Deductions: the comparison table L603-609 and L621 lean on third-party numbers (gingerlabs citing arXiv:2511.17593, Introl/Red Hat, an unnamed 8x H200 blog), flagged as such but still padding; the T Cloud CCE case (L578) is a single third-party deployment.",
+    "T3": "Strong on internals and reasons: block table, CoW, beam-search sharing, FCFS/all-or-nothing preemption, swap vs recompute trade-off, V1 token-budget scheduler, hash-chain prefix caching with LRU and the xxhash multi-tenant risk (L293, matches cache.py), production-stack and disaggregated serving, and when vLLM is weak (L613-615). Commands and flags come from current docs; the paper's swap path is marked as V1-deprecated (L199). Deduction: the V1 description stops at the v0.8.1 guide (L228-237 maturity table), so readers do not see what changed since then; HPA advice (L572) reads as fact."
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "H2s are claim noun phrases (L17, L35, L142, L589); some H3s are topic labels (L423 '선택 기준', L438 '예제 모델에 적용하기')."},
+    "running_example": {"status": "met", "evidence": "Qwen/Qwen2.5-1.5B-Instruct runs from the prefix-caching example (L251) through offline (L333), serve (L352), args (L445-475), Docker GPU/CPU (L495, L539) to the selection table (L635)."},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "Block attention formula (L51-53) -> kernel figure -> block-table walk-through table (L69-73) -> waste bound with numbers (L85); CoW mechanism -> refcount table (L103-107) -> 7-token sharing example (L111)."},
+    "facts_once": {"status": "partly met", "evidence": "Linux-only at L15 and L303; localhost:8000 at L15 and L355; 2-4x at L13 and L33; chunked prefill vs max_num_batched_tokens at L15, L220 and L436."},
+    "numbers_with_scope": {"status": "met", "evidence": "L33 24x with 'HuggingFace Transformers, 저자 측 벤치마크'; L226 1.7x with the V0 baseline (multi-step off) and models/datasets; L595 setup (A10G/LLaMA-7B, A100 40GB/LLaMA-13B, ShareGPT)."},
+    "nothing_invented": {"status": "partly met", "evidence": "Illustrative values are labelled ('수치는 설명을 위해 정한 값입니다' L169, L211); but 'saved compute ≈ h × p' (L279) is unsourced and unlabelled, and L316 ROCm support is stale."},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L625 '이 글의 판단으로 상황별 선택을 정리하면' plus L635 advice to benchmark your own traffic."},
+    "length_fitted": {"status": "met", "evidence": "Hard internals get the most space (L35-293); installation is ~25 lines (L295-316); CPU env-var detail runs a bit long (L506-545)."},
+    "type_specific_shape": {"status": "met", "evidence": "Opens with TL;DR and the 60-80% waste problem (L11-33); architecture at L35 before any setup; ends with when to choose and where vLLM is weak (L589-635)."},
+    "korean_style": {"status": "partly met", "evidence": "Natural overall; repeated figure-intro frames (L29, L101, L148, L599) and a few awkward sentences (L15, L251, L267)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {"id": 1, "line": 13, "block": "P1", "claim": "기존 시스템은 ... 메모리의 60~80%를 버렸습니다", "verdict": "supported", "source": "vLLM blog: 'We find that existing systems waste 60% – 80% of memory due to fragmentation and over-reservation.'"},
+      {"id": 2, "line": 13, "block": "P1", "claim": "vLLM 논문은 ... FasterTransformer, Orca보다 모델 정확도 손실 없이 처리량을 2~4배 높였다", "verdict": "supported", "source": "arXiv 2309.06180 abstract: 'improves the throughput of popular LLMs by 2-4× with the same level of latency compared to ... FasterTransformer and Orca'; intro: 'without affecting the model accuracy at all'."},
+      {"id": 3, "line": 33, "block": "P10", "claim": "2023년 6월 vLLM 블로그는 ... HuggingFace Transformers보다 최대 24배 높은 처리량", "verdict": "supported", "source": "vLLM blog: 'up to 24x higher throughput than HuggingFace Transformers, without requiring any model architecture changes'."},
+      {"id": 4, "line": 43, "block": "P13", "claim": "두 설계의 성능 차이가 없다고 보고, 구현이 쉬운 후자를 택했습니다", "verdict": "supported", "source": "Paper §4.1 footnote: 'The two designs have no performance difference and we choose the second one for easy implementation.'"},
+      {"id": 5, "line": 101, "block": "P34", "claim": "두 샘플 모두 ... 물리 블록 7과 1에 매핑하므로, 두 물리 블록의 참조 카운트는 모두 2", "verdict": "supported", "source": "Paper §4.4: 'the reference counts for physical blocks 7 and 1 are both 2'."},
+      {"id": 6, "line": 130, "block": "P43", "claim": "기존 후보 0과 3이 빠지면 ... 카운트가 0에 이른 블록만 실제로 반환", "verdict": "supported", "source": "Paper §4.4 beam search: 'their logical blocks are freed, and the reference counts ... are reduced. vLLM frees all physical blocks whose reference counts reach 0 (blocks 2, 4, 5, 8).'"},
+      {"id": 7, "line": 197, "block": "P64", "claim": "선점된 시퀀스가 모두 끝날 때까지 새 요청을 받지 않고 ... 스왑 공간 크기는 KV 캐시에 배정한 GPU 메모리를 넘지 않음", "verdict": "supported", "source": "Paper §4.5: 'vLLM stops accepting new requests until all preempted sequences are completed ... the swap space on the CPU RAM is bounded by the GPU memory allocated for the KV cache.'"},
+      {"id": 8, "line": 205, "block": "P67", "claim": "v0.8.1 기준 V1은 V0의 모델, GPU 커널, 유틸리티를 유지하면서 스케줄러, KV 캐시 매니저, 워커, 샘플러, API 서버를 재설계 ... 목표는 넷", "verdict": "supported", "source": "v0.8.1 V1 user guide: 'retains ... (such as the models, GPU kernels, and utilities) ... re-architects ... the scheduler, KV cache manager, worker, sampler, and API server'; four 'V1 aims to' bullets."},
+      {"id": 9, "line": 226, "block": "P73", "claim": "V1이 V0보다 최대 1.7배 ... multi-step scheduling을 끈 V0 ... Llama 3.1 8B, Llama 3.3 70B(ShareGPT), Qwen2-VL(VisionArena)", "verdict": "supported", "source": "V1 alpha blog: 'up to 1.7x higher throughput compared to V0 (without multi-step scheduling)'; ShareGPT for Llama 3.1 8B/3.3 70B; Qwen2-VL on VisionArena. Note: this blog is not in the post's Sources."},
+      {"id": 10, "line": 273, "block": "P85", "claim": "캐시 적중률이 0%여도 처리량 하락이 1% 미만 ... 상수 시간 제거 ... enable_prefix_caching 기본값 True", "verdict": "supported", "source": "V1 blog: 'less than 1% decrease in throughput even when the cache hit rate is 0%'; 'constant-time cache eviction'; cache.py L260 'enable_prefix_caching: bool = True'."},
+      {"id": 11, "line": 345, "block": "P103", "claim": "generation_config.json 권장값 적용, generation_config=\"vllm\"으로 vLLM 기본값; llm.generate는 채팅 템플릿을 자동 적용하지 않음", "verdict": "supported", "source": "quickstart.md L131-133 and L170: 'The `llm.generate` method does not automatically apply the model's chat template'."},
+      {"id": 12, "line": 355, "block": "P106", "claim": "서버는 기본적으로 http://localhost:8000, --host/--port, 한 번에 모델 하나", "verdict": "supported", "source": "quickstart.md L209: 'By default, it starts the server at `http://localhost:8000` ... --host and --port ... The server currently hosts one model at a time'."},
+      {"id": 13, "line": 430, "block": "P124", "claim": "max_model_len에 -1 또는 auto를 주면 GPU 메모리에 맞는 최대 길이를 자동으로", "verdict": "supported", "source": "model.py L256/L266: 'Field(default=None, ge=-1)'; '-1 or 'auto' -> Automatically choose the maximum model length that fits in' GPU memory."},
+      {"id": 14, "line": 543, "block": "P151", "claim": "--block-size의 기본값은 128 (CPU); --max-num-batched-tokens는 첫 토큰, --max-num-seqs는 출력 토큰 성능; 기본값이 world size에 비례", "verdict": "supported", "source": "cpu.md L302 'Use multiples of 32 as `--block-size`, which is 128 by default.'; L306-315 defaults '2048 * world_size', '128 * world_size' and first-token/output-token impact."},
+      {"id": 15, "line": 605, "block": "P169", "claim": "vLLM 대 FasterTransformer 최대 22배 요청률(논문); LMSYS 내부 최대 30배; GPU 50% 절감, 일평균 3만·피크 6만 요청(블로그)", "verdict": "supported", "source": "Paper §6.2: 'Compared to FasterTransformer, vLLM can sustain up to 22× higher request rates'; blog: 'up to 30x higher throughput than an initial HF backend', 'cut the number of GPUs ... by 50%', 'average of 30K requests daily and a peak of 60K'."}
+    ],
+    "additional_findings_outside_sample": [
+      {"line": 316, "claim": "AMD GPU는 ... 현재 Python 3.12, ROCm 7.0, glibc >= 2.35만 지원합니다", "verdict": "wrong", "source": "docs.vllm.ai/en/latest .../installation/gpu/ (and gpu.rocm.inc.md): 'Pre-built wheels are available for ROCm 10.0; ROCm 7.2 wheels remain available for earlier releases'; rocm700 is listed only for vLLM 0.14.0 to 0.18.0 and rocm100 is the nightly default."},
+      {"line": 425, "claim": "gpu_memory_utilization 기본 동작 0.92", "verdict": "partly wrong", "source": "cache.py L216-227: default None; 'If unspecified, 1.0 with the extensible KV cache (sized from measured memory) and 0.92 otherwise'."},
+      {"line": 279, "claim": "saved compute ≈ h × p", "verdict": "unsupported (writer's heuristic, not labelled)", "source": "none of the listed sources give this formula"},
+      {"line": 561, "claim": "kv_cache_metrics: 오프라인 추론에서는 클래스 생성 인자로", "verdict": "incomplete", "source": "observability.py L62-65 requires log stats; llm.py sets kwargs['disable_log_stats']=True by default, so offline use also needs disable_log_stats=False."}
+    ]
+  },
+  "checklist": {
+    "source": "human_fixes.yaml guide-vllm has no fixes; the notes' generic guide checks are used",
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "details": [
+      {"check": "cross-references to non-existent chapters", "status": "avoided", "evidence": "No numbered chapter references; back-references are named (L455 '앞서 CLI 절에서 본')."},
+      {"check": "trailing tag remnant like </path></name>", "status": "avoided", "evidence": "grep for '</' finds none in the body."},
+      {"check": "HTML entity leak like &gt;", "status": "avoided", "evidence": "No &gt;/&lt;/&amp; in the body; the Sources link texts use &#124; and &#91;&#93; (L646, L648, L651, L652), which kramdown renders as | and []."},
+      {"check": "unclosed code fence", "status": "avoided", "evidence": "38 fence lines, all paired; every bash block passes bash -n, every Python block parses."},
+      {"check": "stale third-party CLI flags", "status": "avoided", "evidence": "CLI flags follow current docs; the 2023 api_server entrypoint is mentioned only as history (L399). (Separately, the AMD ROCm support statement at L316 is stale, but that is official-docs content, not a third-party flag.)"},
+      {"check": "install/usage-centric coverage with little on internals", "status": "avoided", "evidence": "Internals occupy L17-L293 before installation starts at L295."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 35,
+    "internals_first_line": 21,
+    "install_first_line": 295,
+    "sources_total": 17,
+    "official_docs_sources": 10,
+    "non_official_sources": 7,
+    "non_official_share": 0.41,
+    "third_party_share": 0.24,
+    "non_official_breakdown": "paper arXiv 2309.06180, vLLM 2023 blog, RFC #2614 (project design sources); Introl, gingerlabs, Spheron, itnext T Cloud CCE (third-party)",
+    "uncited_source_used": "vLLM V1 alpha blog (2025-01-27) used at L226 and L273, not in Sources",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "runnable_code_verdict": "Runs as pasted, as far as checkable without a GPU: imports (from vllm import LLM, SamplingParams) and constructor kwargs (gpu_memory_utilization, max_model_len, max_num_seqs via **kwargs) match llm.py; the chat-completions JSON is valid; --uds, --api-key, --config, --help=<x>, 8K suffix (human_readable_int_or_auto), --attention-backend values, Docker GPU/CPU commands and the CPU source-build commands all match current docs/code. No openai-client snippet is given."
+  },
+  "top_issues": [
+    "L316 states AMD ROCm support as 'Python 3.12, ROCm 7.0, glibc >= 2.35만', which is stale: the current official GPU page says wheels are for ROCm 10.0 and rocm700 covers only vLLM 0.14-0.18.",
+    "The engine-args table (L424-428) gives gpu_memory_utilization as 0.92 (declared None; 1.0 with the extensible KV cache) and uses vague cells ('테스트 편의용 값', '—') instead of the class defaults 2048/128; L414 labels the section 'v0.9.2 기준' while using current-main fields.",
+    "Unsourced or uncited material: the 'saved compute ≈ h × p' heuristic (L279) is presented as fact, and the V1 alpha blog behind L226/L273 is missing from Sources; repeated figure-intro frames (L29, L101, L148, L599)."
+  ]
+}

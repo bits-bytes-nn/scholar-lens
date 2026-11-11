@@ -1,0 +1,87 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v10.md",
+  "judge_run": 1,
+  "scores": {"A": 8.0, "B": 8.0, "C": 8.0, "D": 8.5, "E": 8.5, "F": 6.0, "T1": 8.5, "T2": 8.5, "T3": 8.5},
+  "deductions": {
+    "A": ["L11-15 TL;DR is two dense paragraphs; L19-38 then restate it (framework list, fractional GPU, YAML vs programmable API, KubeRay)", "H3 headings are topic names, not claims: L191 '설치', L712 '배포와 상태 확인', L1009 '고르는 기준'", "L710 writes (0.0, 1.0] as plain text, L796 the same range as $$(0.0, 1.0]$$"],
+    "B": ["L575 heading '…로 다루는 단일 진실 공급원 Serve 설정 파일' is a calque; better '…로 관리하는 Serve 설정 파일, 프로덕션의 기준'", "L984 heading '…에 맞고 모델별 최적화 서버로는 부족한 선택지' is awkward and reads as if Serve is 'insufficient'; better 'Python 파이프라인에는 맞고 단일 모델 최적화에는 맞지 않는 Ray Serve'", "L21 '결국 모델마다…', L93 '결국 \"어떤 액터가…\"로 정리됩니다' are restatements of the kind §5.1 limits", "L253 '(Ray 2.59.0 CLI 기준)' appears twice in two sentences in a post whose sources are 2.60"],
+    "C": ["L990 '표에서도 열을 나눴습니다' but the table (L992-995) splits sources by row label, not column", "L763 uses 'KubeRay 이슈 #2557의 RayService' as the place where serveConfigV2 is introduced: a bug report as a forward reference for a basic field", "L155-185 Ray-paper section (bottom-up scheduler, T_wait) is a detour from Serve; the post admits the scheduling example is unrelated to request routing (L183)"],
+    "D": ["Good: power-of-two worked table L124-132, 2x4 backpressure arithmetic L841, fractional GPU arithmetic L871, T_wait example L183", "L982 packs Serve LLM metrics, dashboard and usage-telemetry into one paragraph with no help"],
+    "E": ["Tables and ASCII diagrams are placed well and are not duplicated; the official architecture diagram is replaced by an ASCII sketch marked as illustrative (L101), acceptable", "L804-812 multi-app YAML is a fragment that points to a module that does not exist (model:translator_app)"],
+    "F": ["L841 '…Summarizer가 이 오류를 잡지 않으면 클라이언트는 503이 아니라 500을 받습니다' is wrong: on a private Ray 2.60.0 cluster, an uncaught BackPressureError from a handle behind the ingress returned HTTP 503 to the client ([200,200,503,503,503,503]), the same as backpressure at the ingress. L839 ('…Translator의 큐가 넘칠 때는 해당하지 않습니다') and L855 (the 'two ways to get 503' premise) build on it", "L747 status lists are incomplete against the official monitoring page and the 2.60 enums: applications can also be UNHEALTHY; deployments have six states (UPDATING, HEALTHY, UNHEALTHY, DEPLOY_FAILED, UPSCALING, DOWNSCALING), not three", "L97 and L794 call ray-project/ray doc/source/serve/architecture.md (the source of the official Architecture page) a '서드파티 문서': the attribution is wrong", "Sources list (L1015-1032) leaves out works the body credits: Suhas Bhairav's Triton blog (L986, L995, L997, L1007), the discuss.ray.io answer (L800), the Ray OSDI paper itself (L167, L171, L1003; only a reading-notes page is listed, and it lacks chain replication, T_wait and Table 3), and the Serve LLM observability page (L982). It also lists an unrelated page, Ray Data take_batch (L1026)", "L811 import_path model:translator_app names a module the post never defines"],
+    "T1": ["Verified: 6 of the 7 runnable blocks ran as pasted on Ray 2.60.0 (only the HTTP port changed); the multi-app YAML (L804-812) would fail on import"],
+    "T2": ["The serve-ml-models table (L270-321), the Ray-paper section and the Serve LLM paragraph (L982) are padding next to the running example; the take_batch source does not belong"],
+    "T3": ["Strong: controller/proxy/replica actors, autoscaler in the controller and its failure, power of two choices, backpressure layers, cancellation semantics, KubeRay vs Serve recovery, PodMonitor vs ServiceMonitor reasoning, comparison and failure modes", "Design advice is marked as such (L843 '권장값이 아닙니다', L1011 '이 글의 판단으로는')"]
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "H2s are claim noun phrases (L17, L91, L818); several H3s are topic names (L191 '설치', L712, L1009)"},
+    "running_example": {"status": "met", "evidence": "Translator / Summarizer from L23 through serve build (L583), KubeRay (L767), backpressure (L841) and the closing judgment (L1011)"},
+    "mechanism_design_code_example": {"status": "met", "evidence": "power of two choices L122-132; backpressure table + 2x4 example L834-853; fractional GPU L861-879"},
+    "facts_once": {"status": "partly met", "evidence": "TL;DR L13-15 restated in L19-38; L710 and L796 repeat user_config/no-restart, host/port immutability and rolling_update_percentage nearly verbatim; fractional GPU at L13, L34, L48, L861"},
+    "numbers_with_scope": {"status": "met", "evidence": "L1001 cold-start numbers with instance types, workloads and the author's caveat; L1003 6900 vs 290 states/sec with 100KB and co-located setting"},
+    "nothing_invented": {"status": "partly met", "evidence": "L841 500-not-503 inference contradicted by a local run; L747 status lists truncated; L811 undefined module"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L1009-1011 '이 글의 판단으로는…' with when to pick FastAPI, Triton or Serve"},
+    "length_fitted": {"status": "partly met", "evidence": "1,032 lines; Ray-paper scheduler section and framework table add length without serving the running example"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR + problem first (L11-38), architecture and request lifecycle (L91) before install (L187), closes with when to choose and failure modes (L984-1011)"},
+    "korean_style": {"status": "partly met", "evidence": "consistent 입니다 register; calque headings L575, L984; '결국' restatements L21, L93"}
+  },
+  "claims": {
+    "checked": 15, "supported": 13, "unsupported": 0, "wrong": 2,
+    "sampling": "prose paragraphs counted from TL;DR paragraph 1 (L13), every third paragraph; claims taken from sampled paragraphs, plus L1001 (adjacent to sampled L1003) to reach 8 numeric claims",
+    "examples": [
+      {"line": 48, "claim": "num_cpus/num_gpus are floats per replica; fractions pack replicas on fewer CPUs/GPUs", "verdict": "supported", "source": "getting_started: 'num_gpus: a float representing the logical number of GPUs each replica should reserve. You can make this a fraction to pack multiple replicas…'"},
+      {"line": 99, "claim": "Danshyn: ServeController is a Ray Core actor managing deployment lifecycle, scaling, updates, HA", "verdict": "supported", "source": "themutex.substack.com: 'ServeController which is responsible for the life-cycle management of its deployments, including scaling…, handling updates, and ensuring high availability'"},
+      {"line": 120, "claim": "requests wait in the queue when every replica exceeds max_ongoing_requests; async def handlers do not block the replica", "verdict": "supported", "source": "serve/architecture: 'If no replicas are available (that is, more than max_ongoing_requests…), the request is left in the queue…'; 'declared with async def, the replica will not wait'"},
+      {"line": 140, "claim": "controller death: requests continue via HTTP/gRPC/handle, autoscaling pauses, prior metrics lost on recovery", "verdict": "supported", "source": "serve/architecture Note: 'When the controller dies, requests can still be sent… autoscaling is paused… all previous metrics collected are lost.'"},
+      {"line": 167, "claim": "GCS is a sharded key-value store with pub-sub and per-shard chain replication", "verdict": "supported", "source": "Ray paper arXiv 1712.05889 §4.2.3: 'per-shard chain replication'. Not in the listed reading-notes page; the paper itself is missing from Sources"},
+      {"line": 199, "claim": "TensorFlow example installs tensorflow>=2.0 with requests and ray[serve]", "verdict": "supported", "source": "serve-ml-models: '$ pip install \"tensorflow>=2.0\" requests \"ray[serve]\"'"},
+      {"line": 529, "claim": "route_prefix must start with /, cannot end with / unless it is /, no { }; /my_app + /fetch_data = /my_app/fetch_data", "verdict": "supported", "source": "ray.serve.schema _route_prefix_format; http-guide FastAPI route_prefix paragraph"},
+      {"line": 573, "claim": "Uvicorn keep-alive default 5 s, set by http_options.keep_alive_timeout_s, cluster-global, not updatable at runtime", "verdict": "supported", "source": "http-guide: 'By default, Uvicorn keeps HTTP connections alive for 5 seconds… global to your Ray cluster, and you can't update it during runtime.'"},
+      {"line": 710, "claim": "rolling_update_percentage must be in (0.0, 1.0]", "verdict": "supported", "source": "ray.serve.schema: 'The fraction of replicas to update at a time during a rolling update. Must be in (0.0, 1.0].'"},
+      {"line": 747, "claim": "application status is one of NOT_STARTED, DEPLOYING, RUNNING, DEPLOY_FAILED, DELETING; deployment status is one of HEALTHY, UNHEALTHY, UPDATING", "verdict": "wrong", "source": "serve/monitoring: 'A Serve deployment has six possible statuses: UPDATING, HEALTHY, UNHEALTHY, DEPLOY_FAILED, UPSCALING, DOWNSCALING'; ray 2.60 ApplicationStatus also has UNHEALTHY"},
+      {"line": 816, "claim": "KubeRay #2557, reported Nov 2024, stale and unresolved; removing two of three deployments stalls at WaitForServeDeploymentReady, removing one works; reporter only guesses a threshold/config issue", "verdict": "supported", "source": "GitHub API: created 2024-11-20, state open, labels include stale; body 'It seems like there might be a threshold or configuration issue in serveConfigV2'"},
+      {"line": 837, "claim": "max_queued_requests is per caller (proxy or handle), default -1 = unlimited; handles get BackPressureError, HTTP gets 503 by default, configurable via backpressure_config.status_code", "verdict": "supported", "source": "ray.serve.schema DeploymentSchema.max_queued_requests description"},
+      {"line": 841, "claim": "an uncaught BackPressureError from the handle behind the ingress makes the client get 500, not 503; the status code applies only to the proxy-called deployment's queue (L839)", "verdict": "wrong", "source": "Local test on a private Ray 2.60.0 cluster: ingress -> handle -> Slow(max_ongoing_requests=1, max_queued_requests=1), 6 concurrent HTTP calls returned [200,200,503,503,503,503], the same as backpressure at the ingress"},
+      {"line": 1001, "claim": "Python Data Bench cold start: Ray Serve ~6 s (cluster init), BentoML ~2.5 s, Triton ~3.5 s, FastAPI ~1 s; g5.xlarge/m6i.large, XGBoost CPU + 350M transformer GPU, mean of three workloads, rough figures", "verdict": "supported", "source": "pythondatabench table row 'Cold start (warm container) ~2.5s ~6s (cluster init) ~1s ~3.5s' and the preceding caveat paragraph (the post drops the 'warm container' qualifier)"},
+      {"line": 1003, "claim": "Ray paper: client and server co-located, Ray actor 6900 vs Clipper 290 states/sec at 100KB", "verdict": "supported", "source": "Ray paper Table 3: 'Clipper … 290±1.3 states/sec; Ray … 6900±150 states/sec' (larger input, 100KB); 'both client and server processes are co-located on the same machine'"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0, "avoided": 1, "na": 1, "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "verdict": "avoided", "evidence": "no ../_images or empty-text links; the only image (L173) has Korean alt text and a local /assets path; the architecture is an ASCII sketch (L103-114)"},
+      {"id": "proxy-env-ray-start-unsupported", "verdict": "n/a", "evidence": "the post has no proxy env-var section; no 'ray start' or RAY_SERVE_* text"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 91,
+    "basic_concepts_line": 40,
+    "install_line": 187,
+    "sources_total": 17,
+    "non_official_sources": 3,
+    "non_official_share": 0.18,
+    "non_official_note": "lingyunyang reading notes, Danshyn substack, Python Data Bench; the GitHub architecture.md and KubeRay issue are project-owned. Body also credits uncited non-official works (Bhairav blog, discuss.ray.io answer)",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "runs as pasted (except the multi-app YAML)",
+    "environment": "uv venv, ray[serve] 2.60.0 + torch + transformers, private head node on port 46379 with its own temp dir, Serve HTTP on 127.0.0.1:48123 instead of 8000",
+    "results": {
+      "MyFirstDeployment (L58-74)": "assert passed",
+      "serve_quickstart.py + client (L205-266)": "200, 'Bonjour monde!' (post says 'Bonjour Monde!', as the docs prose does)",
+      "serve_quickstart_composed.py + client (L333-415)": "200, French summary-translation",
+      "FastAPI Translator + params client (L488-525)": "200, 'Bonjour monde!'",
+      "Streamer/Caller (L442-470)": "deploys; it is a handle example (the __call__ takes an int), and HTTP returns 500 as expected; the post does not claim an HTTP client",
+      "StreamingResponder (L539-565)": "streams 0,1,2…",
+      "text_ml.py + client (L583-651)": "200, French output",
+      "multi-app YAML (L804-812)": "not runnable: module 'model' is never defined"
+    }
+  },
+  "top_issues": [
+    "Backpressure behind a handle: L839/L841/L855 say an uncaught BackPressureError gives the client 500, not 503; a local Ray 2.60 run returns 503",
+    "L747 status lists are incomplete (applications can be UNHEALTHY; deployments have six states, not three)",
+    "Attribution and sources: the official architecture doc is called third-party (L97, L794); Bhairav's blog, the discuss.ray.io answer, the Ray paper and the Serve LLM page are cited in the body but missing from Sources, while the unrelated take_batch page is listed"
+  ]
+}

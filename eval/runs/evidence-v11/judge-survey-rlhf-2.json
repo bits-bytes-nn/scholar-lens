@@ -1,0 +1,86 @@
+{
+  "item": "survey-rlhf",
+  "post": "/tmp/eval-evidence/survey-rlhf-v11.md",
+  "judge_run": 2,
+  "scores": {"A": 7.5, "B": 7.5, "C": 7.0, "D": 8.0, "E": 7.0, "F": 6.5},
+  "survey_S1": 6.5,
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "All H2/H3 are noun phrases, e.g. L439 '보상 모델 없이도 다시 나타나는 혹 모양 과최적화', L734 '계보마다 다른 승리의 정의'; no da-form headings."},
+    "running_example": {"status": "met", "evidence": "Reddit TL;DR preference pair threaded through every section (L15, L351, L409, L539, L567, L713-720, L781, L807); 28 'TL;DR' mentions, arguably overused."},
+    "mechanism_choice_formula_example": {"status": "met", "evidence": "KL penalty L104-112, BT loss L140-146, DPO L347-351, SimPO L527-539, GRPO advantage L651-655 each go mechanism -> formula -> labelled hypothetical worked example."},
+    "facts_said_once": {"status": "not met", "evidence": "Online IPO '770M, single summarisation task' at L571, L616, L728, L738, L801; Gao 'KL penalty = early stopping' L273 and L449; SPPO MT-Bench drop L610 and L750; KTO underfit limitation L437 and L748; Pass@K not improved L679, L750, L797; DPO loss equation shown twice (L347, L520); '앞서 ...' back-references 28 times."},
+    "numbers_variant_scope_unit": {"status": "partly met", "evidence": "Card numbers mostly scoped (L513 Phi-2 2.7B AlpacaEval 2.0; L541 Mistral-Base 7B). Table cells drop the comparator: L757 'TL;DR 97%, CNN/DM 80% 선호' (60k fine-tuned vs supervised), L764 '요약 승률 RLAIF 71% / RLHF 73%' (vs SFT), L767 KTO 0.631 (vs SFT target, OpenAssistant)."},
+    "nothing_invented": {"status": "partly met", "evidence": "L807 credits 'verifiable binary reward' to DeepSeekMath GRPO (it used learned outcome/process reward models); L689 says the Mroueh analysis is not directly validated by experiments although its Appendix A reports a GSM8K run (21% -> 37.5%)."},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L809-815 three practical lessons; each section closes with '이 글의 판단으로는' (L277, L323, L449, L543, L616, L691, L726, L752)."},
+    "length_fitted": {"status": "partly met", "evidence": "~83k chars, 39 figures, 22 cards; synthesis sections L730-801 re-run card content, padding the second half."},
+    "type_specific_shape": {"status": "partly met", "evidence": "One comparison table (L754-773) exists, but cards still carry many result numbers the table should own (L513, L541, L610, L663), and the synthesis sections L746-750 restate KTO/SimPO/SPPO/DAA cards instead of comparing lineages."},
+    "korean_style": {"status": "partly met", "evidence": "Generally natural 입니다 register; '앞서 본' x28, '셈입니다' x5, noun frame L441 'DAA 과최적화 연구의 답은 아니라는 것입니다' (-> 'DAA 과최적화 연구는 아니라고 답합니다'), '결국' restatement L807."}
+  },
+  "rubric_deductions": {
+    "A": ["L244 '\\beta_{\\text{bo$n$}}' puts single $ inside a $$ block (breaks the math-only-$$ rule)", "L333 '\\mid\\mid' and L377 '\\;||\\;' used for KL instead of \\Vert", "L612-616 RLHF Workflow subsection is one content paragraph plus assessment"],
+    "B": ["L441 noun frame '답은 아니라는 것입니다'", "'앞서 본/앞서 따라온' 28 times, e.g. three times in L807", "L807 '결국 RL을 지웠다가 되살린 이유는'"],
+    "C": ["Synthesis sections L734-750 and L779-801 restate card facts (see facts_said_once)", "L691 equates DeepSeekMath Pass@K (learned RM) with Mroueh's binary-reward absorbing fixed point as 'the same phenomenon'"],
+    "D": ["Labelled hypothetical worked examples at the right places (L112, L146, L351, L539, L589, L655); length of second half dilutes them"],
+    "E": ["DPO loss duplicated L347 and L520", "Table cell '-' L771", "Table cells that are data counts, not results: L756 'Atari 5,500 질의', L761 'Elo 평가 비교 10,274건(도움성)·8,135건'", "L770 same model given two values 'Iter3 LC 28.52%; SPPO LC 28.53%'"],
+    "F": ["L807 (also framing at L620, L797, L813) verifiable binary reward attributed to DeepSeekMath GRPO, which scored outputs with a trained reward model", "L689 claim that the GRPO-dynamics analysis lacks experimental validation; paper Appendix A has one"]
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 513, "claim": "Phi-2 (2.7B) ORPO AlpacaEval 2.0 6.35% vs SFT+DPO 0.78%", "verdict": "supported", "source": "2403.07691 Table 1: 'Phi-2 + SFT + DPO 2.7B ... 0.78% (0.22)'; 'Phi-2 + ORPO (Ours) ... 6.35% (0.74)'"},
+      {"line": 513, "claim": "Mistral-ORPO-alpha/beta MT-Bench 7.23 and 7.32 without multi-turn data", "verdict": "supported", "source": "2403.07691: 'Mistral-ORPO-α (7B) and Mistral-ORPO-β (7B) scored 7.23 and 7.32 in MT-Bench without being exposed to the multi-turn conversation dataset'"},
+      {"line": 541, "claim": "Spearman rho avg log-likelihood vs length: SimPO w/o LN 0.82, DPO 0.59, SimPO 0.34", "verdict": "supported", "source": "2405.14734 Table 6: 'SimPO w/o LN | DPO | SimPO ... 0.82 | 0.59 | 0.34'"},
+      {"line": 541, "claim": "Mistral-Base 7B ablation: w/o LN LC 11.9%, gamma=0 LC 16.8%", "verdict": "supported", "source": "2405.14734 ablation table, Mistral-Base LC column: SimPO 21.5, w/o LN 11.9, gamma=0 16.8"},
+      {"line": 610, "claim": "DPO/IPO average output length 2736/2654; SPPO 1676 -> 2163 at iter 3", "verdict": "supported", "source": "2405.00675: 'DPO and IPO ... 2736 and 2654 ... SPPO ... from 1676 in the base model to 2163 at the third iteration'"},
+      {"line": 610, "claim": "Llama-3-8B-SPPO LC 38.77%, overall 39.85% vs GPT-4-Turbo", "verdict": "supported", "source": "2405.00675: 'Llama-3-8B-SPPO has a higher length-controlled win rate 38.77% and overall win rate 39.85%'"},
+      {"line": 663, "claim": "GRPO samples 64 outputs per question, KL coefficient 0.04", "verdict": "supported", "source": "2402.03300: 'The KL coefficient is 0.04. For each question, we sample 64 outputs.'"},
+      {"line": 673, "claim": "Iterative GRPO replays 10% historical data for the reward model", "verdict": "supported", "source": "2402.03300: 'a replay mechanism that incorporates 10% of historical data'"},
+      {"line": 447, "claim": "6.9B: win rate peaks mostly in the first 25% of the epoch while KL keeps rising", "verdict": "supported", "source": "2406.02900 Fig. 2 caption: 'most experiments reach their best performance in the first 25% of the epoch ... All models are 6.9B'"},
+      {"line": 807, "claim": "GRPO's group baseline was paired with verifiable binary rewards such as answer checking (cited to Shao et al. 2024 and Mroueh 2025)", "verdict": "wrong", "source": "2402.03300 §4.1: 'A reward model is then used to score the outputs'; process supervision uses 'a process reward model'; iterative GRPO retrains 'the old reward model'. The binary verifiable reward is Mroueh's analysis assumption, not DeepSeekMath's setup."},
+      {"line": 689, "claim": "The GRPO-dynamics analysis is theory-centred and not directly validated by large-scale experimental numbers", "verdict": "unsupported", "source": "2503.06639: 'The dynamic of the PoS is verified empirically in Appendix A'; Appendix A trains Qwen2.5-0.5B-Instruct on GSM8K, success 21% -> 37.5%. A claim about what the paper leaves out that the paper contradicts (only 'large-scale' saves it)."},
+      {"line": 770, "claim": "Table: Mistral-7B-SPPO Iter3 LC 28.52%; SPPO LC 28.53% vs DPO 26.39% vs IPO 25.45%", "verdict": "supported", "source": "2405.00675: '28.52% for the length-controlled version' and 'SPPO reaches 28.53%, outperforming the DPO's best rate of 26.39% (by Snorkel) and IPO's rate of 25.45%' (paper itself inconsistent; cell repeats both)"},
+      {"line": 771, "claim": "Table: iterative DPO 8B AlpacaEval-2 LC 31.3% (vanilla DPO 22.5%)", "verdict": "supported", "source": "2405.07863 Table 2: 'Ours (DPO baseline) 8B Vanilla DPO 22.5 ... Ours (Iterative RLHF) 8B Iterative DPO 31.3'"},
+      {"line": 772, "claim": "Table: Llama-3-Instruct SimPO AlpacaEval 2 LC 44.7%; ~20% less run time, ~10% less memory", "verdict": "supported", "source": "2405.14734 Table 1 'Llama-3-8B-Instruct-SimPO 44.7'; 'SimPO cuts run time by roughly 20% and reduces GPU memory usage by about 10%'"},
+      {"line": 767, "claim": "Table: Mistral-7B KTO (one y per x) 0.631; Mistral-7B DPO 0.600", "verdict": "supported", "source": "2402.01306 Table 3: 'Mistral-7B + DPO 0.600 ± 0.037 ... Mistral-7B + KTO (one y per x) 0.631 ± 0.036' (winrate vs SFT target, OpenAssistant; scope dropped in cell)"}
+    ],
+    "additional_checked_supported": [
+      "L768 DeepSeekMath 7B MATH maj@64 60.9% (abstract)",
+      "L764 harmless rate RLAIF 88% vs RLHF 76%; summarization 71%/73% vs SFT",
+      "L319 d-RLAIF with PaLM 2 XS labeler preferred over SFT 74%; LLM labeling >10x cheaper",
+      "L757 Ziegler 97%/80% (60k fine-tuned vs supervised) and 88%/86% (5k offline vs zero-shot): numbers right, comparator missing",
+      "L763 DPO TL;DR GPT-4 win ~61% vs PPO 57%; human 58%",
+      "L427 KTO matches DPO at 1:10 desirable:undesirable",
+      "L571 Online IPO 770M model, single task"
+    ]
+  },
+  "checklist": {
+    "repeated": 1,
+    "avoided": 4,
+    "na": 1,
+    "repeated_ids": ["copy-explains-preference"],
+    "items": [
+      {"id": "grpo-card-unverified-figure", "result": "avoided", "evidence": "2503.06639 card L689 has no equation and only p_ref=0/1 boundary values stated in the paper (Theorem 5, 'zero is an absorbing fixed point'). Its 'not experimentally validated' sentence is a separate F issue."},
+      {"id": "copy-explains-preference", "result": "repeated", "evidence": "L126 '60k 온라인 RL 모델은 사람 평가에서 사람이 쓴 참조 요약보다 더 자주 선호되었는데, 저자들은 이 결과가 라벨러의 단순 휴리스틱을 이용한 결과일 수 있다고 봅니다' still ties the vs-reference preference (96%/84%) to labeler heuristics; mitigated by the abstract's 'very good performance according to our human labelers, but may be exploiting the fact that labelers rely on simple heuristics', and no numbers are given."},
+      {"id": "daa-no-quantification", "result": "avoided", "evidence": "L441-447 and L773 make no claim that 2406.02900 gives no quantitative figures; L447 only says it offers no solution, which the paper's framing supports."},
+      {"id": "grpo-row-reward", "result": "n/a", "evidence": "Comparison table L754 has no reward column; GRPO row L768 is 'DeepSeekMath 7B MATH maj@64 60.9% | RL은 Pass@K 향상 없음'. The same misattribution reappears in prose at L807 (scored under F)."},
+      {"id": "heading-da-form-offline", "result": "avoided", "evidence": "All headings are noun phrases, e.g. L439 '보상 모델 없이도 다시 나타나는 혹 모양 과최적화'."},
+      {"id": "heading-da-form-judge", "result": "avoided", "evidence": "No da-form headings; e.g. L779 '보상 모델이 사라져도 남는 프록시'."}
+    ]
+  },
+  "extras": {
+    "plan_papers_never_cited": [],
+    "thin_sections": ["L612 '누적 데이터로 도는 반복 DPO 레시피' (one content paragraph + assessment)", "L622 'PPO에서 가치 모델이 맡던 일' (one equation + one paragraph)", "L795 '새 성공을 만들지 못하는 RL' (one paragraph)"],
+    "venue_issues": ["L831 'International Conference on Artificial Intelligence and Statistics' spelled out while all other venues are abbreviations (AISTATS); not wrong"],
+    "table_cell_issues": ["L771 RLHF Workflow limitation '-'", "L756 'Atari 5,500 질의' and L761 'Elo 평가 비교 10,274건(도움성)·8,135건' are data counts, not results", "L760 'RM 데이터 약 2,000개 미만: 거의 무개선' and L765 'D1 관측 선호 3개, DPO 모든 τ에서 결정적' are prose fragments", "L770 two values (28.52% / 28.53%) for the same model", "L757, L764, L767 drop the comparator/setting"],
+    "synthesis_restates_cards": "L746-750 and L787-797 re-narrate KTO, SimPO, SPPO, DAA and GRPO card findings instead of comparing lineages"
+  },
+  "top_issues": [
+    "L807 (with L620/L797/L813) credits verifiable binary rewards to DeepSeekMath GRPO, which used trained reward models; the binary reward is Mroueh's analysis assumption.",
+    "Facts restated many times (Online IPO 770M single task x5, KL penalty=early stop, SPPO MT-Bench drop, Pass@K) and synthesis sections re-narrate cards; '앞서 본' x28.",
+    "Comparison table quality: '-' cell (L771), data counts instead of results (L756, L761), duplicate SPPO value (L770), comparators dropped; plus L689 false 'no experimental validation' limitation and a single $ inside math at L244."
+  ]
+}

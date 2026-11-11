@@ -1,0 +1,150 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.ray.io/en/latest/serve/getting_started.html",
+  "title": "Ray Serve: Composable Python Model Serving from Laptop to KubeRay",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-ray-serve-composable-python-model-serving-from-laptop-to-kuberay/2026-11-04-ray-serve-composable-python-model-serving-from-laptop-to-kuberay.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-ray-serve-composable-python-model-serving-from-laptop-to-kuberay.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '정적 그래프 서버로는 다루기 힘든 다중 모델 Python 파이프라인': check 1 sentence(s) the evidence may not support: 텍스트 ML 애플리케이션은 이 흐름을 따라 로컬 `serve run`에서 출발해, 외부 HTTP 요청을 처음 받는 디플로이먼트(인그레스)를 FastAPI로 만들고, 설정 파일과 오토스케일링을 거쳐, Serve 애플리 (unsupported: No source mentions RayService as a KubeRay custom resource that manages Serve apps; the evidence only names a Kubernetes Operator (KubeRay).)",
+    "Section 'bind 그래프와 DeploymentHandle로 구성하는 모델 합성': check 3 sentence(s) the evidence may not support: 두 디플로이먼트가 함께 쓰는 t5-small 로딩과 생성 단계는 `load_t5`, `generate` 함수가 맡습니다. (unsupported: The official text_ml.py has no load_t5 or generate helpers; each deployment loads t5-small in its own __init__.) | `Translator`에는 HTTP 핸들러 없이 `translate` 메서드만 있고, 이 메서드는 핸들을 통해서만 호출됩니다. (unsupported: Translator in text_ml.py also has a reconfigure method, and no evidence says translate is callable only through a handle.) | 실행 예제에서 `Summarizer`가 `Translator`로 넘기는 값은 `max_length=15`로 생성한 짧은 요약 문자열이므로 첫 줄의 경로를 탑니다. (numbers not in its evidence)",
+    "Section 'bind 그래프와 DeploymentHandle로 구성하는 모델 합성' still has: numbers ['15'] without evidence: 실행 예제에서 `Summarizer`가 `Translator`로 넘기는 값은 `max_length=15`로 생성한 짧은 요약 문자열이므로 첫 줄의 경로를 탑니다.",
+    "Section '설치부터 serve run과 HTTP 요청까지 이어지는 첫 텍스트 ML 애플리케이션': check 2 sentence(s) the evidence may not support: `Ctrl-C`를 누르면 애플리케이션이 내려가고, 실행 중에는 기본 주소 `http://127.0.0.1:8000/`에서 요청을 받습니다 [[E11, E65]]. (numbers not in its evidence) | 클라이언트는 $$28 \\times 28$$개 값을 담은 무작위 JSON 배열을 보내 예측값을 받습니다 [[E28, E29]]. (numbers not in its evidence)",
+    "Section '설치부터 serve run과 HTTP 요청까지 이어지는 첫 텍스트 ML 애플리케이션' still has: numbers ['127.0', '8000'] are not in the cited evidence: `Ctrl-C`를 누르면 애플리케이션이 내려가고, 실행 중에는 기본 주소 `http://127.0.0.1:8000/`에서 요청을 받습니다 . | numbers ['28'] are not in the cited evidence: 클라이언트는 $$28 \\times 28$$개 값을 담은 무작위 JSON 배열을 보내 예측값을 받습니다 .",
+    "Section 'target_ongoing_requests로 조율하는 오토스케일링과 큐 기반 백프레셔': check 2 sentence(s) the evidence may not support: 상태 코드를 503 대신 429로 지정하거나 `Retry-After` 헤더를 붙일 수 있습니다 [[E117]]. (numbers not in its evidence) | `serve deploy`로 다시 적용하면, HTTP 진입점인 `Summarizer`에서 큐가 넘쳐 거절된 요청은 503 대신 429를 받습니다 [[E117]]. (numbers not in its evidence)",
+    "Section 'target_ongoing_requests로 조율하는 오토스케일링과 큐 기반 백프레셔' still has: ['2.59'] already stated in 'bind 그래프와 DeploymentHandle로 구성하는 모델 합성': refer back without repeating: Ray 2.59.0 기준으로 `\"auto\"`는 다음 설정을 명시한 것과 같습니다 . | numbers ['429'] are not in the cited evidence: 상태 코드를 503 대신 429로 지정하거나 `Retry-After` 헤더를 붙일 수 있습니다 . | numbers ['429'] are not in the cited evidence: `serve deploy`로 다시 적용하면, HTTP 진입점인 `Summarizer`에서 큐가 넘쳐 거절된 요청은 503 대신 429를 받습니다 ."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3315.9,
+  "input_tokens": 3180922,
+  "output_tokens": 393062,
+  "estimated_cost_usd": 18.5867,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 164,
+      "failed_calls": 0,
+      "input_tokens": 32371,
+      "output_tokens": 393062,
+      "cache_read_tokens": 935154,
+      "cache_write_tokens": 2213397,
+      "cost_usd": 18.586684
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2617,
+        "output_tokens": 183,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000353
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2786,
+        "output_tokens": 889,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000723
+      },
+      "read": {
+        "calls": 45,
+        "failed_calls": 0,
+        "input_tokens": 110,
+        "output_tokens": 35740,
+        "cache_read_tokens": 323600,
+        "cache_write_tokens": 95777,
+        "cost_usd": 0.661781
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 6460,
+        "cache_read_tokens": 1856,
+        "cache_write_tokens": 18876,
+        "cost_usd": 0.224338
+      },
+      "verify": {
+        "calls": 53,
+        "failed_calls": 0,
+        "input_tokens": 212,
+        "output_tokens": 113176,
+        "cache_read_tokens": 483020,
+        "cache_write_tokens": 1077015,
+        "cost_usd": 7.842658
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 60715,
+        "cache_read_tokens": 50820,
+        "cache_write_tokens": 332462,
+        "cost_usd": 2.897162
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 33808,
+        "cache_read_tokens": 27538,
+        "cache_write_tokens": 62253,
+        "cost_usd": 0.998675
+      },
+      "fix": {
+        "calls": 32,
+        "failed_calls": 0,
+        "input_tokens": 128,
+        "output_tokens": 140123,
+        "cache_read_tokens": 48320,
+        "cache_write_tokens": 627014,
+        "cost_usd": 5.95737
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 26398,
+        "output_tokens": 1968,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003624
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 31801,
+        "output_tokens": 3040,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.0047
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 45,
+        "failed_calls": 0,
+        "input_tokens": 110,
+        "output_tokens": 35740,
+        "cache_read_tokens": 323600,
+        "cache_write_tokens": 95777,
+        "cost_usd": 0.661781
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 115,
+        "failed_calls": 0,
+        "input_tokens": 460,
+        "output_tokens": 354282,
+        "cache_read_tokens": 611554,
+        "cache_write_tokens": 2117620,
+        "cost_usd": 17.920203
+      }
+    }
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "kind": "summarize",
+  "status": "succeeded",
+  "input": "2106.09685",
+  "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2106_09685/2026-11-06-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-06-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Inference-Latency-Elimination' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Subspace-Similarity-Analysis' (or its acronym) does not appear in the paper; check it fits.",
+    "Section '구현 방식': check 1 sentence(s) the evidence may not support: 따라서 GPT-3 175B를 WikiSQL에 적응시키는 경우라면 $$W_q$$와 $$W_v$$에 작은 $$B$$, $$A$$를 붙이는 것으로 충분합니다. (numbers not in its evidence)",
+    "Section '구현 방식' still has: numbers ['175B'] without evidence: 따라서 GPT-3 175B를 WikiSQL에 적응시키는 경우라면 $$W_q$$와 $$W_v$$에 작은 $$B$$, $$A$$를 붙이는 것으로 충분합니다.",
+    "Section '의의와 한계' still has: evidence ['E16'] was already referred back to once; do not restate it again: 앞서 본 결과에서는 한 자리 수 랭크로도 $$W_q$$와 $$W_v$$의 적응에 충분했습니다 . | 901 characters of prose for a target of 500: cut background, repetition and minor detail"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 645.2,
+  "input_tokens": 476531,
+  "output_tokens": 76591,
+  "estimated_cost_usd": 2.0722,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 66,
+      "failed_calls": 0,
+      "input_tokens": 123238,
+      "output_tokens": 76591,
+      "cache_read_tokens": 221758,
+      "cache_write_tokens": 131535,
+      "cost_usd": 2.072207
+    },
+    "by_stage": {
+      "figures": {
+        "calls": 8,
+        "failed_calls": 0,
+        "input_tokens": 16800,
+        "output_tokens": 7635,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005498
+      },
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 53765,
+        "output_tokens": 264,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005509
+      },
+      "read": {
+        "calls": 16,
+        "failed_calls": 0,
+        "input_tokens": 38,
+        "output_tokens": 13645,
+        "cache_read_tokens": 137182,
+        "cache_write_tokens": 42300,
+        "cost_usd": 0.269712
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 2171,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 4419,
+        "cost_usd": 0.065531
+      },
+      "verify": {
+        "calls": 18,
+        "failed_calls": 0,
+        "input_tokens": 39602,
+        "output_tokens": 20583,
+        "cache_read_tokens": 43742,
+        "cache_write_tokens": 22814,
+        "cost_usd": 0.701634
+      },
+      "draft": {
+        "calls": 6,
+        "failed_calls": 0,
+        "input_tokens": 24,
+        "output_tokens": 8014,
+        "cache_read_tokens": 14500,
+        "cache_write_tokens": 33431,
+        "cost_usd": 0.333331
+      },
+      "review": {
+        "calls": 6,
+        "failed_calls": 0,
+        "input_tokens": 24,
+        "output_tokens": 7327,
+        "cache_read_tokens": 6560,
+        "cache_write_tokens": 7546,
+        "cost_usd": 0.186991
+      },
+      "fix": {
+        "calls": 9,
+        "failed_calls": 0,
+        "input_tokens": 12977,
+        "output_tokens": 16046,
+        "cache_read_tokens": 19774,
+        "cache_write_tokens": 19433,
+        "cost_usd": 0.477905
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 906,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 1592,
+        "cost_usd": 0.026096
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 9,
+        "failed_calls": 0,
+        "input_tokens": 70565,
+        "output_tokens": 7899,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.011007
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 16,
+        "failed_calls": 0,
+        "input_tokens": 38,
+        "output_tokens": 13645,
+        "cache_read_tokens": 137182,
+        "cache_write_tokens": 42300,
+        "cost_usd": 0.269712
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 41,
+        "failed_calls": 0,
+        "input_tokens": 52635,
+        "output_tokens": 55047,
+        "cache_read_tokens": 84576,
+        "cache_write_tokens": 89235,
+        "cost_usd": 1.791488
+      }
+    }
+  }
+}

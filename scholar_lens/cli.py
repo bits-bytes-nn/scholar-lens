@@ -9,12 +9,21 @@ and scripts can parse the outcome directly::
     scholar-lens guide "https://docs.vllm.ai/en/latest/" --reference "https://arxiv.org/abs/2309.06180"
     scholar-lens survey plan "LLM preference optimization" --paper 2305.18290 --reference "https://huggingface.co/blog/rlhf"
     scholar-lens survey write --plan papers/survey-llm-preference-optimization/plan.json
+    scholar-lens publish papers/guide-x/x.rejected.md
     scholar-lens status <job-id> --wait
+    scholar-lens cancel <job-id>
+    scholar-lens costs --since 2026-11-01 --by stage --billed
 
 Exit codes: 0 succeeded (or submitted), 1 failed, 2 rejected input,
-3 still running (``status``), 4 the command itself failed (``"status":
-"error"``: AWS credentials, config, Batch/S3 API errors), so the job's state
-is unknown. The Batch ``worker`` exits 10 (failed) or 11 (rejected) once it
+3 still running (``status``), 4 a remote command itself failed (``--remote``,
+``status`` or ``cancel``: ``"status": "error"`` for AWS credentials, config, Batch/S3 API
+errors), so the job's state is unknown, 5 the artifact was saved but the
+requested blog PR failed (a ``failed`` result with ``pr_error``, its
+``markdown_path`` and ``s3_uri`` kept; also from ``status`` and ``publish``).
+``publish`` exits like a run: 0, 1 (the post still breaks a blog rule, its
+rejected copy kept), 2 (no such post or no publish request next to it), 5. A
+local run that cannot start (a
+broken config) reports ``failed`` and exits 1. The Batch ``worker`` exits 10 (failed) or 11 (rejected) once it
 has sent its own notification, 4 when that notification could not be sent,
 and 143 (128 + SIGTERM) when Batch stopped it (timeout, cancel, host
 termination) after printing the interrupted run's result.
@@ -34,15 +43,38 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from scholar_lens.src.jobs import JobRequest, JobResult
-from scholar_lens.src.survey_plan import SurveyInputError
+from scholar_lens.domain.jobs import (
+    JobAlreadyFinished,
+    JobRequest,
+    JobResult,
+    validation_summary,
+)
+from scholar_lens.domain.survey.plan import SurveyInputError
+from scholar_lens.entrypoints.logs import configure_logging
 
 EXIT_OK, EXIT_FAILED, EXIT_REJECTED, EXIT_PENDING, EXIT_ERROR = 0, 1, 2, 3, 4
+EXIT_PR_FAILED = 5
+PROG = "scholar-lens"
+_EXIT_CODES_HELP = (
+    "Exit codes: 0 succeeded or submitted, 1 failed, 2 rejected input, "
+    "3 still running, 4 the command itself failed, 5 artifact saved but the "
+    "blog PR failed (see pr_error)."
+)
 _EXIT_BY_STATUS = {
     "succeeded": EXIT_OK,
     "failed": EXIT_FAILED,
     "rejected": EXIT_REJECTED,
 }
+
+
+def result_exit_code(result: JobResult) -> int:
+    """The CLI exit code of a finished run: its status, except a run whose
+    artifact was saved but whose blog PR failed."""
+    if result.pr_error is not None:
+        return EXIT_PR_FAILED
+    return _EXIT_BY_STATUS[result.status]
+
+
 # The Batch worker exits with these after it has sent its own failure
 # notification. They differ from 1/2 so that a Python crash (1) or an argparse
 # error (2) before the worker code runs is still reported by the stack's
@@ -55,9 +87,22 @@ _WORKER_EXIT_BY_STATUS = {
     "rejected": WORKER_REPORTED_REJECTED,
 }
 
+# The cost allocation tag on every stack resource (scripts/deploy_infra.py).
+# The stack tags its resources ProjectName=<resources.project_name>.
+
 # How long `status --wait` polls before returning the current state: one
 # 3-hour Batch attempt plus queueing time.
 DEFAULT_WAIT_SECONDS = 4 * 60 * 60
+
+
+def _day(value: str) -> Any:
+    """A UTC day (YYYY-MM-DD) as the datetime of its midnight."""
+    from datetime import UTC, datetime
+
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").replace(tzinfo=UTC)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(f"not a YYYY-MM-DD day: {value!r}") from e
 
 
 def _seconds(value: str) -> float:
@@ -84,11 +129,12 @@ class _JsonArgumentParser(argparse.ArgumentParser):
 
 def build_parser() -> argparse.ArgumentParser:
     parser = _JsonArgumentParser(
-        prog="scholar-lens",
+        prog=PROG,
         description=(
             "Generate AI/ML paper reviews, summaries, technical guides and "
             "paper surveys."
         ),
+        epilog=_EXIT_CODES_HELP,
     )
     commands = parser.add_subparsers(dest="command", required=True)
 
@@ -104,6 +150,26 @@ def build_parser() -> argparse.ArgumentParser:
             action="store_false",
             help="Do not open a blog pull request (the post is still saved).",
         )
+        sub.add_argument(
+            "--max-cost-usd",
+            type=float,
+            default=None,
+            metavar="USD",
+            help=(
+                "This run's cost ceiling instead of the configured one (a Batch "
+                "job otherwise uses the config.yaml of the last deploy)."
+            ),
+        )
+        sub.add_argument(
+            "--fresh",
+            action="store_true",
+            help=(
+                "Compute every stage again instead of resuming from the stages "
+                "a run with the same inputs saved (also reads the sources again "
+                "and, for a guide, gathers them again). The evidence engines "
+                "only: a review or summary on the sections engine ignores it."
+            ),
+        )
 
     for kind, help_text in (
         ("review", "In-depth, section-by-section paper review."),
@@ -112,6 +178,12 @@ def build_parser() -> argparse.ArgumentParser:
         sub = commands.add_parser(kind, help=help_text, description=help_text)
         sub.add_argument(
             "source", help="arXiv id (e.g. 2106.09685) or a paper PDF URL."
+        )
+        sub.add_argument(
+            "--engine",
+            choices=("sections", "evidence"),
+            default=None,
+            help="This run's writing engine instead of the configured one.",
         )
         sub.add_argument(
             "--repo-url",
@@ -167,6 +239,14 @@ def build_parser() -> argparse.ArgumentParser:
         dest="discover_subpages",
         action="store_false",
         help="Do not follow in-scope sub-pages of the URLs.",
+    )
+    guide.add_argument(
+        "--fresh-sources",
+        action="store_true",
+        help=(
+            "Gather the sources again instead of reusing the corpus a run with "
+            "the same inputs saved (tech_guide.source_snapshot_ttl_days)."
+        ),
     )
     add_run_options(guide)
 
@@ -237,7 +317,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Write the survey post from a plan file.",
         description=(
             "Write the survey post from a plan file (as 'survey plan' saved it, "
-            "or edited): paper cards, outline, sections, blog checks, PR."
+            "or edited): paper reading, outline, sections, blog checks, PR."
         ),
     )
     survey_write.add_argument(
@@ -251,6 +331,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     add_run_options(survey_write)
 
+    publish = commands.add_parser(
+        "publish",
+        help="Check a saved or rejected post again and open its blog PR.",
+        description=(
+            "Check a post a run saved (--no-pr) or rejected (*.rejected.md), "
+            "possibly edited, against the blog rules again and open or update "
+            "its pull request on the run's branch. Runs locally."
+        ),
+    )
+    publish.add_argument(
+        "post",
+        metavar="MARKDOWN_PATH_OR_S3_URI",
+        help=(
+            "The post: a local path, or s3://<bucket>/<key> in the configured "
+            "bucket (a Batch run's posts/ or rejected/ copy)."
+        ),
+    )
+    publish.add_argument(
+        "--no-pr",
+        dest="create_pr",
+        action="store_false",
+        help="Check and save the post without opening a pull request.",
+    )
+    publish.add_argument(
+        "--resolved",
+        action="store_true",
+        help=(
+            "The run's blocking problems are fixed in the edited post: they no "
+            "longer block the PR and stay in its checklist as items to check."
+        ),
+    )
+
+    cancel = commands.add_parser(
+        "cancel",
+        help="Stop a remote job (cancelled before it starts, terminated after).",
+    )
+    cancel.add_argument("job_id")
+
     status = commands.add_parser("status", help="Show a remote job's state and result.")
     status.add_argument("job_id")
     status.add_argument(
@@ -261,6 +379,31 @@ def build_parser() -> argparse.ArgumentParser:
         type=_seconds,
         default=DEFAULT_WAIT_SECONDS,
         help="Seconds to wait with --wait (default: %(default)s).",
+    )
+
+    costs = commands.add_parser(
+        "costs",
+        help="Report what the Batch runs of a period cost (from result manifests).",
+    )
+    costs.add_argument(
+        "--since", required=True, type=_day, help="First day, YYYY-MM-DD (UTC)."
+    )
+    costs.add_argument(
+        "--until",
+        type=_day,
+        default=None,
+        help="Day after the last, YYYY-MM-DD (UTC; default: tomorrow).",
+    )
+    costs.add_argument(
+        "--by",
+        choices=["kind", "stage", "model", "day"],
+        default="kind",
+        help="Group the runs by (default: %(default)s).",
+    )
+    costs.add_argument(
+        "--billed",
+        action="store_true",
+        help="Add the billed cost of the project's tagged resources (Cost Explorer).",
     )
 
     worker = commands.add_parser(
@@ -285,7 +428,13 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 
 def _request_from_args(args: argparse.Namespace) -> JobRequest:
     if args.command == "survey" and args.survey_stage == "write":
-        return JobRequest(kind="survey_write", plan=args.plan, create_pr=args.create_pr)
+        return JobRequest(
+            kind="survey_write",
+            plan=args.plan,
+            create_pr=args.create_pr,
+            fresh=args.fresh,
+            max_cost_usd=args.max_cost_usd,
+        )
     if args.command == "survey":
         return JobRequest(
             kind="survey_plan",
@@ -302,7 +451,10 @@ def _request_from_args(args: argparse.Namespace) -> JobRequest:
             reference_urls=args.reference_urls,
             search_queries=args.search_queries,
             discover_subpages=args.discover_subpages,
+            fresh_sources=args.fresh_sources,
             create_pr=args.create_pr,
+            fresh=args.fresh,
+            max_cost_usd=args.max_cost_usd,
         )
     return JobRequest(
         kind=args.command,
@@ -310,6 +462,9 @@ def _request_from_args(args: argparse.Namespace) -> JobRequest:
         repo_urls=args.repo_urls,
         parse_pdf=args.parse_pdf,
         create_pr=args.create_pr,
+        fresh=args.fresh,
+        engine=args.engine,
+        max_cost_usd=args.max_cost_usd,
     )
 
 
@@ -322,22 +477,24 @@ def _emit(payload: BaseModel | dict[str, Any]) -> None:
 
 
 def _aws_context() -> Any:
+    from scholar_lens.bootstrap import build_context
     from scholar_lens.configs import Config
-    from scholar_lens.src.runtime import build_context
 
     return build_context(Config.load())
 
 
 def _submit(request: JobRequest) -> int:
-    from scholar_lens.src.jobs import submit_job
+    from scholar_lens.adapters.aws.batch import submit_job
 
     context = _aws_context()
     resources = context.config.resources
     if request.kind == "survey_write":
-        from scholar_lens.src.survey_writer import stage_plan_for_batch
+        from scholar_lens.application.use_cases.survey_write import stage_plan_for_batch
 
-        _check_plan_bucket(request.plan or "", context.s3_handler)
-        request = stage_plan_for_batch(request, context.s3_handler, resources.s3_prefix)
+        _check_plan_bucket(request.plan or "", context.s3_handler, resources.s3_prefix)
+        request = stage_plan_for_batch(
+            request, context.s3_handler, resources.s3_prefix, files=context.files
+        )
     submitted = submit_job(
         context.default_boto_session,
         request,
@@ -348,38 +505,33 @@ def _submit(request: JobRequest) -> int:
     return EXIT_OK
 
 
-def _check_plan_bucket(plan: str, s3_handler: Any) -> None:
-    """An ``s3://`` plan must be in the configured bucket, the only one the
-    job can read: ``SurveyInputError`` (rejected) before anything is
-    submitted, instead of a job that is rejected later."""
+def _check_plan_bucket(plan: str, s3_handler: Any, prefix: str) -> None:
+    """An ``s3://`` plan must be under ``<bucket>/<prefix>/`` of the configured
+    bucket, the only place the job role can read: ``SurveyInputError``
+    (rejected) before anything is submitted, instead of a job that is
+    denied later."""
     if not plan.startswith("s3://"):
         return
-    bucket = plan.removeprefix("s3://").partition("/")[0]
+    bucket, _, key = plan.removeprefix("s3://").partition("/")
     configured = getattr(s3_handler, "bucket_name", None)
-    if bucket != configured:
+    scope = f"{prefix.strip('/')}/" if prefix.strip("/") else ""
+    if bucket != configured or not key.startswith(scope):
         raise SurveyInputError(
-            f"The plan {plan!r} is not in the configured S3 bucket "
-            f"({configured or 'none configured'})."
+            f"The plan {plan!r} is not under s3://{configured or '<no bucket>'}/"
+            f"{scope}, where the job can read it."
         )
 
 
 def _status(job_id: str, *, wait: bool, timeout: float) -> int:
-    from scholar_lens.src.jobs import describe_job, wait_for_job
+    from scholar_lens.application.use_cases.status import job_status
+    from scholar_lens.bootstrap import job_queue
 
-    context = _aws_context()
-
-    def describe():  # type: ignore[no-untyped-def]
-        return describe_job(
-            context.default_boto_session,
-            job_id,
-            s3_handler=context.s3_handler,
-            s3_prefix=context.config.resources.s3_prefix,
-        )
-
-    report = wait_for_job(describe, timeout_seconds=timeout) if wait else describe()
+    report = job_status(
+        job_queue(_aws_context()), job_id, wait=wait, timeout_seconds=timeout
+    )
     _emit(report)
     if report.result is not None:
-        return _EXIT_BY_STATUS[report.result.status]
+        return result_exit_code(report.result)
     if report.batch_status == "FAILED":
         return EXIT_FAILED
     if report.batch_status == "SUCCEEDED":
@@ -387,12 +539,53 @@ def _status(job_id: str, *, wait: bool, timeout: float) -> int:
     return EXIT_PENDING  # not finished yet: ask again later
 
 
+def _cancel(job_id: str) -> int:
+    from scholar_lens.application.use_cases.status import cancel_job
+    from scholar_lens.bootstrap import job_queue
+
+    _emit(cancel_job(job_queue(_aws_context()), job_id))
+    return EXIT_OK
+
+
+def _costs(args: argparse.Namespace) -> int:
+    from datetime import UTC, datetime, timedelta
+
+    from scholar_lens.application.use_cases.costs import report_costs
+    from scholar_lens.bootstrap import cost_sources
+
+    until = args.until or datetime.now(UTC).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    ) + timedelta(days=1)
+    if until <= args.since:  # a usage error needs no credentials
+        _emit({"status": "rejected", "error": "--until must be after --since."})
+        return EXIT_REJECTED
+    context = _aws_context()
+    if not context.config.resources.s3_bucket_name:
+        _emit({"status": "error", "error": "No S3 bucket is configured."})
+        return EXIT_ERROR
+    ledger, billing = cost_sources(context, billed=args.billed)
+    report = report_costs(
+        ledger, since=args.since, until=until, by=args.by, billing=billing
+    )
+    _emit(report)
+    return EXIT_OK
+
+
 def _run(request: JobRequest, *, job_id: str | None = None) -> JobResult:
-    from scholar_lens.src.runtime import run_job
+    from scholar_lens.entrypoints.runtime import run_job
 
     result: JobResult = run_job(request, job_id=job_id)
     _emit(result)
     return result
+
+
+def _publish(post: str, *, create_pr: bool, resolved: bool) -> int:
+    """``publish``: one result, the exit code a run would have."""
+    from scholar_lens.entrypoints.runtime import run_publish
+
+    result = run_publish(post, create_pr=create_pr, resolved=resolved)
+    _emit(result)
+    return result_exit_code(result)
 
 
 def _worker_exit(result: JobResult, *, reported: bool) -> int:
@@ -419,7 +612,7 @@ def _report_worker_failure(result: JobResult) -> int:
     notification went out (see ``APP_REPORTED_EXIT_CODES``)."""
     _emit(result)
     try:
-        from scholar_lens.src.runtime import record_unstarted_run
+        from scholar_lens.entrypoints.runtime import record_unstarted_run
 
         reported = record_unstarted_run(result)
     except Exception as e:  # noqa: BLE001 - e.g. the runtime stack fails to import
@@ -494,17 +687,38 @@ _SIGTERM_EXIT = 128 + signal.SIGTERM
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    # faiss-cpu bundles its own OpenMP runtime; tolerate a second copy loaded
-    # by another native wheel instead of aborting.
-    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+    configure_logging()
     args = parse_args(argv)
     if args.command == "worker":
         return _work(args.request)
+    if args.command == "publish":
+        return _publish(args.post, create_pr=args.create_pr, resolved=args.resolved)
+    if args.command == "costs":
+        try:
+            return _costs(args)
+        except Exception as e:  # noqa: BLE001 - report AWS/config errors as JSON
+            _emit({"status": "error", "error": f"{type(e).__name__}: {e}"})
+            return EXIT_ERROR
+    if args.command == "cancel":
+        try:
+            return _cancel(args.job_id)
+        except JobAlreadyFinished as e:
+            _emit({"status": "rejected", "error": str(e)})
+            return EXIT_REJECTED
+        except Exception as e:  # noqa: BLE001 - report AWS/config errors as JSON
+            _emit({"status": "error", "error": f"{type(e).__name__}: {e}"})
+            return EXIT_ERROR
     if args.command != "status":
         try:
             request = _request_from_args(args)
         except ValidationError as e:
-            _emit({"status": "rejected", "error": str(e)})
+            # A usage error, as argparse reports its own (prog: message).
+            _emit(
+                {
+                    "status": "rejected",
+                    "error": f"{PROG}: invalid arguments: {validation_summary(e)}",
+                }
+            )
             return EXIT_REJECTED
     try:
         if args.command == "status":
@@ -518,11 +732,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         _emit({"status": "error", "error": f"{type(e).__name__}: {e}"})
         return EXIT_ERROR
     try:
-        return _EXIT_BY_STATUS[_run(request).status]
+        return result_exit_code(_run(request))
     except KeyboardInterrupt as e:
         # Ctrl-C: run_job has cleaned up and re-raised with its recorded result
         # (cost, tokens, duration); still print one result.
-        from scholar_lens.src.runtime import INTERRUPTED_ERROR
+        from scholar_lens.entrypoints.runtime import INTERRUPTED_ERROR
 
         _emit(
             getattr(e, "job_result", None)

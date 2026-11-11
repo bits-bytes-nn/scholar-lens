@@ -1,0 +1,798 @@
+{
+ "item": "review-kimi",
+ "kind": "review",
+ "source": "2507.20534",
+ "criteria_note": "Scored A-F, G, X1, R1-R3 per eval/ARTIFACT_RUBRIC.md; claims checked against https://arxiv.org/html/2507.20534 (fetched text). G is deterministic in spirit; blog lint/validator were not run, so G is judged by reading the front matter and markup. Prose length excludes front matter, headings, display math, tables, images and references.",
+ "X": {
+  "prose_length_chars": 22445,
+  "scores": {
+   "A": {
+    "score": 7.0,
+    "reason": "Clean arc (problem -> MuonClip -> data -> systems -> agentic data -> RL -> infra -> results -> safety -> assessment), no H1, levels consistent. But the results sections carry stitched fragments: L355 opens mid-thought '다중 시도에서는 71.6으로 오릅니다. 독점 모델과 비교하면 양상이 다릅니다.' and L369 ends a section on a dangling lead-in '독점 모델과 비교하면 결과가 과제마다 다릅니다.' with nothing after it; L149 '남은 5.5조 토큰에서는' presupposes a first phase never stated."
+   },
+   "B": {
+    "score": 7.5,
+    "reason": "Natural 입니다 register throughout; some calques/formulaic frames: L107 '헤드 단위로 적용한 이유로, ... 줄이기 위해서라고 밝힙니다' (rewrite: '헤드 단위로 적용한 것은 다른 헤드를 과도하게 정규화하지 않기 위해서입니다'); L239 '탐지하는 역할을 합니다' (-> '따로 탐지합니다', and it repeats the previous sentence); L52 '가산적으로 커진다는 설명입니다' noun frame; L207 two consecutive '저자들은 ... 설명합니다' sentences."
+   },
+   "C": {
+    "score": 6.5,
+    "reason": "Method half flows well with explicit back-references (L72 '앞서 본 상한식', L147 tying MLA to QK-Clip). Results half has broken transitions: L357 '반대로 ... 에이전트 모드에서는 Sonnet과 차이가 다시 벌어집니다' contrasts with an agentless comparison that was never written; L363 'DeepSeek-V3-0324는 48.8, Qwen3-235B-A22B는 37.3입니다.' gives comparators without K2's own value in the paragraph; L367 '영어 전체 점수에서' never names ACEBench; L149 orphan."
+   },
+   "D": {
+    "score": 8.5,
+    "reason": "Hard parts get help exactly where needed: L49-52 logit bound before the fix, L88 why gamma^alpha * gamma^(1-alpha) gives gamma, L92 hypothetical tau=100/S=400 worked example with the MLA sqrt split, L225 RL objective worked with 2-of-4 correct responses; telecom running example carried through data synthesis, rubric and limitations (L187, L199, L433-437). Minor padding: L181 and L245 telecom asides add little."
+   },
+   "E": {
+    "score": 8.0,
+    "reason": "Tables where comparison helps (SimpleQA rephrasing L133, reward types L233, base L295, instruct L338/L377, safety L409); images described by content, not paper numbering. Deductions: empty cell for Claude Opus 4 DROP at L385 ('| 92.0 | | 79.1') instead of the source dash; no architecture table for the 384-expert/64-head design."
+   },
+   "F": {
+    "score": 9.0,
+    "reason": "All 24 checked claims supported or figure-only; no invented formulas; \\mid used for conditionals. Minor: L387 '후처리 학습 이후 점수가 두 배 이상으로 올랐습니다' compares base 1-shot LiveCodeBench (26.29) with the instruct score (53.7), a cross-setting comparison the paper does not make; L399 '패배율은 세 경우 모두 약 17%' is read off a figure."
+   },
+   "G": {
+    "score": 9.5,
+    "reason": "use_math true with $$ present; description 133 chars, starts 'Kimi K2', numbers (15.5조, 320억, 65.8, 66.1) all in TL;DR; Liquid braces inside {% raw %} at L220; https arXiv link; no code fences. Not run against the blog lint."
+   },
+   "X1": {
+    "score": 7.5,
+    "reason": "Category Agentic-AI fits; tags short. 'Sparsity-Scaling-Law' (L10) names a paper contribution the post never discusses (no sparsity/expert-count section), and 'Agentic-AI' duplicates the category."
+   },
+   "R1": {
+    "score": 7.5,
+    "reason": "Deep on MuonClip (bound, global vs per-head clip, MLA components, algorithm steps, training dynamics), memory techniques, agentic synthesis, RL (objective, verifiable rewards, critic recalibration, three stabilisers) and checkpoint engine. Gaps: no sparsity scaling law / 384-expert / 64-head choice; no parallelism config or start-up; RL verifiable-reward table (L233-237) omits coding/SWE environments; results section fragmentary around L355-369."
+   },
+   "R2": {
+    "score": 8.5,
+    "reason": "Layering intuition -> formula -> worked example is done for the two hardest contributions (MuonClip L46-99, RL objective L217-225). Length is proportionate."
+   },
+   "R3": {
+    "score": 8.5,
+    "reason": "TL;DR answers the four questions with settings ('micro Pass@1 평균(Avg@4) 66.1', '에이전트 단일 시도 Pass@1 65.8%'). Closing L423-439 names the paper's own limitations (synthetic data, token over-generation, overconfident rubric) and concrete implications; opinion is marked ('이 글의 판단으로는'). Slightly strong 'K2는 현재 가장 먼저 검토할 후보' (L439)."
+   }
+  },
+  "principles": {
+   "claim_headings": {
+    "status": "met",
+    "evidence": "H2s state results: L60 '업데이트 후 필요한 헤드만 재스케일하는 MuonClip', L291 '지식·코딩·수학·중국어에서 기준 모델을 앞서는 Kimi-K2-Base'."
+   },
+   "running_example": {
+    "status": "met",
+    "evidence": "Hypothetical telecom plan-change task introduced L56 and reused L181, L187, L199, L207, L245, L433-437."
+   },
+   "mechanism_reason_formula_example": {
+    "status": "met",
+    "evidence": "QK-Clip: problem bound L49, design (weights not logits) L72, formula L85, per-head reason L90, worked example L92."
+   },
+   "facts_said_once": {
+    "status": "partly",
+    "evidence": "1.04조/320억 at L25 and L147; ACEBench origin at L171 and L367; L239 repeats the hack-check sentence just before it."
+   },
+   "numbers_with_variant_scope_unit": {
+    "status": "partly",
+    "evidence": "Mostly scoped ('Avg@4', '에이전트 단일 시도'), but L363 'DeepSeek-V3-0324는 48.8' lacks the metric and K2's value in place; L367 '영어 전체 점수' lacks the benchmark name."
+   },
+   "nothing_invented": {
+    "status": "met",
+    "evidence": "No formula or mechanism beyond the paper; hypothetical examples labelled '가상의'."
+   },
+   "own_assessment_at_end": {
+    "status": "met",
+    "evidence": "L423 '이 글의 판단으로는 ...' and L439 recommendation."
+   },
+   "length_fitted": {
+    "status": "met",
+    "evidence": "22,445 prose chars for a long technical report; space concentrated on MuonClip and RL."
+   },
+   "type_specific_shape": {
+    "status": "met",
+    "evidence": "Review shape: TL;DR four questions, section-by-section body, limitations and implications."
+   },
+   "korean_style": {
+    "status": "partly",
+    "evidence": "입니다 register consistent; calques at L107, L239, L52."
+   }
+  },
+  "claims": {
+   "checked": 28,
+   "numbers_checked": 23,
+   "supported": 27,
+   "unsupported": 0,
+   "wrong": 0,
+   "unverifiable": 1,
+   "error_rate": 0.0,
+   "items": [
+    {
+     "line": "L25",
+     "claim": "1.04조 total, 320억 active MoE",
+     "number": true,
+     "verdict": "supported",
+     "source": "§2.3: 'Kimi K2 is a 1.04 trillion-parameter ... with 32 billion activated parameters.'"
+    },
+    {
+     "line": "L25",
+     "claim": "15.5조 tokens with no loss spike",
+     "number": true,
+     "verdict": "supported",
+     "source": "Abstract: 'pre-trained on 15.5 trillion tokens with zero loss spike.'"
+    },
+    {
+     "line": "L27",
+     "claim": "3,000+ real MCP tools and 20,000+ synthetic tools",
+     "number": true,
+     "verdict": "supported",
+     "source": "§3.1.1: 'fetch 3000+ real MCP ... produces over 20,000 synthetic tools.'"
+    },
+    {
+     "line": "L28",
+     "claim": "Full weight update under 30 s",
+     "number": true,
+     "verdict": "supported",
+     "source": "§3.3: 'complete a full parameter update for Kimi K2 with less than 30 seconds'"
+    },
+    {
+     "line": "L33",
+     "claim": "Tau2 66.1, ACEBench 76.5, GPT-4.1 80.1 on ACEBench",
+     "number": true,
+     "verdict": "supported",
+     "source": "App.: 'averages 66.1 micro Pass@1 ... remains competitive with GPT-4.1 (80.1)'"
+    },
+    {
+     "line": "L34",
+     "claim": "SWE-bench Verified 65.8 single, 71.6 multi; Multilingual 47.3 vs Sonnet 51.0",
+     "number": true,
+     "verdict": "supported",
+     "source": "Table 3 rows Agentic-Single-Attempt 65.8, Multi-Attempt 71.6, Multilingual 47.3 / 51.0"
+    },
+    {
+     "line": "L44",
+     "claim": "9B active / 53B total vanilla-Muon MoE; max logits exceed 1000",
+     "number": true,
+     "verdict": "supported",
+     "source": "§2.1: 'mid-scale 9B activated and 53B total ... quickly exceed a magnitude of 1000'"
+    },
+    {
+     "line": "L52",
+     "claim": "Muon weights and updates have higher effective rank; aligned singular vectors add singular values",
+     "number": false,
+     "verdict": "supported",
+     "source": "App. E: 'as both the weights and the updates have a higher effective rank than Adam, we hypothesize ... increase additively.'"
+    },
+    {
+     "line": "L54",
+     "claim": "QK-Norm not applicable to MLA since keys are not fully materialised",
+     "number": false,
+     "verdict": "supported",
+     "source": "§2.1 discussion of QK-Norm and MLA"
+    },
+    {
+     "line": "L88",
+     "claim": "gamma=min(1,tau/S_max), S_max=max over heads, alpha typically 0.5",
+     "number": true,
+     "verdict": "supported",
+     "source": "§2.1: 'S_max=max_h S_max^h, and alpha is a balancing parameter typically set to 0.5'"
+    },
+    {
+     "line": "L98",
+     "claim": "Update scaled by sqrt(max(n,m))*0.2 to match Adam RMS",
+     "number": true,
+     "verdict": "supported",
+     "source": "Algorithm 1: 'Newton-Schulz(M_t)·sqrt(max(n,m))·0.2 ▷ Match Adam RMS'"
+    },
+    {
+     "line": "L107",
+     "claim": "Logits capped at 100, decay after ~30% of steps; 12.7% of heads clip in first 70000 steps",
+     "number": true,
+     "verdict": "supported",
+     "source": "§2.1: 'only decay to a stable range after approximately 30% of the training steps'; App.: 'Initial 70000 steps: 12.7% of attention heads triggered QK-Clip'"
+    },
+    {
+     "line": "L113",
+     "claim": "Two 0.5B active / 3B total MoE, MuonClip with tau=30",
+     "number": true,
+     "verdict": "supported",
+     "source": "App.: 'two small-scale 0.5B activated and 3B total ... (tau=30)'"
+    },
+    {
+     "line": "L133-137",
+     "claim": "SimpleQA 23.76 / 27.39 / 28.94 for 0/1/10 rephrasings",
+     "number": true,
+     "verdict": "supported",
+     "source": "Table 1 cells 23.76, 27.39, 28.94"
+    },
+    {
+     "line": "L149",
+     "claim": "Cosine 2e-4 to 2e-5 over 5.5T; annealing 400B at 4k then 60B at 32k",
+     "number": true,
+     "verdict": "supported",
+     "source": "§2.5: 'followed by 5.5T tokens with a cosine decay from 2e-4 to 2e-5 ... 400 billion tokens with a 4k ... 60 billion tokens with a 32k'"
+    },
+    {
+     "line": "L157",
+     "claim": "FP8-E4M3 in 1x128 tiles with FP32 scales; no FP8 in compute",
+     "number": true,
+     "verdict": "supported",
+     "source": "§2.4: 'compressed to FP8-E4M3 in 1 × 128 tiles with FP32 scales ... we do not apply FP8 in computation.'"
+    },
+    {
+     "line": "L159",
+     "claim": "Down-projection recompute optional, prevents crashes from early expert imbalance",
+     "number": false,
+     "verdict": "supported",
+     "source": "§2.4: 'While optional, this recomputation ... preventing crashes caused by expert imbalance'"
+    },
+    {
+     "line": "L167",
+     "claim": "DualPipe doubles parameter and gradient memory, rejected at 1T scale",
+     "number": false,
+     "verdict": "supported",
+     "source": "§2.4: 'DualPipe doubles the memory required for parameters and gradients ... opted not to use DualPipe.'"
+    },
+    {
+     "line": "L223",
+     "claim": "Muon used to minimise the RL objective",
+     "number": false,
+     "verdict": "supported",
+     "source": "§3.2.3: 'As in SFT, we employ the Muon optimizer to minimize this objective.'"
+    },
+    {
+     "line": "L273",
+     "claim": "Network FS would need several PB/s aggregate bandwidth",
+     "number": true,
+     "verdict": "supported",
+     "source": "§3.3.2: 'aggregate bandwidth required ... reaches several petabytes per second.'"
+    },
+    {
+     "line": "L299-310",
+     "claim": "Base table: MMLU-Pro 69.17, SimpleQA 35.25, CMATH 90.26 vs 90.53",
+     "number": true,
+     "verdict": "supported",
+     "source": "Base results table cells 69.17, 35.25, 90.26/90.53"
+    },
+    {
+     "line": "L314",
+     "claim": "K2-Base tops 10 of 12 English benchmarks (loses GPQA-Diamond, HellaSwag)",
+     "number": true,
+     "verdict": "supported",
+     "source": "Base table English block (12 rows): K2 below only on GPQA-Diamond 48.11<50.51 and HellaSwag 94.60<95.27"
+    },
+    {
+     "line": "L343-350",
+     "claim": "Multi-SWE 18.3 vs Sonnet 29.2; Tau2 telecom 65.8 vs Opus 57.0 vs Sonnet 45.2",
+     "number": true,
+     "verdict": "supported",
+     "source": "Table 3 rows Multi-SWE-bench, Tau2 telecom"
+    },
+    {
+     "line": "L387",
+     "claim": "LiveCodeBench v6 more than doubled after post-training",
+     "number": true,
+     "verdict": "supported",
+     "source": "Base 26.29 (1-shot) vs Instruct 53.7: arithmetic holds; the cross-setting comparison is the post's own, not a paper statement"
+    },
+    {
+     "line": "L399",
+     "claim": "Loss rate about 17% against all three opponents",
+     "number": true,
+     "verdict": "unverifiable",
+     "source": "Only in Figure 11; text gives win rates 65.4/64.6/59.6"
+    },
+    {
+     "line": "L401",
+     "claim": "LMSYS Arena July 17 2025: open-source #1, 5th overall, 3,000+ votes",
+     "number": true,
+     "verdict": "supported",
+     "source": "§4.1.2: 'On the LMSYS Arena leaderboard (July 17, 2025) ... top-1 open-source model and 5th overall based on over 3,000 user votes.'"
+    },
+    {
+     "line": "L411-415",
+     "claim": "Safety: Harmful IJ 92.16 vs 66.67; Security Basic 77.84 vs Qwen 90.09; Security IJ 43.90 vs 78.04",
+     "number": true,
+     "verdict": "supported",
+     "source": "Table 6 rows Harmful/Iterative Jailbreak, Security/Basic, Security/Iterative Jailbreak"
+    },
+    {
+     "line": "L417",
+     "claim": "Base64 strategy pass rates near 100%; Crescendo lowers them",
+     "number": true,
+     "verdict": "supported",
+     "source": "§4.3.2: 'Under the Base64 strategy, passing rates generally approached or reached 100% ... the Crescendo strategy led to a general drop'"
+    }
+   ]
+  },
+  "checklist": {
+   "rl-section-duplicated": {
+    "status": "avoided",
+    "evidence": "One RL H2 (L211) and one infra H2 (L261); '검증 가능한 보상' heading once (L229)."
+   },
+   "rl-subheading-levels": {
+    "status": "avoided",
+    "evidence": "Verifiable reward, self-critique, stabilisers are H3 under the RL H2 (L215-253)."
+   },
+   "ppo-claim": {
+    "status": "avoided",
+    "evidence": "L217 '알고리즘의 뼈대는 K1.5에서 가져왔습니다'; no PPO."
+   },
+   "invented-budget-formula": {
+    "status": "avoided",
+    "evidence": "L257 per-sample max token budget, truncation and penalty; no formula."
+   },
+   "invented-ptx-formula": {
+    "status": "avoided",
+    "evidence": "L258 '손으로 고른 고품질 샘플을 보조 PTX 손실로'; no L_total."
+   },
+   "invented-temperature-formula": {
+    "status": "avoided",
+    "evidence": "L259 decay described without a functional form."
+   },
+   "invented-env-code": {
+    "status": "avoided",
+    "evidence": "No code block anywhere."
+   },
+   "invented-math-verifier": {
+    "status": "avoided",
+    "evidence": "L231 coverage and SFT pass@k difficulty selection."
+   },
+   "invented-logic-verifier": {
+    "status": "avoided",
+    "evidence": "No formal-logic step verifier."
+   },
+   "invented-code-quality-eval": {
+    "status": "n/a",
+    "evidence": "RL coding/SWE rewards not described; no code-quality grading claim (L203 mentions test-suite pass rates for SFT sandboxes)."
+   },
+   "invented-safety-monitoring": {
+    "status": "n/a",
+    "evidence": "RL safety data pipeline not covered; red-team eval section L405-419 has no real-time monitoring claim."
+   },
+   "invented-self-refine-loop": {
+    "status": "avoided",
+    "evidence": "L243 pairwise comparison of own outputs; L249 critic refined with on-policy verifiable rollouts."
+   },
+   "invented-human-rubric-content": {
+    "status": "n/a",
+    "evidence": "Human-annotated rubrics not described."
+   },
+   "rubric-limitation-garbled": {
+    "status": "avoided",
+    "evidence": "L429 '자기 한정 표현을 감점하고 단일하고 단정적인 답을 선호 ... 확신을 과장할 수 있습니다'."
+   },
+   "invented-infra-mechanisms": {
+    "status": "avoided",
+    "evidence": "L273-289 checkpoint engine broadcast, per-parameter pipelining, partial rollout; no invented mechanisms."
+   },
+   "missing-description": {
+    "status": "avoided",
+    "evidence": "L8 plain-text description starting 'Kimi K2' with TL;DR numbers."
+   },
+   "arxiv-https": {
+    "status": "avoided",
+    "evidence": "L444 https://arxiv.org/pdf/2507.20534v2."
+   }
+  },
+  "structure_defects": [
+   "L149 orphaned lead-in: '남은 5.5조 토큰에서는 ...' presupposes the 10T constant-LR phase, which is never stated.",
+   "L355 paragraph opens mid-thought: '다중 시도에서는 71.6으로 오릅니다. 독점 모델과 비교하면 양상이 다릅니다.' (single-attempt discussion and the contrast are missing).",
+   "L357 broken transition: '반대로 ... 에이전트 모드에서는 Sonnet과 차이가 다시 벌어집니다' contrasts with an agentless comparison never made.",
+   "L363 orphaned numbers: 'DeepSeek-V3-0324는 48.8, Qwen3-235B-A22B는 37.3입니다.' without K2's value or the metric in the paragraph.",
+   "L367 '영어 전체 점수에서 K2는 76.5로' does not name ACEBench.",
+   "L369 dangling section end: '독점 모델과 비교하면 결과가 과제마다 다릅니다.' with nothing after it.",
+   "L353 heading is clause-shaped: '실제 저장소 이슈 해결: 오픈 모델과 격차는 크고, Claude와는 좁혀짐' (borderline)."
+  ],
+  "top_issues": [
+   "Results section around L355-369 is stitched fragments: paragraphs open or end mid-thought and drop K2's own values.",
+   "No coverage of the architecture choices (sparsity scaling law, 384 experts, 64 heads), parallelism or start-up, though 'Sparsity-Scaling-Law' is a tag; RL verifiable-reward table omits coding/SWE."
+  ],
+  "mean_score": 8.0,
+  "mean_score_excl_G": 7.85,
+  "checklist_summary": {
+   "repeated": 0,
+   "avoided": 14,
+   "n/a": 3
+  }
+ },
+ "Y": {
+  "prose_length_chars": 21023,
+  "scores": {
+   "A": {
+    "score": 7.0,
+    "reason": "Good arc and it adds an architecture section (L90-130) and a training-schedule table; no H1. But core method paragraphs are damaged: L62 subsection opens '그 결과 업데이트 행렬의 특이값이 모두 같아지고' with no antecedent; L78 '그 결과 다음 스텝에서 이 헤드의 최대 로짓은 대략 100 수준으로 돌아옵니다' refers to a worked example that is not there; L263 bullet lost its label (complex instruction following); L92 H3 directly under H2 with no lead."
+   },
+   "B": {
+    "score": 7.5,
+    "reason": "입니다 register consistent; mixed English mid-sentence ('loss spike가 생기고' L43, 'loss에 미친 영향' L82); '에이전틱'/'에이전트' alternate; awkward L335 \"'대부분'은 이런 예외를 포함한 말입니다\" (rewrite: '대부분이라는 말에는 이런 예외가 들어 있습니다'); L50 formulaic '결국 ... 필요합니다'."
+   },
+   "C": {
+    "score": 6.5,
+    "reason": "Back-references are frequent and accurate (L176 head reduction -> EP size, L331 SimpleQA link, L394 base vs instruct GPQA). But L62 and L78 break the MuonClip explanation; L84 '100으로 눌려' uses K2's tau=100 that is never introduced; L268 self-critique subsection starts '비교 기준은 루브릭이며' without saying what is compared. ACEBench-origin point is repeated four times (L212, L234, L347, L441)."
+   },
+   "D": {
+    "score": 7.0,
+    "reason": "Helpful: sparsity defined at use (L112), cost/benefit for heads (L128), RL objective worked example with 2-of-4 transfers (L256), partial rollout example (L312). But the hardest part, QK-Clip on MLA, lost its bound formula and worked example (L76-78), and the self-critique mechanism (pairwise ranking, critic recalibration) is reduced to two sentences (L268-270)."
+   },
+   "E": {
+    "score": 7.5,
+    "reason": "Strong tables (architecture diff L96, schedule L198, base L318, instruct L355/L377, safety L414). Deductions: τ² table L357-361 is mostly empty cells ('| 66.1 | 48.8 | 37.3 | | 67.6 | |'); N/A cells L389-390; the logit-explosion curve discussed at L43/L84 is not shown."
+   },
+   "F": {
+    "score": 8.0,
+    "reason": "All checked claims supported, one figure-only value. Deduction: L244 uses '|' for the conditional in the denominator '(y_{i}|x)' while the numerator uses \\mid (rubric: \\mid for conditionals). L64 and L84 are fine. L357 'Claude Opus 4 67.6' for τ² average comes only from the main-results figure (consistent with the per-domain table's micro average ≈67.7)."
+   },
+   "G": {
+    "score": 4.0,
+    "reason": "Front matter has no description key (L1-12): the validator requires a 120-160 char plain-text description; this alone fails G. Otherwise use_math true, Liquid inside {% raw %} (L244), https link."
+   },
+   "X1": {
+    "score": 8.0,
+    "reason": "Category fits; tags short and in the paper's terms, all covered in the body (Sparsity-Scaling-Law has its own section L110). 'Agentic-AI' duplicates the category."
+   },
+   "R1": {
+    "score": 8.0,
+    "reason": "Broadest coverage: MuonClip, sparsity law and head count, rephrasing, parallelism/memory/schedule, agentic synthesis, RL (verifiable rewards incl. Kubernetes SWE env L264), checkpoint engine, start-up/fault tolerance (L306-308), base/instruct/safety results incl. TerminalBench, IFEval, Crescendo. Gaps: critic recalibration with verifiable signals missing; complex instruction hybrid verifier reduced to an unlabelled bullet (L263); MuonClip algorithm steps absent."
+   },
+   "R2": {
+    "score": 7.0,
+    "reason": "Layers well for RL objective and architecture trade-offs, but the MuonClip section skips from hypothesis to per-head factor without the logit bound, the global-vs-per-head step, or the numeric example its own L78 assumes."
+   },
+   "R3": {
+    "score": 8.5,
+    "reason": "TL;DR answers four questions with settings and an explicit counterpoint ('에이전틱 단일 시도 기준으로는 Claude Sonnet 4(72.7)와 Opus 4(72.5)가 여전히 앞섭니다' L32). Closing separates author limitations (L435) from the writer's view (L439-447) with concrete use/avoid cases. L443 '예산 제어가 이를 완전히 막지는 못했습니다' is the writer's inference, not a paper claim."
+   }
+  },
+  "principles": {
+   "claim_headings": {
+    "status": "met",
+    "evidence": "L90 '384개 전문가와 64개 헤드: 희소성 스케일링 법칙에 따른 아키텍처 선택', L408 '안전성 레드팀: 반복 탈옥에는 강하지만 Crescendo와 보안 공격에는 약점'."
+   },
+   "running_example": {
+    "status": "met",
+    "evidence": "Hypothetical transfer/banking task from L52 reused at L218, L224, L226, L256, L312, L347."
+   },
+   "mechanism_reason_formula_example": {
+    "status": "partly",
+    "evidence": "Done for RL objective (L242-256) and heads (L124-130); MuonClip lacks the bound and worked example, and L78 refers to a missing example."
+   },
+   "facts_said_once": {
+    "status": "not met",
+    "evidence": "ACEBench inspiration/evaluation overlap stated at L212, L234, L347, L441; rejection sampling at L232 and again L234; 15.5T at L26, L88, L138."
+   },
+   "numbers_with_variant_scope_unit": {
+    "status": "met",
+    "evidence": "'τ² 점수는 ... 시드 4개로 평균한 값(Avg@4)' L345; 'SWE-bench Verified 에이전틱 단일 시도' L363; safety table labelled '통과율(%)' L412."
+   },
+   "nothing_invented": {
+    "status": "met",
+    "evidence": "No invented formula or mechanism; transfer_funds/get_balance labelled as hypothetical (L218)."
+   },
+   "own_assessment_at_end": {
+    "status": "met",
+    "evidence": "L437-447 '이 글의 시각: 재사용할 것과 주의할 것' with use/avoid cases."
+   },
+   "length_fitted": {
+    "status": "met",
+    "evidence": "21,023 prose chars, distributed across a long report."
+   },
+   "type_specific_shape": {
+    "status": "met",
+    "evidence": "Review shape with four-question TL;DR, sectioned body, limitations."
+   },
+   "korean_style": {
+    "status": "partly",
+    "evidence": "Register consistent; English fragments mid-sentence (L43, L82) and awkward L335."
+   }
+  },
+  "claims": {
+   "checked": 28,
+   "numbers_checked": 23,
+   "supported": 27,
+   "unsupported": 0,
+   "wrong": 0,
+   "unverifiable": 1,
+   "error_rate": 0.0,
+   "items": [
+    {
+     "line": "L17",
+     "claim": "9B active MoE run, max logit over 1000",
+     "number": true,
+     "verdict": "supported",
+     "source": "§2.1: 'mid-scale 9B activated ... exceed a magnitude of 1000'"
+    },
+    {
+     "line": "L26",
+     "claim": "8 of 384 experts active, 64 heads, 15.5T tokens",
+     "number": true,
+     "verdict": "supported",
+     "source": "§2.3: 'activating 8 out of 384 experts'; 'we choose to 64 attention heads'"
+    },
+    {
+     "line": "L28",
+     "claim": "Full parameter update under 30 s",
+     "number": true,
+     "verdict": "supported",
+     "source": "§3.3: 'less than 30 seconds'"
+    },
+    {
+     "line": "L31",
+     "claim": "τ² 66.1 vs DeepSeek-V3-0324 48.8; ACEBench 76.5 vs GPT-4.1 80.1",
+     "number": true,
+     "verdict": "supported",
+     "source": "App.: '66.1 micro Pass@1 ... vs DeepSeek-V3-0324 48.8 ... GPT-4.1 (80.1)'"
+    },
+    {
+     "line": "L32",
+     "claim": "SWE-V single 65.8; Sonnet 4 72.7, Opus 4 72.5",
+     "number": true,
+     "verdict": "supported",
+     "source": "Table 3: 65.8 | 72.7* | 72.5*"
+    },
+    {
+     "line": "L62",
+     "claim": "Muon update has equal singular values (full rank); Adam low-rank; Muon weights higher singular-value entropy",
+     "number": false,
+     "verdict": "supported",
+     "source": "App. E: 'all singular values of the update matrix are equal ... Adam exhibits a skewed spectrum ... higher singular-value entropy'"
+    },
+    {
+     "line": "L64",
+     "claim": "W_q W_k^T squares the spectral norm; Muon tends to enlarge singular values",
+     "number": false,
+     "verdict": "supported",
+     "source": "App. E: 'The product W_q W_k^T squares the spectral norm ... Muon's tendency to enlarge singular values'"
+    },
+    {
+     "line": "L82",
+     "claim": "0.5B/3B MoEs, tau=30, negligible loss effect",
+     "number": true,
+     "verdict": "supported",
+     "source": "App.: 'two small-scale 0.5B activated and 3B total ... (tau=30)'"
+    },
+    {
+     "line": "L84",
+     "claim": "12.7% of heads clip in first 70000 steps, then inactive",
+     "number": true,
+     "verdict": "supported",
+     "source": "App.: 'Initial 70000 steps: 12.7% ... Post-70000 steps: ... QK-Clip inactive'"
+    },
+    {
+     "line": "L98-106",
+     "claim": "Arch diff: 61 layers, 671B vs 1.04T, 37B vs 32.6B, 256 vs 384 experts, 128 vs 64 heads, dense 3 vs 1, grouping yes/no",
+     "number": true,
+     "verdict": "supported",
+     "source": "Table 2 cells"
+    },
+    {
+     "line": "L118",
+     "claim": "Sparsity 48 uses 1.69x/1.39x/1.15x fewer FLOPs than 8/16/32 at val loss 1.5",
+     "number": true,
+     "verdict": "supported",
+     "source": "§2.3: 'sparsity 48 reduces FLOPs by 1.69×, 1.39×, and 1.15×'"
+    },
+    {
+     "line": "L126-128",
+     "claim": "Doubling heads: 0.5-1.2% val-loss gain; 64->128 heads +83% inference FLOPs",
+     "number": true,
+     "verdict": "supported",
+     "source": "§2.3: '0.5% to 1.2%'; 'leads to an 83% increase in inference FLOPs' (at 128k)"
+    },
+    {
+     "line": "L144",
+     "claim": "Style-diverse prompting inspired by WRAP",
+     "number": false,
+     "verdict": "supported",
+     "source": "§2.2: 'Inspired by WRAP [50]'"
+    },
+    {
+     "line": "L154-158",
+     "claim": "SimpleQA 23.76 / 27.39 / 28.94",
+     "number": true,
+     "verdict": "supported",
+     "source": "Table 1"
+    },
+    {
+     "line": "L160",
+     "claim": "Each corpus rephrased at most twice",
+     "number": true,
+     "verdict": "supported",
+     "source": "§2.2: 'each corpora is rephrased at most twice.'"
+    },
+    {
+     "line": "L200-204",
+     "claim": "10T at 2e-4 after 500-step warm-up; 5.5T cosine to 2e-5; 2e-5->7e-6 over 400B@4k + 60B@32k; wd 0.1; 67M batch; YaRN to 128k",
+     "number": true,
+     "verdict": "supported",
+     "source": "§2.5 training recipe text"
+    },
+    {
+     "line": "L264",
+     "claim": "SWE env from GitHub PRs/issues; Kubernetes sandbox 10,000+ concurrent instances",
+     "number": true,
+     "verdict": "supported",
+     "source": "§3.2.1: 'supports over 10,000 concurrent sandbox instances'"
+    },
+    {
+     "line": "L308",
+     "claim": "Workers read part or none of the checkpoint, read once overall; inference replica restarts independently",
+     "number": false,
+     "verdict": "supported",
+     "source": "§3.3.3: 'all workers collectively read the checkpoint only once ... robust to single-point failures'"
+    },
+    {
+     "line": "L353",
+     "claim": "SWE-bench Multilingual: only Claude 4 Sonnet evaluated due to cost",
+     "number": false,
+     "verdict": "supported",
+     "source": "Fig. 1 note: 'we evaluated only Claude 4 Sonnet because the cost of Claude 4 Opus was prohibitive.'"
+    },
+    {
+     "line": "L357",
+     "claim": "τ² average Pass@1 Claude Opus 4 67.6",
+     "number": true,
+     "verdict": "unverifiable",
+     "source": "Not in text or Table 3 (per-domain 81.8/60.0/57.0 only); likely from Figure 1, consistent with a task-weighted average ≈67.7"
+    },
+    {
+     "line": "L360",
+     "claim": "Multi-attempt 71.6 vs Sonnet 80.2",
+     "number": true,
+     "verdict": "supported",
+     "source": "App.: '71.6% (Kimi-K2-Instruct) vs. 80.2% (Claude 4 Sonnet)'"
+    },
+    {
+     "line": "L365",
+     "claim": "TerminalBench 25.0% Terminus, 30% in-house",
+     "number": true,
+     "verdict": "supported",
+     "source": "App.: 'attains 25.0% using the default Terminus framework and rises to 30%'"
+    },
+    {
+     "line": "L382/L394",
+     "claim": "AIME 2024 69.6 vs 59.4 vs 40.1 (+10.2, +29.5)",
+     "number": true,
+     "verdict": "supported",
+     "source": "Table 3 AIME 2024 row 69.6 | 59.4* | 40.1*"
+    },
+    {
+     "line": "L387-396",
+     "claim": "IFEval 89.8, Multi-Challenge 54.1 lead all; Opus 49.0 second",
+     "number": true,
+     "verdict": "supported",
+     "source": "Table 3; §4.1.2 'leads all models on instruction benchmarks'"
+    },
+    {
+     "line": "L390",
+     "claim": "MRCR 55.0 vs 50.8, GPT-4.1 66.9",
+     "number": true,
+     "verdict": "supported",
+     "source": "Table 3 MRCR row 55.0 | 50.8 | — | 74.4 | — | 66.9"
+    },
+    {
+     "line": "L404",
+     "claim": "Chinese in-house win rates 65.4 / 64.6 / 59.6",
+     "number": true,
+     "verdict": "supported",
+     "source": "App.: '65.4% win rate, Claude Sonnet 4 with 64.6%, and DeepSeek-V3-0324 with 59.6%'"
+    },
+    {
+     "line": "L412",
+     "claim": "Promptfoo; 3 attack prompts per plugin-strategy; same reviewer per test set",
+     "number": true,
+     "verdict": "supported",
+     "source": "§4.3.1: 'generated 3 attack prompts per plugin for each strategy ... assigned the same reviewer'"
+    },
+    {
+     "line": "L416-421",
+     "claim": "Harmful Crescendo 64.71 vs 80.39/86.27; Security Crescendo 68.29 vs 87.80",
+     "number": true,
+     "verdict": "supported",
+     "source": "Table 6 Crescendo rows"
+    }
+   ]
+  },
+  "checklist": {
+   "rl-section-duplicated": {
+    "status": "avoided",
+    "evidence": "One RL H2 (L236), one infra H2 (L278); '검증 가능한 보상' heading once (L258)."
+   },
+   "rl-subheading-levels": {
+    "status": "avoided",
+    "evidence": "Reward and stabiliser subsections are H3 under the RL H2 (L240-276)."
+   },
+   "ppo-claim": {
+    "status": "avoided",
+    "evidence": "L242 '목적함수는 K1.5에서 가져왔습니다'; no PPO."
+   },
+   "invented-budget-formula": {
+    "status": "avoided",
+    "evidence": "L274 prose only."
+   },
+   "invented-ptx-formula": {
+    "status": "avoided",
+    "evidence": "L275 '엄선한 고품질 샘플'; no formula."
+   },
+   "invented-temperature-formula": {
+    "status": "avoided",
+    "evidence": "L276 prose only."
+   },
+   "invented-env-code": {
+    "status": "avoided",
+    "evidence": "Only inline hypothetical tool names at L218 ('가상의 ... 생길 수 있습니다'), not presented as the paper's API."
+   },
+   "invented-math-verifier": {
+    "status": "avoided",
+    "evidence": "L262 coverage and pass@k difficulty."
+   },
+   "invented-logic-verifier": {
+    "status": "avoided",
+    "evidence": "None."
+   },
+   "invented-code-quality-eval": {
+    "status": "avoided",
+    "evidence": "L264 GitHub PR/issue environments in a Kubernetes sandbox; no code-quality grading."
+   },
+   "invented-safety-monitoring": {
+    "status": "n/a",
+    "evidence": "RL safety pipeline not covered; red-team section L408-427 makes no monitoring claim."
+   },
+   "invented-self-refine-loop": {
+    "status": "avoided",
+    "evidence": "L238 '모델이 스스로 출력을 비교해 만든 선호 보상'; no iterative loop (critic recalibration also absent)."
+   },
+   "invented-human-rubric-content": {
+    "status": "n/a",
+    "evidence": "Human-annotated rubrics not described."
+   },
+   "rubric-limitation-garbled": {
+    "status": "avoided",
+    "evidence": "L435 '자기 한정 표현과 헤징을 금지하고 ... 확신을 과장하는 응답이 나올 수 있으며'."
+   },
+   "invented-infra-mechanisms": {
+    "status": "avoided",
+    "evidence": "L286-312 match the paper (broadcast, per-parameter pipelining, start-up, partial rollout)."
+   },
+   "missing-description": {
+    "status": "repeated",
+    "evidence": "Front matter L1-12 has no description key."
+   },
+   "arxiv-https": {
+    "status": "avoided",
+    "evidence": "L452 https link."
+   }
+  },
+  "structure_defects": [
+   "L62 orphaned lead-in at subsection start: '그 결과 업데이트 행렬의 특이값이 모두 같아지고' (the msign/Newton-Schulz premise is missing).",
+   "L78 refers to a missing worked example: '그 결과 다음 스텝에서 이 헤드의 최대 로짓은 대략 100 수준으로 돌아옵니다. 같은 스텝에서 S_max^h가 60인 다른 헤드는 그대로 둡니다.'",
+   "L263 bullet without its label and lead: '모델이 실제로 따르지 않았으면서 ... hack-check 층을 하나 더 둡니다.' (complex instruction following and its hybrid verifier are missing).",
+   "L268 subsection opens '비교 기준은 루브릭이며, 판정하는 쪽도 학습 중인 모델 자신입니다.' without saying what is compared; subsection is three sentences.",
+   "L92 H3 immediately under H2 L90 with no lead paragraph.",
+   "L408 heading is clause-shaped: '안전성 레드팀: 반복 탈옥에는 강하지만 Crescendo와 보안 공격에는 약점' (borderline)."
+  ],
+  "top_issues": [
+   "No description in front matter (G fails; human-fix 'missing-description' repeated).",
+   "MuonClip and RL-reward explanations have dropped sentences (L62, L78, L263, L268): the QK-Clip worked example, the instruction-following verifier and the critic recalibration loop are missing."
+  ],
+  "mean_score": 7.18,
+  "mean_score_excl_G": 7.5,
+  "checklist_summary": {
+   "repeated": 1,
+   "avoided": 14,
+   "n/a": 2
+  }
+ },
+ "preference": {
+  "overall": "X",
+  "per_criterion": {
+   "A": "tie",
+   "B": "tie",
+   "C": "tie",
+   "D": "X",
+   "E": "X",
+   "F": "X",
+   "G": "X",
+   "X1": "Y",
+   "R1": "Y",
+   "R2": "X",
+   "R3": "tie"
+  },
+  "reason": "Both are factually clean (no wrong numbers found). X explains the two hardest contributions, QK-Clip on MLA and the K1.5 RL objective, in full layers with worked examples, and has valid front matter; its damage is concentrated in the instruct-results prose (L355-369). Y covers more of the report (architecture/sparsity, schedule, start-up, SWE sandbox, TerminalBench, IFEval, Crescendo) but its core method sections have dropped sentences that leave orphaned references (L62, L78, L263, L268), and it has no description so it fails G and repeats a human-fixed defect. Coverage favours Y; correctness of the method explanation and publishability favour X."
+ }
+}

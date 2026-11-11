@@ -1,0 +1,178 @@
+{
+  "item": "review-kimi (arXiv 2507.20534)",
+  "kind": "review",
+  "source_checked": "https://arxiv.org/html/2507.20534 (v2 HTML, incl. Tables 2-6 and Appendices C, E, F, G)",
+  "X": {
+    "file": "/tmp/judge2/review-kimi-g1/review-kimi-X.md",
+    "scores": {"A": 8.0, "B": 8.5, "C": 7.5, "D": 8.0, "E": 8.0, "F": 6.0},
+    "type_scores": {"R1": 6.5, "R2": 7.5, "R3": 8.0},
+    "reasons": {
+      "A": "Clean front matter (description 138 chars, starts with 'Kimi K2', https link), no body H1, $$-only math, claim-style H2s. Deductions: L36 heading promises '세 가지 병목' while L38/L44 describe two; L265 wraps part of a display formula in {% raw %} and mixes '\\mid' (numerator) with '|' (denominator); L192 '남은 과제는 뒤의 한계 절에서 다룹니다.' is a one-line stub paragraph.",
+      "B": "Natural 입니다-register Korean with few stock patterns (1x '할 수 있습니다'). Minor: L32 joins a who-benefits judgement and the LMSYS fact in one bullet; L100 'Muon은 토큰 효율이 높은 옵티마이저(optimizer)입니다' adds a needless gloss.",
+      "C": "Mostly smooth, with an airline example threaded L42 -> L224 -> L228 -> L413. Deductions: heading/body mismatch L36 vs L38; explicit deferrals 'L271 ... 이 장치들은 이 글에서 다루지 않습니다' and L192 leave gaps; L254 ends a subsection on the critic init with no follow-through (critic refinement never described).",
+      "D": "Good help on hard parts: per-head QK-Clip worked example (L124), MLA component scaling reason (L121), objective worked example with e^0.5 (L269), pass@k zero-variance example (L248). Under-explained: why soft-cap/QK-Norm are insufficient (L102 offers generic alternatives instead of the paper's MLA argument), what the core/prescriptive rubrics are (L252), Muon itself (L100).",
+      "E": "11 figures placed where discussed and described, tables verbatim (L54-64, L182-186, L343-349, L363-369). Deductions: L323-329 '비교 모델' column packs several models and scores into prose cells; L343 drops the Claude Sonnet 4 column without saying so.",
+      "F": "2 wrong of 28 sampled claims: L379 'K2는 어려운 프롬프트 승률 54.5% ... 두 항목 모두 최고 성적' contradicts Table 3 (Claude Opus 4 59.7 on Hard Prompt; the paper's prose overclaims, the post repeats it); L387 labels the Chinese in-house win rates '무승부 제외' although the paper reports plain win rates (65.4% win with ~17% loss implies ties are included). One unsupported framing at L102 (alternatives 'loss regularization term' not in the paper).",
+      "R1": "Covers architecture, MuonClip, rephrasing, agentic data, a slice of RL, FP8 storage, checkpoint engine and evaluations. Missing large parts of the paper: training infrastructure and parallelism (2.4), pre-training recipe/LR schedule/YaRN, RL domains (instruction following, faithfulness, coding/SWE, safety), closed-loop critic refinement, rubric content, budget control/PTX/temperature decay (explicitly skipped L271), tool-call template, startup/agentic rollout, safety red-team eval, 12.7%/70k-step QK-Clip statistic, 9B/53B logit-explosion evidence, appendix hypothesis.",
+      "R2": "Where it goes deep it layers well (intuition -> formula -> numeric example for QK-Clip and the K1.5 objective). Length (~23k chars) is short for a 1T-parameter tech report; difficulty-heavy parts (infra, RL details) are cut rather than layered.",
+      "R3": "TL;DR answers the four questions with setting-qualified numbers ('비사고 설정', L30-31). Closing (L409-417) is the writer's own judgement, separates its inference from the paper ('논문이 직접 내린 진단은 아닙니다', L413), names concrete limits (non-thinking-only comparison, in-house Chinese benchmark) and when to use K2."
+    },
+    "principles": {
+      "claim_headings": "met - e.g. L46 '희소도를 높이고 어텐션 헤드를 줄인 MLA 기반 MoE 구조', L307; partly undermined by L36 three-vs-two mismatch",
+      "running_example": "met - airline change task L42, L224, L228, L413",
+      "mechanism_design_formula_example": "met for QK-Clip (L102-124) and RL objective (L263-269); not met for infra",
+      "facts_said_once": "mostly met - 15.5T and 65.8 each twice (TL;DR + body)",
+      "numbers_with_scope_unit": "mostly met - 'non-thinking', Avg@64, Pass@1 given; L387 mislabels win-rate scope",
+      "nothing_invented": "partly met - L379 overclaim, L387 mislabel, L102 generic alternatives",
+      "own_assessment_at_end": "met - L409-417",
+      "length_fitted_to_difficulty": "partly met - too short for the paper's hard infra/RL parts",
+      "type_specific_shape": "met - TL;DR then reader-question sections, no 초록/서론 section",
+      "korean_style": "met"
+    },
+    "claims": {
+      "checked": 28,
+      "supported": 25,
+      "unsupported": 1,
+      "wrong": 2,
+      "unverifiable": 0,
+      "error_rate": 0.107,
+      "numeric_claims": 16,
+      "examples": [
+        {"line": 57, "claim": "671B->1.04T (+54%), 37B->32.6B (-13%)", "verdict": "supported", "source": "Table 2"},
+        {"line": 78, "claim": "sparsity 48 needs 1.69x/1.39x/1.15x fewer FLOPs than 8/16/32 at val loss 1.5", "verdict": "supported", "source": "Sec 2.3"},
+        {"line": 92, "claim": "doubling heads improves val loss 0.5%-1.2%", "verdict": "supported", "source": "Sec 2.3 / Fig 6"},
+        {"line": 150, "claim": "0.5B active/3B total, tau=30, no significant degradation", "verdict": "supported", "source": "Appendix D"},
+        {"line": 184, "claim": "SimpleQA 23.76 / 27.39 / 28.94", "verdict": "supported", "source": "Table 1"},
+        {"line": 283, "claim": "FP8-E4M3 in 1x128 tiles with FP32 scales, storage only", "verdict": "supported", "source": "Sec 2.4.3"},
+        {"line": 325, "claim": "tau2 66.1 vs DeepSeek 48.8 / Qwen 37.3; ACEBench 76.5 vs GPT-4.1 80.1", "verdict": "supported", "source": "Appendix C"},
+        {"line": 345, "claim": "coding/math table (30 cells)", "verdict": "supported", "source": "Table 3"},
+        {"line": 365, "claim": "base-model table (20 cells), MMLU and Chinese 5-shot", "verdict": "supported", "source": "Table 4"},
+        {"line": 379, "claim": "Arena-Hard v2.0 hard prompt 54.5 is best on both items", "verdict": "wrong", "source": "Table 3: Claude Opus 4 59.7 on Hard Prompt"},
+        {"line": 387, "claim": "win rates 65.4/64.6/59.6 are '무승부 제외'", "verdict": "wrong", "source": "Appendix C: plain win rates; loss ~17%"},
+        {"line": 102, "claim": "alternatives: change attention or add a loss regularizer", "verdict": "unsupported", "source": "paper names logit soft-cap and QK-Norm"}
+      ]
+    },
+    "checklist": {
+      "repeated": 0, "avoided": 9, "na": 8, "repeated_ids": [],
+      "detail": {
+        "rl-section-duplicated": "avoided - one RL H2 (L234), no duplicate infra heading",
+        "rl-subheading-levels": "avoided - L244/L250/L261 are H3 under L234",
+        "ppo-claim": "avoided - L263 'K1.5의 정책 최적화 알고리즘'",
+        "invented-budget-formula": "n/a - budget control not covered (L271)",
+        "invented-ptx-formula": "n/a - PTX not covered",
+        "invented-temperature-formula": "n/a - not covered",
+        "invented-env-code": "avoided - L240 mentions Gym-like framework, no code",
+        "invented-math-verifier": "avoided - L246-248 coverage + pass@k",
+        "invented-logic-verifier": "avoided",
+        "invented-code-quality-eval": "n/a - RL coding rewards not covered",
+        "invented-safety-monitoring": "n/a - safety RL not covered",
+        "invented-self-refine-loop": "avoided - L242 pairwise comparison",
+        "invented-human-rubric-content": "n/a",
+        "rubric-limitation-garbled": "n/a",
+        "invented-infra-mechanisms": "avoided - L287-305 follow Appendix G",
+        "missing-description": "avoided - L8 starts 'Kimi K2', 138 chars, TL;DR numbers",
+        "arxiv-https": "avoided - L422 https"
+      }
+    },
+    "top_issues": [
+      "L271 (and overall): large coverage gaps - budget control/PTX/temperature decay explicitly skipped; no training infra or LR recipe, no RL domains (IF, faithfulness, coding, safety), no critic refinement, no safety evaluation",
+      "L379: '두 항목 모두 최고 성적' for Arena-Hard hard prompts contradicts Table 3 (Claude Opus 4 59.7 > 54.5)",
+      "L387: win-rate column labelled '무승부 제외', a definition the paper does not use; plus L36 heading promises three bottlenecks while L38-44 give two"
+    ]
+  },
+  "Y": {
+    "file": "/tmp/judge2/review-kimi-g1/review-kimi-Y.md",
+    "scores": {"A": 7.5, "B": 8.0, "C": 8.0, "D": 8.0, "E": 8.5, "F": 7.0},
+    "type_scores": {"R1": 9.0, "R2": 8.0, "R3": 7.5},
+    "reasons": {
+      "A": "Valid front matter (description 131 chars, https links), $$-only math, Liquid wrapped in {% raw %} (L452-466). Deductions: L34-50 '## Kimi K2 개요' is an intro section right after the TL;DR that restates the TL;DR numbers; L840-842 '### 결론부의 요약' restates the paper's conclusion; several topic headings ('L52 사전 지식: ...', 'L600 RL 알고리즘: ...', 'L736 Kimi-K2-Instruct 평가: ...'); 86 headings make the post sprawling.",
+      "B": "Natural Korean, consistent terms, good register. Deductions: 9x '할 수 있습니다' including cases that simply happen; '논씽킹' transliteration where '비사고' or 'non-thinking' would read better (L28, L46); some long stacked sentences (L767, L777).",
+      "C": "Background (Muon, MoE/MLA) introduced before use and referred back accurately ('앞서 본 로짓 식', L150; '앞서 설명한 PP·EP·ZeRO-1', L654). Deductions: overview section duplicates TL;DR so the reader meets the same 8 numbers three times (L28-29, L50, L756-777); architecture table appears after MuonClip although MLA was already introduced, causing some back-and-forth.",
+      "D": "Excellent help on hard parts: RMS matching derivation with 1024x4096 example (L74), why QK-Norm fails on MLA (L88, L104), per-head vs naive clip numeric example (L146), alpha interpretation (L156), effective-rank and 2x2 toy examples (L201, L221), K1.5 objective worked example (L628), closed-loop critic scenario (L572). Deductions for padding the easy: AdamW primer (L58), InstructGPT 3-step RLHF (L525), Gym reset/step (L734), red-teaming and few-shot definitions (L805, L815).",
+      "E": "18 figures each introduced with what to look at; tables verbatim with stated omissions (L765 'Gemini 2.5 Flash 열은 생략', L836 '일부 행만 옮겼습니다'); tool template code is the paper's (L438-466); math used where it clarifies. Minor: two adjacent t-SNE figures (L398-400) with one shared sentence.",
+      "F": "0 wrong, 2 unsupported, 1 unverifiable of 39 sampled claims. L838 'Criminal·Privacy·Security의 프롬프트 인젝션과 반복 탈옥 일부 조합에서 K2는 다른 모델보다 통과율이 낮습니다' overgeneralizes and conflicts with its own table L831 (DeepSeek-R1 69.70 < K2 75.76) and Table 6 (Criminal-IJ K2 highest 57.57). L848 '저자들은 후속 릴리스에서 이 문제들을 해결...' extends the paper's future-release pledge (Sec 5 limitations only) to every issue listed. L46 '8개 벤치마크' figure unverifiable from text. Notably corrects two paper-prose overclaims against Table 3 (L777 GPQA vs Opus 74.9, L791 Arena-Hard second to Opus 59.7).",
+      "R1": "Near-complete section-by-section coverage: MuonClip incl. appendix hypothesis and 12.7%/70k statistic, data rephrasing, architecture, parallelism/EP/activation memory, LR recipe, SFT and tool template/enforcer, every RL domain, self-critique with rubrics and critic refinement, budget/PTX/temperature, RL infra incl. startup and partial rollout, full instruct/base/safety evaluations.",
+      "R2": "Consistent intuition -> formula -> worked example layering on every hard mechanism. Deduction: length (~57k chars) overshoots; easy background is padded at the same depth as hard parts.",
+      "R3": "TL;DR is concrete and scoped (L25, L28-30). Closing (L844-850) has a real assessment with specific gaps (ablation only at 0.5B/tau=30, no 1T AdamW comparison, H800-specific choices) and use guidance tied to numbers (43.90, MRCR 55.0). Deductions: the closing re-lists the paper's limitations at length, L848 stretches the future-work claim, and L840-842 restates the paper's conclusion."
+    },
+    "principles": {
+      "claim_headings": "partly met - claim-like L90, L229, L519; topic-style L34, L52, L600, L736, L840",
+      "running_example": "partly met - several local illustrative examples (flight booking L408, weather tool L468) but no single input followed through the post",
+      "mechanism_design_formula_example": "met - QK-Clip L122-156, RMS matching L74, objective L612-630",
+      "facts_said_once": "not met - 15.5T five times, 65.8 four times, LMSYS rank three times (L30, L50, L797)",
+      "numbers_with_scope_unit": "met - modes, Avg@k, '*' report-sourced values flagged (L767, L777)",
+      "nothing_invented": "mostly met - outside formulas attributed (InstructGPT PTX L642), illustrative numbers labelled; L838 and L848 stretch",
+      "own_assessment_at_end": "partly met - L846 and L850 are own judgement, L848 is a recap of paper limitations",
+      "length_fitted_to_difficulty": "partly met - hard parts get depth, but easy background is also expanded",
+      "type_specific_shape": "partly met - overview/intro section after TL;DR (L34) and conclusion recap (L840)",
+      "korean_style": "mostly met - '할 수 있습니다' frequency, '논씽킹' transliteration"
+    },
+    "claims": {
+      "checked": 39,
+      "supported": 36,
+      "unsupported": 2,
+      "wrong": 0,
+      "unverifiable": 1,
+      "error_rate": 0.053,
+      "numeric_claims": 30,
+      "examples": [
+        {"line": 25, "claim": "12.7% of heads clipped in first 70,000 steps; 3,000+ MCP, 20,000+ synthetic tools; update < 30 s", "verdict": "supported", "source": "Appendix D, Sec 3.1.1, 3.3.2"},
+        {"line": 74, "claim": "orthogonal update RMS 1/sqrt(max(n,m)); 1024x4096 -> 1/64", "verdict": "supported", "source": "derivation consistent with Eq. for Muon update"},
+        {"line": 169, "claim": "9B active/53B total vanilla Muon, max logit > 1000", "verdict": "supported", "source": "Sec 2.1"},
+        {"line": 179, "claim": "logits decay after ~30% of training steps", "verdict": "supported", "source": "Fig 2 caption"},
+        {"line": 291, "claim": "1.69/1.39/1.15x and ~13% = 1-1/1.15", "verdict": "supported", "source": "Sec 2.3 + arithmetic"},
+        {"line": 295, "claim": "128k: 64->128 heads = +83% inference FLOPs", "verdict": "supported", "source": "Sec 2.3"},
+        {"line": 309, "claim": "2 TB RAM, 8 GPUs/node, 8x400 Gbps RoCE", "verdict": "supported", "source": "Sec 2.4.1"},
+        {"line": 359, "claim": "10T @2e-4, 5.5T cosine->2e-5, 400B 4k + 60B 32k, 2e-5->7e-6, 67M batch", "verdict": "supported", "source": "Sec 2.5"},
+        {"line": 756, "claim": "agentic/competitive coding table (48 cells)", "verdict": "supported", "source": "Table 3"},
+        {"line": 773, "claim": "tau2 Telecom 65.8 vs Opus 57.0; Retail 70.6 vs 81.8; Airline 56.5 vs 60.0", "verdict": "supported", "source": "Table 3"},
+        {"line": 777, "claim": "math avg +5.3 / +5.5 / +15.8; HLE 4.7 below all but GPT-4.1", "verdict": "supported", "source": "Appendix C, Table 3"},
+        {"line": 791, "claim": "Arena-Hard hard prompt 54.5, second to Opus 59.7", "verdict": "supported", "source": "Table 3"},
+        {"line": 809, "claim": "base: 10/12 English; GPQA 50.51 vs 48.11; HellaSwag 95.27 vs 94.60; CMATH -0.27", "verdict": "supported", "source": "Table 4"},
+        {"line": 829, "claim": "six safety rows", "verdict": "supported", "source": "Table 6"},
+        {"line": 838, "claim": "K2 lower than other models on Criminal/Privacy/Security PI and IJ combos", "verdict": "unsupported", "source": "Table 6: Criminal-PI R1 69.70 < K2 75.76; Criminal-IJ K2 highest"},
+        {"line": 848, "claim": "authors will fix all listed problems in later releases", "verdict": "unsupported", "source": "Sec 5 pledge covers only its three limitations"},
+        {"line": 46, "claim": "figure compares 8 benchmarks", "verdict": "unverifiable", "source": "Figure 1 image"}
+      ]
+    },
+    "checklist": {
+      "repeated": 1, "avoided": 16, "na": 0, "repeated_ids": ["rl-subheading-levels"],
+      "detail": {
+        "rl-section-duplicated": "avoided - L472, L650, L652 each once",
+        "rl-subheading-levels": "repeated - verifiable rewards (L472), self-critique (L519) and RL algorithm (L600) are sibling H2s with no single RL heading above them",
+        "ppo-claim": "avoided - L602 'Kimi K1.5의 정책 최적화 알고리즘'; PPO only as contrast",
+        "invented-budget-formula": "avoided - L638 per-sample max token budget, truncation + penalty, no formula",
+        "invented-ptx-formula": "avoided - L642 formula attributed to InstructGPT; L644 K2 uses curated high-quality samples",
+        "invented-temperature-formula": "avoided - L648 schedule described, no functional form",
+        "invented-env-code": "avoided - L734 describes OpenAI Gym API in prose as Gym's, no class code",
+        "invented-math-verifier": "avoided - L480-484 coverage + pass@k",
+        "invented-logic-verifier": "avoided",
+        "invented-code-quality-eval": "avoided - L507 unit tests, Kubernetes, 10,000+ sandboxes",
+        "invented-safety-monitoring": "avoided - L511-517 attack/target/judge, binary labels",
+        "invented-self-refine-loop": "avoided - L545-547 generate, pairwise compare, rank",
+        "invented-human-rubric-content": "avoided - L555 data-team rubrics for specific instructional contexts",
+        "rubric-limitation-garbled": "avoided - L595-598 hedging/disclaimer ban -> overstated certainty",
+        "invented-infra-mechanisms": "avoided - L666-718 follow Sec 3.3.2 and Appendix G",
+        "missing-description": "avoided - L8 starts 'Kimi K2', 131 chars, TL;DR numbers",
+        "arxiv-https": "avoided - all arXiv links https"
+      }
+    },
+    "top_issues": [
+      "L34-50 and L840-842: an overview section after the TL;DR and a conclusion recap repeat the headline numbers (65.8 four times, 15.5T five times), against the no-intro and facts-once rules",
+      "L838: safety weakness overgeneralized; conflicts with its own table row L831 (DeepSeek-R1 69.70 below K2) and Table 6 (Criminal-IJ K2 best)",
+      "L848 extends the authors' future-release pledge to every listed issue; plus length (~57k chars) inflated by easy background (L58 AdamW, L525 RLHF, L734 Gym API, L815 red-teaming)"
+    ]
+  },
+  "preference": {
+    "A": {"winner": "X", "reason": "X follows the TL;DR -> reader-question shape without intro or conclusion-recap sections; Y adds both and many topic headings."},
+    "B": {"winner": "X", "reason": "Both natural; X has fewer stock patterns and no transliteration like '논씽킹'."},
+    "C": {"winner": "tie", "reason": "X has a heading/body mismatch and explicit deferrals; Y has repeated numbers and duplicated overview."},
+    "D": {"winner": "Y", "reason": "Y explains the genuinely hard parts (RMS matching, QK-Norm vs MLA, critic loop) that X skips, despite some padding."},
+    "E": {"winner": "Y", "reason": "Y's tables are verbatim with stated omissions; X packs several models into prose cells."},
+    "F": {"winner": "Y", "reason": "Y: 0 wrong / 2 unsupported in 39 (5.3%) and it corrects the paper's prose overclaims; X: 2 wrong / 1 unsupported in 28 (10.7%), repeating one of those overclaims."},
+    "R1": {"winner": "Y", "reason": "Y covers nearly every section incl. infra, RL domains and safety; X omits large parts."},
+    "R2": {"winner": "Y", "reason": "Both layer well; Y layers every hard mechanism, X cuts hard parts instead of layering them."},
+    "R3": {"winner": "X", "reason": "X's closing is a tighter own judgement with inference labelled; Y's mixes recap and a stretched future-work claim."},
+    "overall": {"winner": "Y", "reason": "Y wins on depth and factual accuracy, the higher-stakes criteria; X is cleaner and better shaped but thinner and less accurate."}
+  }
+}

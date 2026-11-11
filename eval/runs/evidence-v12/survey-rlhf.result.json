@@ -1,0 +1,120 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-rlhf.json",
+  "title": "Preference Optimization for LLM Alignment: From RLHF to DPO and GRPO",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-llm-rlhf-dpo-da36ac9a/2026-11-07-preference-optimization-for-llm-alignment-from-rlhf-to-dpo-and-grpo.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-preference-optimization-for-llm-alignment-from-rlhf-to-dpo-and-grpo.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '사람의 유해성 라벨을 원칙과 모델 판정으로 대체한 AI 피드백' still has: an evidence marker stands for a word; state the fact and put the marker at the end of the sentence: 클램핑이 필요할 만큼 치우친 CoT 확률 [[E104]], 높은 점수에서 흐트러지는 선호 모델 보정 [[E101]], 지시 문구 하나에 좌우된 회피 성향 [[E97]]이 모두 라벨의 질이 판정자와 프롬프트 설계에 달려 있음을 보여 줍니다.",
+    "Section '명시적 보상 모델이 없어도 되돌아오는 과최적화와 길이 편향': check 2 sentence(s) the evidence may not support: SPPO 논문의 Mistral-7B 실험에서는 AlpacaEval 2.0 평균 출력 길이가 DPO와 IPO에서 크게 늘었습니다. (numbers not in its evidence) | Mistral-7B에서는 DPO, IPO, SPPO 모두 이후 반복에서 성능이 떨어졌습니다. (numbers not in its evidence)",
+    "Section '명시적 보상 모델이 없어도 되돌아오는 과최적화와 길이 편향' still has: numbers ['7B'] without evidence (cite it; an illustration of your own ends with [[EX]]): SPPO 논문의 Mistral-7B 실험에서는 AlpacaEval 2.0 평균 출력 길이가 DPO와 IPO에서 크게 늘었습니다. | numbers ['7B'] without evidence (cite it; an illustration of your own ends with [[EX]]): Mistral-7B에서는 DPO, IPO, SPPO 모두 이후 반복에서 성능이 떨어졌습니다.",
+    "Section '보상 모델의 유무보다 데이터의 온폴리시성과 정규화 방식이 좌우하는 정렬 성능' still has: evidence ['E217'] was already referred back to once; do not restate it again: 온라인 IPO는 이 정적 분포를 현재 정책에서 뽑은 쌍으로 바꿉니다 . | evidence ['E227'] was already referred back to once; do not restate it again: SPPO는 반복할 때마다 길이 보정 승률과 원시 승률이 함께 꾸준히 올랐습니다 . | evidence ['E241'] was already referred back to once; do not restate it again: RL을 쓰지 않는 반복 DPO도 매 반복 직전 모델이 생성한 응답에서 새 쌍을 만들어 데이터에 누적합니다 . | evidence ['E245'] was already referred back to once; do not restate it again: 그 결과 평균 로그우도와 응답 길이의 상관이 DPO보다 낮아졌습니다 . | evidence ['E233'] was already referred back to once; do not restate it again: 출력 길이도 DPO·IPO보다 완만하게 늘었습니다 ."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3056.5,
+  "input_tokens": 2797839,
+  "output_tokens": 357719,
+  "estimated_cost_usd": 13.8193,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 95,
+      "failed_calls": 0,
+      "input_tokens": 602817,
+      "output_tokens": 357719,
+      "cache_read_tokens": 1422427,
+      "cache_write_tokens": 772595,
+      "cost_usd": 13.81931
+    },
+    "by_stage": {
+      "read": {
+        "calls": 7,
+        "failed_calls": 0,
+        "input_tokens": 16,
+        "output_tokens": 10895,
+        "cache_read_tokens": 114140,
+        "cache_write_tokens": 18587,
+        "cost_usd": 0.178276
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 11890,
+        "cache_read_tokens": 2045,
+        "cache_write_tokens": 59630,
+        "cost_usd": 0.536784
+      },
+      "verify": {
+        "calls": 41,
+        "failed_calls": 0,
+        "input_tokens": 433079,
+        "output_tokens": 76908,
+        "cache_read_tokens": 1102580,
+        "cache_write_tokens": 309066,
+        "cost_usd": 5.256832
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 70779,
+        "cache_read_tokens": 27020,
+        "cache_write_tokens": 238242,
+        "cost_usd": 2.617776
+      },
+      "review": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 28627,
+        "cache_read_tokens": 16218,
+        "cache_write_tokens": 58902,
+        "cost_usd": 0.873713
+      },
+      "fix": {
+        "calls": 23,
+        "failed_calls": 0,
+        "input_tokens": 153179,
+        "output_tokens": 157742,
+        "cache_read_tokens": 160424,
+        "cache_write_tokens": 88168,
+        "cost_usd": 4.272565
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 16451,
+        "output_tokens": 878,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.083364
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 7,
+        "failed_calls": 0,
+        "input_tokens": 16,
+        "output_tokens": 10895,
+        "cache_read_tokens": 114140,
+        "cache_write_tokens": 18587,
+        "cost_usd": 0.178276
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 88,
+        "failed_calls": 0,
+        "input_tokens": 602801,
+        "output_tokens": 346824,
+        "cache_read_tokens": 1308287,
+        "cache_write_tokens": 754008,
+        "cost_usd": 13.641034
+      }
+    }
+  }
+}

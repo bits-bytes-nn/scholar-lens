@@ -1,0 +1,796 @@
+{
+ "item": "review-dpo",
+ "kind": "review",
+ "source": "2305.18290",
+ "criteria_note": "Scored A-F, G, X1, R1-R3 per eval/ARTIFACT_RUBRIC.md; claims checked against https://arxiv.org/html/2305.18290 (v3 HTML incl. appendices). G judged by inspection only (validator/blog lint not run). Prose length = body minus front matter, headings, fenced code, display-math blocks, tables, images and References, newlines excluded, spaces included. Single judge pass.",
+ "X": {
+  "prose_length_chars": 24023,
+  "mean_score": 7.91,
+  "scores": {
+   "A": {
+    "score": 8.5,
+    "reason": "Front matter complete (subtitle, paper_author, paper_doi, description, two-level categories, use_math). Deductions: stray one-line blockquote L331 '> 같은 목적함수 안에서는 오히려 RL 루프보다 더 잘 풀었습니다.' with no function; KL written with \\mid\\mid instead of \\Vert at L72, L80, L321."
+   },
+   "B": {
+    "score": 7.5,
+    "reason": "Natural 입니다 register overall. Deductions: L370 '응답이 모델의 분포 안에 있도록 하려는 조치이며' has no stated antecedent (rewrite: '그래서 선호 응답으로 Preferred-FT 학습한 모델을 참조 모델로 두어 응답이 모델 분포 안에 있게 했고'); L376 '근거는 두 가지입니다' omits what the reasons support; English default verb frames 'L21 언어모델이 곧 암묵적 보상 모델 역할을 합니다', L94 '역할을 함께 맡습니다'."
+   },
+   "C": {
+    "score": 7.0,
+    "reason": "Mostly good arc, but L44 describes the pipeline figure ('도식에서는 단계 수를 비교하면 됩니다') 50 lines before it appears (L96) and L98 repeats the same description; L372 '두 기준선과 같거나 더 나았습니다' names no two baselines (2-shot Pythia never introduced in that section); L376 jumps from 'PPO model failed' to '근거는 두 가지' without saying Best of 128 is the proxy; human-study conclusion stated twice (L447 and L451)."
+   },
+   "D": {
+    "score": 8.5,
+    "reason": "Help lands on hard points: worked numeric examples for BT loss (L66), closed form with beta change (L86), DPO loss on one TL;DR pair (L128), equivalence class (L146), gradient weight (L202). Easy parts not padded. Minor: L198 and L212 re-explain the weight saturation twice."
+   },
+   "E": {
+    "score": 7.5,
+    "reason": "Good tables (defaults L259, sweep L314, CNN/DM L357, human study L437) and the paper's loss code. Deductions: the headline TL;DR temperature/win-rate figure and the HH win-rate figure are absent, so the main results (L343, L366) have no visual; pipeline figure described twice (L44, L98); the survey-UI screenshot (L427) adds little."
+   },
+   "F": {
+    "score": 8.0,
+    "reason": "27 claims checked, 1 unsupported: L268 '과제별로 바뀐 값은 TL;DR 요약의 β 하나이고' although IMDb sweeps beta (L317 itself). Symbol rule: KL uses \\mid\\mid (L72, L321). Everything else matched the source, including tables 1-2, the 275/150/100/125 counts and the excluded rater."
+   },
+   "G": {
+    "score": 9.0,
+    "reason": "use_math true with $$ math; description 124 chars, starts with DPO, numbers 61%/57% appear in TL;DR; no Liquid; fence 'python'; https arXiv link. No violations found by inspection (validator not run)."
+   },
+   "X1": {
+    "score": 7.0,
+    "reason": "Category Finetuning fits. Tags: 'Bradley-Terry-Loss' is not the paper's term (paper: Bradley-Terry model), 'RLHF-Alternative' restates the claim; five tags with two generic ones."
+   },
+   "R1": {
+    "score": 8.0,
+    "reason": "Covers derivation, equivalence classes, Theorem 1 with uniqueness, gradient, PPO instability, setup, all three tasks, human study and limitations. Less depth than possible: Plackett-Luce loss only sketched (L178), gradient derivation not shown, appendix derivation of Eq. 4 compressed (L76-80)."
+   },
+   "R2": {
+    "score": 8.0,
+    "reason": "Layering intuition -> formula -> toy number is consistent (L56-66, L76-86, L124-130). Length (24k chars) is reasonable for DPO's difficulty."
+   },
+   "R3": {
+    "score": 8.0,
+    "reason": "TL;DR answers four questions concretely with settings (L31 GPT-J, temp 0.0). Closing L470-480 is a genuine own judgment with when-to-use and three cautions, labelled as the writer's interpretation (L474). Deduction: future-work list (L461-464) omits eliciting judgments from automated systems, self-labeling and other modalities."
+   }
+  },
+  "principles": {
+   "claim headings": {
+    "verdict": "met",
+    "evidence": "Body headings are claim noun phrases: L36 '두 단계 학습과 루프 내 샘플링이 만드는 RLHF의 부담', L180 '순서를 잘못 매긴 쌍에 더 크게 반응하는 DPO 그래디언트', L304, L386."
+   },
+   "running example": {
+    "verdict": "met",
+    "evidence": "One Reddit TL;DR pair (x, y_w, y_l) runs through the post: L42, L48, L124-128, L146, L200-202, L268, L409, L413."
+   },
+   "mechanism -> design choice -> formula -> worked example": {
+    "verdict": "met",
+    "evidence": "e.g. L102-128: reparameterization -> why Z cancels -> DPO loss -> numeric pair loss 0.555 vs 0.693."
+   },
+   "facts said once": {
+    "verdict": "partly met",
+    "evidence": "Pipeline figure described at L44 and again L98; GPT-4-proxy conclusion at L447 and L451; Best-of-N cost at L296 and L384."
+   },
+   "numbers with variant, scope and unit": {
+    "verdict": "partly met",
+    "evidence": "Mostly scoped (L31 'GPT-J SFT 기반... 온도 0.0'); L268 overstates beta scope; L27 TL;DR lists defaults without the TL;DR beta exception."
+   },
+   "nothing invented": {
+    "verdict": "met",
+    "evidence": "Toy numbers flagged as '가상' (L66, L86, L128, L146, L202); length-bias speculation explicitly labelled as the writer's (L474)."
+   },
+   "writer's own assessment at the end": {
+    "verdict": "met",
+    "evidence": "L470-480 '이 글의 판단: 언제 쓰고 무엇을 조심할까' with three concrete cautions."
+   },
+   "length fitted to difficulty": {
+    "verdict": "met",
+    "evidence": "24.0k chars of prose; hard steps get examples, background is brief."
+   },
+   "type-specific shape": {
+    "verdict": "met",
+    "evidence": "TL;DR with four questions, no abstract/intro section after it, closing limitations and implications."
+   },
+   "Korean style": {
+    "verdict": "partly met",
+    "evidence": "Varied sentences, Korean headings; dangling sentences L370, L376; '역할을 합니다' L21."
+   }
+  },
+  "claims": {
+   "checked": 27,
+   "numbers_checked": 15,
+   "supported": 25,
+   "unsupported": 1,
+   "wrong": 0,
+   "unverifiable": 1,
+   "error_rate": 0.037,
+   "items": [
+    {
+     "line": 27,
+     "claim": "default beta=0.1, batch 64, RMSprop, lr 1e-6",
+     "verdict": "supported",
+     "number": true,
+     "source": "App. B: 'Unless noted otherwise, we use a beta=0.1, batch size of 64 and the RMSprop optimizer with a learning rate of 1e-6'"
+    },
+    {
+     "line": 262,
+     "claim": "beta=0.5 for TL;DR summarization",
+     "verdict": "supported",
+     "number": true,
+     "source": "App. B: 'For TL;DR summarization, we use beta=0.5'"
+    },
+    {
+     "line": 266,
+     "claim": "LR warmup 0 to 1e-6 over 150 steps",
+     "verdict": "supported",
+     "number": true,
+     "source": "App. B: 'We linearly warmup the learning rate from 0 to 1e-6 over 150 steps.'"
+    },
+    {
+     "line": 282,
+     "claim": "Anthropic HH has 170k dialogues",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 6: 'containing 170k dialogues between a human and an automated assistant'"
+    },
+    {
+     "line": 284,
+     "claim": "4 completions for 25000 prefixes, 6 preference pairs per prefix",
+     "verdict": "supported",
+     "number": true,
+     "source": "App. C.1: 'sample 4 completions for 25000 prefixes and create 6 preference pairs for each prefix'"
+    },
+    {
+     "line": 316,
+     "claim": "sweep: PPO target KL {3,6,9,12}, DPO beta {0.05,0.1,1,5}, unlikelihood alpha {0.05,0.1,0.5,1}",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 6.1 sweep sentence"
+    },
+    {
+     "line": 321,
+     "claim": "22 runs in total; sequence KL is the sum of per-timestep KLs",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 6.1: 'This sweep includes 22 runs in total.'"
+    },
+    {
+     "line": 343,
+     "claim": "DPO ~61% at temp 0.0 vs PPO 57% at its best temp 0.0",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 6.2: 'approximately 61% at a temperature of 0.0, exceeding the win rate of 57% for PPO at its optimal sampling temperature of 0.0'"
+    },
+    {
+     "line": 353,
+     "claim": "human eval: DPO temp 0.25 preferred 58% over PPO temp 0",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 6.2: 'DPO samples at temperature 0.25 were preferred 58% times over PPO samples at temperature 0'"
+    },
+    {
+     "line": 357,
+     "claim": "CNN/DM win rates DPO 0.36/0.31, PPO 0.26/0.23",
+     "verdict": "supported",
+     "number": true,
+     "source": "Table 1"
+    },
+    {
+     "line": 355,
+     "claim": "CNN/DM prompt same as TL;DR with 'forum post' replaced by 'news article'",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 6.3: 'using the same GPT-4 (C) prompt we used for Reddit TL;DR, but replacing...' (post does not name the C prompt here)"
+    },
+    {
+     "line": 378,
+     "claim": "Best of N for N=1,4,16,64,128; plateau after roughly 64-128",
+     "verdict": "supported",
+     "number": true,
+     "source": "Fig. 4 caption: 'Performance plateaus after roughly 64-128 samples.'"
+    },
+    {
+     "line": 431,
+     "claim": "25 volunteers x 25 summaries; one late, excluded; 150 DPO-PPO-0 and 100 PPO-1-PPO-0 with two humans; 275 judgments; 125 SFT single; ties ~1%; raw agreement",
+     "verdict": "supported",
+     "number": true,
+     "source": "App. D.3 passage incl. footnote 'One volunteer did not respond for the DPO-PPO comparison.'"
+    },
+    {
+     "line": 437,
+     "claim": "human-study table 272/122/199, 47/27/13, 54/32/12, 58/43/17, 70/77/86, 67/79/85, 65/-/87",
+     "verdict": "supported",
+     "number": true,
+     "source": "Table 2"
+    },
+    {
+     "line": 449,
+     "claim": "GPT-4 win rates below human win rates in all three; gap generally smaller with C",
+     "verdict": "supported",
+     "number": false,
+     "source": "Derived from Table 2 (DPO 47/54 vs 58; SFT 27/32 vs 43; PPO-1 13/12 vs 17)"
+    },
+    {
+     "line": 463,
+     "claim": "experiments up to 6B parameters",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 7: 'while we evaluate models up to 6B parameters'"
+    },
+    {
+     "line": 268,
+     "claim": "the only per-task change from defaults is the TL;DR beta",
+     "verdict": "unsupported",
+     "number": false,
+     "source": "App. B gives TL;DR beta=0.5, but Sec. 6.1 sweeps DPO beta in {0.05,0.1,1,5} on IMDb, so beta is also changed there"
+    },
+    {
+     "line": 376,
+     "claim": "public PPO HH model never beat base Pythia-2.8B",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 6.2: 'fail to find a prompt or sampling temperature that gives performance better than the base Pythia-2.8B model'"
+    },
+    {
+     "line": 362,
+     "claim": "PPO uses additional unlabeled TL;DR prompts, DPO does not",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 6.3"
+    },
+    {
+     "line": 329,
+     "claim": "DPO frontier strictly dominates PPO and beats PPO-GT",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 6.1: 'DPO's reward/KL tradeoff strictly dominates that of PPO'... 'even when PPO can access ground truth rewards'"
+    },
+    {
+     "line": 327,
+     "claim": "two PPO-GT implementations (tuned, TRL); 'yellow DPO points'",
+     "verdict": "unverifiable",
+     "number": false,
+     "source": "Two implementations supported (Sec. 6); point colour can only be read off the figure"
+    },
+    {
+     "line": 468,
+     "claim": "'7 plus 2': chosen says 11, GPT-4 judges it correct over DPO's 9",
+     "verdict": "supported",
+     "number": false,
+     "source": "App. D.2 Table 10"
+    },
+    {
+     "line": 293,
+     "claim": "Unlikelihood only in sentiment; meaningless responses from unconstrained likelihood minimization",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 6 Methods"
+    },
+    {
+     "line": 60,
+     "claim": "Bradley-Terry from 1952 paired-comparison paper",
+     "verdict": "supported",
+     "number": true,
+     "source": "Ref [5] Biometrika 1952"
+    },
+    {
+     "line": 345,
+     "claim": "beta not meaningfully tuned, may underestimate DPO",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 6.2"
+    },
+    {
+     "line": 120,
+     "claim": "plugging r=beta log(pi_theta/pi_ref) gives Z(x)=1 and pi_theta back",
+     "verdict": "supported",
+     "number": false,
+     "source": "Follows from Eq. 4/Sec. 5 (normalization condition)"
+    },
+    {
+     "line": 292,
+     "claim": "GPT-J zero-shot for summarization, Pythia-2.8B 2-shot for dialogue",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 6 Methods"
+    }
+   ]
+  },
+  "checklist": {
+   "repeated": 3,
+   "avoided": 11,
+   "na": 3,
+   "repeated_ids": [
+    "future-work-ranking-invented",
+    "cnn-dm-prompt-variant",
+    "overoptimization-figure-ref"
+   ],
+   "details": {
+    "implementation-fragment": {
+     "verdict": "avoided",
+     "evidence": "L24 and L229-233 explain pi_ref = pi^SFT or MLE on y_w before the loss; no broken fragment."
+    },
+    "beta-tldr": {
+     "verdict": "avoided",
+     "evidence": "L261-262 table lists beta 0.1 default and 0.5 for TL;DR; L268 'TL;DR 요약의 β' exception."
+    },
+    "future-work-ranking-invented": {
+     "verdict": "repeated",
+     "evidence": "No invented conditional preferences, but the future-work list L461-464 omits eliciting high-quality judgments from automated evaluators and other modalities."
+    },
+    "plackett-luce-not-future": {
+     "verdict": "avoided",
+     "evidence": "L112 and L172-178 present the Plackett-Luce derivation as already done by the authors."
+    },
+    "ppo-clip-objective": {
+     "verdict": "n/a",
+     "evidence": "No PPO objective given."
+    },
+    "partition-function-size": {
+     "verdict": "n/a",
+     "evidence": "L90 says y ranges over all token sequences; no size (quadratic or |V|^L) stated."
+    },
+    "cnn-dm-prompt-variant": {
+     "verdict": "repeated",
+     "evidence": "L355 'GPT-4 프롬프트는 TL;DR과 같게 두고' does not name the C prompt."
+    },
+    "human-study-columns": {
+     "verdict": "avoided",
+     "evidence": "L437 columns DPO/SFT/PPO-1 with L447 '모든 대결의 상대는 온도 0의 PPO'; no PPO-N."
+    },
+    "human-study-respondents": {
+     "verdict": "avoided",
+     "evidence": "L439 '응답 수 | 272 | 122 | 199'."
+    },
+    "multi-judgment-comparisons": {
+     "verdict": "avoided",
+     "evidence": "L431 'DPO 대 PPO-0 비교 150개와 PPO-1 대 PPO-0 비교 100개에는 사람을 두 명씩'."
+    },
+    "overoptimization-figure-ref": {
+     "verdict": "repeated",
+     "evidence": "L462 '학습 후반에 보이는 소폭의 성능 하락' not tied to the dialogue training curve (Fig. 3 right)."
+    },
+    "gradient-u-definition": {
+     "verdict": "n/a",
+     "evidence": "No u variable defined."
+    },
+    "gradient-sigma-argument": {
+     "verdict": "avoided",
+     "evidence": "L189 and L196 use sigma(r_hat(y_l)-r_hat(y_w)), consistent with L202 example."
+    },
+    "best-of-n-invented": {
+     "verdict": "avoided",
+     "evidence": "L378 only states the 64-128 plateau."
+    },
+    "excluded-participant": {
+     "verdict": "avoided",
+     "evidence": "L431 '늦게 제출한 한 명은 최종 분석에서 뺐습니다'."
+    },
+    "missing-description": {
+     "verdict": "avoided",
+     "evidence": "L9 description starts with 'DPO', uses 61%/57% from TL;DR."
+    },
+    "arxiv-https": {
+     "verdict": "avoided",
+     "evidence": "L485 https://arxiv.org/pdf/2305.18290v3."
+    }
+   }
+  },
+  "top_issues": [
+   "Flow breaks in the dialogue section: L370 dangling '응답이 모델의 분포 안에 있도록 하려는 조치이며', L372 unnamed 'two baselines', L376 '근거는 두 가지' without the Best-of-128-as-proxy conclusion; pipeline figure described twice (L44, L98).",
+   "Scope/checklist slips: L268 says the TL;DR beta is the only per-task change (IMDb sweeps beta); CNN/DM prompt not named as C (L355); over-optimization drop not tied to the dialogue curve (L462); future work omits automated-judgment elicitation and modalities.",
+   "Main result figures (TL;DR temperature curve, HH win rates) are missing."
+  ]
+ },
+ "Y": {
+  "prose_length_chars": 35452,
+  "mean_score": 8.18,
+  "scores": {
+   "A": {
+    "score": 8.0,
+    "reason": "Front matter complete. Deductions: sentence/'~다' heading L316 '이론: 당신의 언어 모델은 사실 보상 모델이다' and label-colon topic heading L61 '배경: 표준 RLHF 파이프라인 — ...'; a '### 정리' subsection restating the conclusion sits inside the experiments section (L581)."
+   },
+   "B": {
+    "score": 8.0,
+    "reason": "Fluent, consistent terms, 입니다 register. Deductions: formulaic sentences L142 '이 유도에서 놓치기 쉬운 점이 있습니다.', L99 '이 제약이 하는 일은 세 가지입니다.', filler L254 '이 가중치의 효과는 식만 봐서는 잘 드러나지 않습니다' (just drop it); question headings L35, L220, L475."
+   },
+   "C": {
+    "score": 8.0,
+    "reason": "Clear four-step derivation with back-references (L107, L166, L230); sections connect. Deductions: the theorem's conclusion is restated four times (L365, L385, L397, L401); the PPO-section takeaway is said twice (L441, L443)."
+   },
+   "D": {
+    "score": 7.5,
+    "reason": "Hard steps get strong help (toy A/B/C example reused for closed form, reparameterization and projection L146, L160, L369; gradient weight table L248; baseline variance example L429). Deductions for padding the trivial for this audience: definition of an equivalence relation with mod-3 example (L322-326), KL definition (L97), sampling temperature (L504), LLM-as-judge (L463), consistency (L218)."
+   },
+   "E": {
+    "score": 8.0,
+    "reason": "Seven figures placed where discussed, gradient-weight table, CNN/DM and human-study tables, paper code with docstring. Deductions: two Best-of-N figures back to back with one-line lead-ins (L528-534); training-curve figure (L540) is lightly discussed."
+   },
+   "F": {
+    "score": 9.0,
+    "reason": "30 claims checked, none unsupported or wrong; derivations sign-consistent (u defined as r_hat(y_l)-r_hat(y_w) explicitly 'with sign flipped', L238, and the final gradient matches). Deduction: L563 gives 25 volunteers without noting one was excluded; several external-source summaries (L111 RWR/AWR, L218 Bong & Rinaldo) are not checkable against the primary source."
+   },
+   "G": {
+    "score": 9.0,
+    "reason": "use_math true; description 136 chars, starts with DPO, numbers 61%/57% in TL;DR; https links; fence 'python'. No violations found by inspection (validator not run)."
+   },
+   "X1": {
+    "score": 7.0,
+    "reason": "Category Finetuning fits. Six tags: 'RL-Free-Preference-Learning' and 'Direct-Preference-Optimization' restate the title; 'Bradley-Terry-Preference-Model' is long; 'Reward-KL-Frontier' and 'Implicit-Reward-Model' are good paper terms."
+   },
+   "R1": {
+    "score": 9.0,
+    "reason": "Most complete technical treatment: full appendix derivation of the closed form (L125-140), BT cancellation steps (L168-176), listwise Plackett-Luce loss (L210), gradient derivation (L238-244), lemmas 1-2, theorem 1 assumptions and why they are needed (L352), uniqueness proof, control-as-inference reading of PPO, full setup and appendix samples."
+   },
+   "R2": {
+    "score": 8.5,
+    "reason": "Explicit 직관/유도/수치로 보기 layering (L236-254) and reused toy example. Deduction: length (35k chars) exceeds what the difficulty needs because of background padding (see D)."
+   },
+   "R3": {
+    "score": 8.0,
+    "reason": "TL;DR concrete with model names (GPT-2-large, GPT-J, Pythia-2.8B). Closing gives practical when-to-use (L591) and real caveats (proxy comparison via Best of 128, L587). Deduction: L589 largely re-lists the paper's future work and L583 restates the paper's conclusion instead of the writer's judgment."
+   }
+  },
+  "principles": {
+   "claim headings": {
+    "verdict": "partly met",
+    "evidence": "Some claim headings (L403, L490 'DPO가 PPO를 엄격히 지배하는 절충'), but several topic/question/sentence headings: L35 'RLHF는 왜 무겁고, DPO는 무엇을 약속하는가', L61 '배경: ...', L316 '이론: ... 이다', L447 '실험 설계: ...'."
+   },
+   "running example": {
+    "verdict": "partly met",
+    "evidence": "A toy A/B/C example recurs in the theory (L146, L160, L369) but there is no single input that runs from motivation to experiments."
+   },
+   "mechanism -> design choice -> formula -> worked example": {
+    "verdict": "met",
+    "evidence": "Four-step derivation with toy numbers (L109-196); gradient 직관/유도/수치 (L236-254)."
+   },
+   "facts said once": {
+    "verdict": "partly met",
+    "evidence": "Theorem conclusion restated L365, L385, L397, L401; PPO normalization takeaway L441 and L443; beta not tuned L512 and L589."
+   },
+   "numbers with variant, scope and unit": {
+    "verdict": "met",
+    "evidence": "e.g. L563 comparison temperatures per arm; L26 TL;DR-only beta=0.5; 6B (60억) L55."
+   },
+   "nothing invented": {
+    "verdict": "met",
+    "evidence": "Toy values flagged '설명을 위한 가상의 예입니다(논문의 수치가 아닙니다)' (L146, L246, L328). External-source content is attributed with links."
+   },
+   "writer's own assessment at the end": {
+    "verdict": "partly met",
+    "evidence": "L587 and L591 give own judgment; L583 and L589 mostly restate the paper's conclusion and future work."
+   },
+   "length fitted to difficulty": {
+    "verdict": "partly met",
+    "evidence": "35.5k chars; padding on basics (equivalence relation L322, KL definition L97, temperature L504)."
+   },
+   "type-specific shape": {
+    "verdict": "partly met",
+    "evidence": "TL;DR present, but the first section L35-59 reads as the paper's introduction re-told."
+   },
+   "Korean style": {
+    "verdict": "met",
+    "evidence": "Natural 입니다 register, varied sentences; a few formulaic lines (L142, L254)."
+   }
+  },
+  "claims": {
+   "checked": 30,
+   "numbers_checked": 15,
+   "supported": 27,
+   "unsupported": 0,
+   "wrong": 0,
+   "unverifiable": 3,
+   "error_rate": 0.0,
+   "items": [
+    {
+     "line": 26,
+     "claim": "beta=0.1, batch 64, RMSprop, lr 1e-6, 150-step warmup; beta=0.5 only for TL;DR",
+     "verdict": "supported",
+     "number": true,
+     "source": "App. B"
+    },
+    {
+     "line": 37,
+     "claim": "misconception believed by 50% of people, not claimed in 50% of queries",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 1"
+    },
+    {
+     "line": 55,
+     "claim": "models up to 6B parameters",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 1 / Sec. 7"
+    },
+    {
+     "line": 59,
+     "claim": "von Neumann winner: expected win rate >= 50% against any policy; CDB labels online",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 2"
+    },
+    {
+     "line": 87,
+     "claim": "reward model = linear head on final transformer layer; rewards normalized to E[r]=0 for all x",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 3 reward modelling phase"
+    },
+    {
+     "line": 103,
+     "claim": "standard approach builds r = r_phi - beta(log pi_theta - log pi_ref) and maximizes with PPO",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 3 RL fine-tuning phase"
+    },
+    {
+     "line": 453,
+     "claim": "IMDb prefixes 2-8 tokens, GPT-2-large SFT, siebert classifier, 25,000 prefixes x 4 completions, 6 pairs",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 6 and App. C.1"
+    },
+    {
+     "line": 455,
+     "claim": "Stiennon et al. collected preferences on a different but similarly-trained SFT model",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 6: 'on samples from a different, but similarly-trained, SFT model'"
+    },
+    {
+     "line": 457,
+     "claim": "Anthropic HH 170k dialogues; Pythia-2.8B fine-tuned on chosen responses",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 6"
+    },
+    {
+     "line": 463,
+     "claim": "gpt-4-0314; A/B order randomized every evaluation",
+     "verdict": "supported",
+     "number": false,
+     "source": "App. C.2"
+    },
+    {
+     "line": 483,
+     "claim": "sweep values, 22 runs, evaluation every 100 steps",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 6.1"
+    },
+    {
+     "line": 512,
+     "claim": "DPO ~61% at temp 0.0 vs PPO 57% at best temp 0.0; DPO max exceeds Best of N",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 6.2"
+    },
+    {
+     "line": 514,
+     "claim": "DPO temp 0.25 preferred 58% over PPO temp 0 by humans",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 6.2"
+    },
+    {
+     "line": 522,
+     "claim": "DPO >= Best of 128 and 2-shot Pythia-2.8B; only computationally efficient method beating chosen",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 6.2 / Fig. 3 caption"
+    },
+    {
+     "line": 526,
+     "claim": "public PPO HH model never beat base Pythia-2.8B; Best of 128 as rough PPO proxy",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 6.2"
+    },
+    {
+     "line": 528,
+     "claim": "Best of N plateaus after roughly 64-128 samples",
+     "verdict": "supported",
+     "number": true,
+     "source": "Fig. 4 caption"
+    },
+    {
+     "line": 552,
+     "claim": "CNN/DM uses the C prompt with 'forum post'->'news article'; temps 0 and 0.25",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 6.3"
+    },
+    {
+     "line": 554,
+     "claim": "CNN/DM table 0.36/0.31 vs 0.26/0.23",
+     "verdict": "supported",
+     "number": true,
+     "source": "Table 1"
+    },
+    {
+     "line": 563,
+     "claim": "comparisons DPO t0.25, SFT t0.25, PPO-1 t1.0 vs PPO t0; 25 volunteers; two raters for DPO and PPO-1; ties ~1%",
+     "verdict": "supported",
+     "number": true,
+     "source": "Sec. 6.4 and App. D.3 (post omits that one volunteer was excluded)"
+    },
+    {
+     "line": 567,
+     "claim": "human-study table values",
+     "verdict": "supported",
+     "number": true,
+     "source": "Table 2"
+    },
+    {
+     "line": 577,
+     "claim": "DPO: H-H 65% vs GPT-4(C)-H 67%; S 47, C 54, human 58",
+     "verdict": "supported",
+     "number": true,
+     "source": "Table 2"
+    },
+    {
+     "line": 260,
+     "claim": "Unlikelihood samples at temp 1.0: 'girl when when ...', 'when an old woman was tripping the when when ...'",
+     "verdict": "supported",
+     "number": false,
+     "source": "App. Table 3"
+    },
+    {
+     "line": 546,
+     "claim": "WWII answer with 'coalition of the willing'/'all-inclusive association'; GPT-4 picks chosen '11' over DPO's 9",
+     "verdict": "supported",
+     "number": false,
+     "source": "App. Tables 9-10"
+    },
+    {
+     "line": 589,
+     "claim": "future work: OOD, self-labeling unlabeled prompts, over-optimization and Fig. 3-right drop, scaling, eliciting judgments, other modalities",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 7 Discussion"
+    },
+    {
+     "line": 472,
+     "claim": "two PPO-GT implementations; modifications also used for normal PPO",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 6 Methods"
+    },
+    {
+     "line": 336,
+     "claim": "lemma 1 is the well-known Plackett-Luce under-specification; identifiability constraints needed",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 5.1"
+    },
+    {
+     "line": 421,
+     "claim": "normalization term = soft value function of pi_ref",
+     "verdict": "supported",
+     "number": false,
+     "source": "Sec. 5.2"
+    },
+    {
+     "line": 218,
+     "claim": "Bong & Rinaldo cover near-0/1 win rates, arbitrary comparison graphs, non-existence under separable data",
+     "verdict": "unverifiable",
+     "number": false,
+     "source": "Paper only cites [4] for consistency; the content summary comes from outside the primary source"
+    },
+    {
+     "line": 538,
+     "claim": "training-curve figure shows temperatures 0.7 and 1.0",
+     "verdict": "unverifiable",
+     "number": false,
+     "source": "Fig. 3 right caption says 'different sampling temperatures'; values only on the figure"
+    },
+    {
+     "line": 111,
+     "claim": "AWR solution pi_new proportional to mu exp(A/beta); RWR E-step form",
+     "verdict": "unverifiable",
+     "number": false,
+     "source": "Not in DPO paper; consistent with the AWR paper as commonly stated"
+    }
+   ]
+  },
+  "checklist": {
+   "repeated": 1,
+   "avoided": 15,
+   "na": 1,
+   "repeated_ids": [
+    "excluded-participant"
+   ],
+   "details": {
+    "implementation-fragment": {
+     "verdict": "avoided",
+     "evidence": "L264-277 explain pi_ref choice before training; no broken fragment."
+    },
+    "beta-tldr": {
+     "verdict": "avoided",
+     "evidence": "L26 and L314 'TL;DR 요약에서만 β=0.5'."
+    },
+    "future-work-ranking-invented": {
+     "verdict": "avoided",
+     "evidence": "L589 lists automated-judgment elicitation and other modalities; no conditional preferences."
+    },
+    "plackett-luce-not-future": {
+     "verdict": "avoided",
+     "evidence": "L198-214 derive the listwise DPO loss as part of the paper."
+    },
+    "ppo-clip-objective": {
+     "verdict": "n/a",
+     "evidence": "L103 describes clipping in words only; no formula."
+    },
+    "partition-function-size": {
+     "verdict": "avoided",
+     "evidence": "L150 '그 수는 |V|^L로 늘어나고'."
+    },
+    "cnn-dm-prompt-variant": {
+     "verdict": "avoided",
+     "evidence": "L552 'TL;DR에서 쓴 C 프롬프트에서 \"forum post\"를 \"news article\"로만 바꿨습니다'."
+    },
+    "human-study-columns": {
+     "verdict": "avoided",
+     "evidence": "L563 '모두 가장 좋은 온도인 0의 PPO를 상대로'; columns DPO/SFT/PPO-1 as in the paper."
+    },
+    "human-study-respondents": {
+     "verdict": "avoided",
+     "evidence": "L569 '응답 수 | 272 | 122 | 199'."
+    },
+    "multi-judgment-comparisons": {
+     "verdict": "avoided",
+     "evidence": "L563 'DPO와 PPO-1 비교에는 평가자를 두 명씩, SFT 비교에는 한 명씩' (both vs PPO-0)."
+    },
+    "overoptimization-figure-ref": {
+     "verdict": "avoided",
+     "evidence": "L589 '대화 학습 곡선 후반의 약간의 성능 하락이 그 사례일 수 있다' ties it to the dialogue training curve shown at L540."
+    },
+    "gradient-u-definition": {
+     "verdict": "avoided",
+     "evidence": "L238 defines u = r_hat(y_l) - r_hat(y_w) explicitly as the sign-flipped quantity with loss -log sigma(-u); every step is consistent with the final gradient. Differs from the paper's u convention but has no sign error."
+    },
+    "gradient-sigma-argument": {
+     "verdict": "avoided",
+     "evidence": "L241, L244, L248 use sigma(r_hat(y_l)-r_hat(y_w))."
+    },
+    "best-of-n-invented": {
+     "verdict": "avoided",
+     "evidence": "L528 only the 64-128 saturation."
+    },
+    "excluded-participant": {
+     "verdict": "repeated",
+     "evidence": "L563 '자원봉사자 25명입니다' with no mention that one was excluded."
+    },
+    "missing-description": {
+     "verdict": "avoided",
+     "evidence": "L9 starts with 'DPO', numbers 61%/57% from TL;DR."
+    },
+    "arxiv-https": {
+     "verdict": "avoided",
+     "evidence": "All arXiv links https (L596, L59, L111, L218)."
+    }
+   }
+  },
+  "top_issues": [
+   "Length and padding: 35.5k chars with textbook basics a competent reader knows (equivalence-relation definition with mod-3 example L322, KL definition L97, temperature L504) and the theorem conclusion restated four times (L365, L385, L397, L401).",
+   "Human study omits that one of the 25 raters was excluded (L563); several headings are topic/question/sentence forms (L35, L61, L316) and the closing partly re-lists the paper's future work (L589).",
+   "Many external-source summaries (RWR/AWR L111, Bong & Rinaldo L218) go beyond the primary source and cannot be verified against it."
+  ]
+ },
+ "preference": {
+  "overall": "Y",
+  "per_criterion": {
+   "A": "X",
+   "B": "Y",
+   "C": "Y",
+   "D": "X",
+   "E": "Y",
+   "F": "Y",
+   "G": "tie",
+   "X1": "tie",
+   "R1": "Y",
+   "R2": "Y",
+   "R3": "tie"
+  },
+  "reason": "Y is more rigorous and more accurate: it shows every derivation step with sign-consistent math, covers the listwise loss, theorem assumptions and the PPO analysis, includes the main result figures, and its 30 checked claims had no errors and only one checklist repeat. X is tighter, better calibrated and has a stronger running example and closing judgment, but it has flow breaks in the dialogue section, one scope error on beta, and three checklist repeats. The margin is modest (about 0.3 mean points, within single-judge noise on several criteria); Y's main cost is length and padding."
+ }
+}

@@ -1,0 +1,111 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/eval-guide/guide-vllm-v8.md",
+  "judge_run": 2,
+  "sampling": "non-heading blocks after front matter (177 total; fenced blocks count as one), paragraph 2 and every third (2,5,...,176 = 59 blocks); 15 claims chosen from sampled blocks",
+  "scores": {"A": 9, "B": 7, "C": 8, "D": 9, "E": 8, "F": 7, "T1": 9, "T2": 8, "T3": 8},
+  "deductions": {
+    "A": ["L13-L15 TL;DR is two dense paragraphs (9 + 8 sentences); heavy for a TL;DR but renders cleanly; no body H1, fences balanced (38), math only $$"],
+    "B": [
+      "English common nouns in headings: L589 '... compute-bound 워크로드에서 약한 vLLM', L613 '이점이 줄어드는 compute-bound 조건', L203 'prefill과 decode의 구분을 없앤' -> '연산이 병목인 워크로드', '프리필과 디코드의 구분'",
+      "L251 '...예로 들어 보겠습니다. 예를 들어 모든 요청이 ...' doubled 예를 들어 -> '모든 요청이 40토큰짜리 같은 시스템 프롬프트로 시작하고 ... 하겠습니다.'",
+      "Formulaic figure intros repeated: L29 '그림에서 눈여겨볼 곳은', L101 '그림에서 눈여겨볼 곳은', L148 '볼 곳은 화살표 방향입니다', L599 '그래프에서는 ... 보면 됩니다'",
+      "L267 '이 정책은 SGLang의 RadixAttention과 같은 정책이 됩니다' -> '이는 SGLang RadixAttention과 같은 정책입니다'",
+      "Subjectless passives: L303 'uv가 권장됩니다', L545 '... 명시하는 것이 권장됩니다' -> '공식 문서는 uv를 권장합니다'",
+      "L482 '컨테이너 배포는 짧습니다' (unclear) -> '컨테이너 배포 절차는 간단합니다'"
+    ],
+    "C": [
+      "Facts restated: 60~80% waste at L13, L17 (heading), L31; 2~4x at L13 and L33; localhost:8000/one model at L15 and L355; Linux-only at L15 and L303; chunked-prefill definition at L15, L220, L436; prefix caching on by default at L15 and L273"
+    ],
+    "D": ["Worked examples placed at the hard steps (L85 9-token block count, L111 sharing savings, L169 iteration schedule, L211 512-token budget, L251 hash chain); little padding"],
+    "E": [
+      "L424-L428 engine-argument table: 'Default' cells '테스트 편의용 값' (prose) and '—' for max_model_len (source: 'If unspecified, will be automatically derived from the model config'); '0.92' cell drops the source's other branch (1.0 with the extensible KV cache)",
+      "L233-L237 v0.8.1 status table drops Logprobs/Structured-output rows (acceptable, whole rows) and says '네 단계' while the source has five statuses (Deprecated covered separately at L199)"
+    ],
+    "F": [
+      "L280-L285 'saved compute ≈ h × p' is the writer's own heuristic; no source gives it and it is not marked as the post's estimate (only the numbers are marked as examples)",
+      "L226 V1 blog post (1.7x over V0) cited but not in the Sources list (L639-L656); L621 numbers come from iotdigitaltwinplm.com Q2 2026 benchmark (verified: Chat (Med), concurrency 32: vLLM 4250, TGI 3120, SGLang 4880, Triton-TRT 5210; '~98% GPU memory utilization'), but the post names only 'a third-party blog' and the page is not in Sources; L608 'arXiv:2511.17593을 인용한 서드파티 비교 블로그' unnamed and unlisted",
+      "L424 'gpu_memory_utilization ... 0.92': vllm/config/cache.py says 'If unspecified, 1.0 with the extensible KV cache ... and 0.92 otherwise' (scope dropped)",
+      "L520 presents VLLM_CPU_KVCACHE_SPACE as the knob to set explicitly; the CPU page calls it 'a legacy setting; use --kv-cache-memory-bytes instead'",
+      "L522 credits blocking of get_mempolicy to seccomp; the CPU page says '--cap-add SYS_NICE is to address get_mempolicy EPERM' and seccomp=unconfined is for migrate_pages (minor conflation)"
+    ],
+    "T1": ["Install, offline, serve, curl, YAML config, GPU and CPU docker commands all match current docs; nothing to subtract beyond needing a GPU"],
+    "T2": ["L608-L609 third-party rows (Introl, unnamed comparison blog) and L578 T Cloud case add weakly sourced material; core topics covered in sensible order"],
+    "T3": [
+      "Design advice stated as fact: L572 'HPA의 확장 기준으로는 큐 깊이가 적합합니다', L587 disaggregated serving 'TBT ... 확인됐을 때 도입합니다' (no source, not marked as recommendation)",
+      "L414 leans on the v0.9.2 engine-args page ('vLLM v0.9.2 기준') for current argument grouping; named, but current docs would do"
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Most H2s are claims (L17, L35, L91, L142, L239); topic headings remain: L623 '선택 기준', L438 '예제 모델에 적용하기', L484 'GPU: vllm/vllm-openai 이미지'"},
+    "running_example": {"status": "met", "evidence": "Qwen/Qwen2.5-1.5B-Instruct from L251 through offline (L333), serve (L352), config (L445-L475), GPU docker (L495), CPU docker (L539)"},
+    "mechanism_chain": {"status": "met", "evidence": "Block table: problem L25 -> design L37-L45 -> formula L51-L53 -> worked table L69-L73 and count L85; chunked prefill L209 -> budget example L213-L218"},
+    "facts_once": {"status": "partly met", "evidence": "60~80% (L13/L17/L31), 2~4x (L13/L33), localhost:8000 (L15/L355), chunked prefill definition (L15/L220/L436)"},
+    "numbers_with_scope": {"status": "mostly met", "evidence": "L23 13B on 40GB A100; L595 A10G/A100 with ShareGPT; L621 model, quantization, GPUs, concurrency; L424 0.92 drops the extensible-KV-cache branch"},
+    "nothing_invented": {"status": "partly met", "evidence": "Illustrative values flagged (L169, L211, L251, L440); h×p formula L280 unsourced and unflagged"},
+    "own_assessment_at_end": {"status": "met", "evidence": "L625 '이 글의 판단으로 상황별 선택을 정리하면' + L635 when vLLM's advantage vanishes"},
+    "length_fitted": {"status": "met", "evidence": "Long internals (L35-L293) for the hard parts; install L295-L345 brief"},
+    "type_shape": {"status": "met", "evidence": "TL;DR L11; problem section L17; architecture/internals L35-L293 before configuration L412; ends with alternatives, compute-bound failure case L613 and selection table L627"},
+    "korean_style": {"status": "partly met", "evidence": "English heading nouns L203/L589/L613, repeated figure intros L29/L101/L148/L599, passives L303/L545"}
+  },
+  "claims": {
+    "checked": 15, "unsupported": 1, "wrong": 0,
+    "examples": [
+      {"line": 15, "claim": "default http://localhost:8000; one model at a time; no native Windows", "verdict": "supported", "source": "quickstart.md: 'By default, it starts the server at http://localhost:8000 ... currently hosts one model at a time'; gpu.md: 'vLLM does not support Windows natively'"},
+      {"line": 23, "claim": "13B on 40GB A100: ~65% weights, ~30% KV cache", "verdict": "supported", "source": "arXiv 2309.06180 §1: 'Approximately 65% of the memory is allocated for the model weights ... Close to 30% ... dynamic states'"},
+      {"line": 71, "claim": "7-token prompt, block size 4: logical 0->physical 7 (#filled 4), 1->1 (#filled 3); second decode allocates physical 3", "verdict": "supported", "source": "paper §4.3: 'first 4 tokens in logical block 0 and the following 3 tokens in logical block 1 ... allocates a new physical block (physical block 3)'"},
+      {"line": 87, "claim": "Alpaca degrades with large blocks; default block size 16", "verdict": "supported", "source": "paper §7.2: 'In the Alpaca trace, while the block size 16 and 32 work well, larger block sizes significantly degrade ... vLLM sets its default block size as 16'"},
+      {"line": 125, "claim": "beam k=4: after iteration all share 0,1,3; 0·1 share 6, 2·3 share 7; frees 2,4,5,8; allocates 9-12", "verdict": "supported", "source": "paper §4.4: 'frees all physical blocks whose reference counts reach 0 (blocks 2, 4, 5, 8) ... allocates new physical blocks (blocks 9-12) ... all candidates share blocks 0, 1, 3; candidates 0 and 1 share block 6, and candidates 2 and 3 further share block 7'"},
+      {"line": 132, "claim": "memory sharing cuts parallel sampling/beam search memory up to 55%, throughput up to 2.2x", "verdict": "supported", "source": "vLLM blog 2023-06-20: 'cutting their memory usage by up to 55%. This can translate into up to 2.2x improvement in throughput'"},
+      {"line": 199, "claim": "v0.8.1 V1 guide: KV swapping not needed for preemption, GPU<>CPU swap, best_of, per-request logits processors deprecated", "verdict": "supported", "source": "v0.8.1 v1_user_guide.md: 'vLLM V1 no longer requires KV cache swapping to handle request preemptions'; Deprecated rows for best_of, Per-Request Logits Processors, GPU <> CPU KV Cache Swapping"},
+      {"line": 234, "claim": "v0.8.1 table: Optimized prefix caching/chunked prefill; Functional LoRA/multimodal; WIP spec decode; Planned FP8 KV cache, embedding, Mamba, encoder-decoder", "verdict": "supported", "source": "v0.8.1 v1_user_guide.md Feature/Model table (rows match; Logprobs/structured-output rows omitted)"},
+      {"line": 220, "claim": "SchedulerConfig.enable_chunked_prefill class default True; chunks by remaining max_num_batched_tokens", "verdict": "supported", "source": "vllm/config/scheduler.py: 'enable_chunked_prefill: bool = True ... prefill requests can be chunked based on the remaining max_num_batched_tokens'"},
+      {"line": 267, "claim": "RFC #2614 evicts only ref-count-0 blocks, giving RadixAttention's policy", "verdict": "supported", "source": "RFC #2614: 'the following cache eviction policy will give the same policy as in RadixAttetion: 1. ... Only evict the blocks with ref count == 0. 2. ... LRU'"},
+      {"line": 314, "claim": "vllm download-kernels: FlashInfer precompiled kernels not bundled; without them startup compiles with a warning, minutes on Hopper+, especially Blackwell; FlashInfer refuses import on mismatch", "verdict": "supported", "source": "gpu.cuda.inc.md: 'Without them, vLLM downloads and compiles kernels at startup, which can add several minutes on Hopper and newer GPUs, especially Blackwell, and logs a warning ... FlashInfer refuses to import when they do not match'"},
+      {"line": 410, "claim": "lowercase decimal suffixes accept floats, uppercase binary need integers; applies to --max-model-len, --max-num-batched-tokens, --kv-cache-memory-bytes", "verdict": "supported", "source": "docs/cli/README.md tip 'Human-readable integer arguments': 'Decimal suffixes (k, m, g, t) also accept floating point ... Binary suffixes (K, M, G, T) require integers'"},
+      {"line": 424, "claim": "gpu_memory_utilization default 0.92", "verdict": "unsupported", "source": "vllm/config/cache.py: default None; 'If unspecified, 1.0 with the extensible KV cache (sized from measured memory) and 0.92 otherwise' (post drops the 1.0 branch)"},
+      {"line": 520, "claim": "VLLM_CPU_KVCACHE_SPACE in GiB, default 0; OMP_THREADS_BIND auto/nobind/'|' per TP rank; CPU_VISIBLE_MEMORY_NODES only with auto", "verdict": "supported", "source": "installation/cpu.md env-var list: 'VLLM_CPU_KVCACHE_SPACE=40 means 40 GiB ... Default value is 0'; '0-31|32-63 means there will be 2 tensor parallel processes'; note the page also calls KVCACHE_SPACE 'a legacy setting; use --kv-cache-memory-bytes instead'"},
+      {"line": 621, "claim": "third-party internal measurement: Llama-3.3-70B 4-bit GPTQ, 8x H200, default settings, concurrency-32 chat: vLLM 4250, TGI 3120, SGLang 4880, Triton-TRT 5210 tok/s; vLLM ~98% memory utilization", "verdict": "supported", "source": "iotdigitaltwinplm.com Q2 2026 benchmark: 'Chat (Med), concurrency 32: vLLM 4250 ... Triton-TRT 5210'; 'internal Q2 2026 measurements and are illustrative'; 'default engine configurations'; '~98% GPU memory utilization'. Source unnamed in the post and absent from Sources"}
+    ]
+  },
+  "checklist": {
+    "note": "guide-vllm has fixes: []; the notes' generic guide checks are used",
+    "repeated": 0, "avoided": 6, "na": 0, "repeated_ids": [],
+    "items": [
+      {"check": "cross-references to non-existent chapters", "result": "avoided", "evidence": "no 'N장' references; cross-refs are '앞서 본 ...' and resolve (e.g. L434 -> CLI suffix rule L410)"},
+      {"check": "trailing </path></name> tag remnant", "result": "avoided", "evidence": "no such tag in the post"},
+      {"check": "&gt; entity leak", "result": "avoided", "evidence": "no &gt;/&lt; in body; Sources use &#124;/&#91; inside link text, which render as | and ["},
+      {"check": "unclosed code fence", "result": "avoided", "evidence": "38 fence lines, all paired"},
+      {"check": "stale third-party CLI flags", "result": "avoided", "evidence": "all flags checked against current docs (--torch-backend, --uds, --generation-config, --attention-backend, --help=..., --config, --block-size); old api_server entrypoint named as 2023-era at L399"},
+      {"check": "install/usage-centric coverage with little on internals", "result": "avoided", "evidence": "internals L35-L293 precede install L295"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 35,
+    "architecture_note": "TL;DR L13 summarizes the block table; the system diagram (scheduler/workers) is at L150",
+    "sources_total": 17,
+    "non_official_sources": 7,
+    "non_official_share": 0.41,
+    "non_official_list": ["arXiv 2309.06180", "vLLM blog 2023", "RFC #2614", "Introl", "gingerlabs", "Spheron", "itnext T Cloud"],
+    "third_party_share": 0.24,
+    "unlisted_sources_used": ["vLLM V1 alpha blog (L226)", "iotdigitaltwinplm Q2 2026 benchmark (L621)", "arXiv:2511.17593-citing comparison blog (L608)"],
+    "opens_with_problem": true,
+    "closes_with_choice_and_failure_modes": true,
+    "runnable_code": {
+      "verdict": "would run as pasted on a Linux NVIDIA GPU host (not executed: no GPU/model download)",
+      "checks": [
+        "both Python blocks parse (ast); imports 'from vllm import LLM, SamplingParams' match quickstart; constructor kwargs gpu_memory_utilization/max_model_len/max_num_seqs are engine args",
+        "install lines L306-L309 identical to quickstart.md L25-L28",
+        "chat curl body is valid JSON with model/messages; /v1/models and /v1/chat/completions are documented",
+        "--port, --uds, --help=all|ModelConfig|max-num-seqs|max verbatim in docs/cli/README.md; '--max-model-len 8K' = 8192 matches the YAML; 'vllm serve MODEL --config config.yaml' and long-form YAML keys per serve_args.md",
+        "GPU docker matches gpu.cuda.inc.md with model swapped; CPU source build lines match cpu.x86.inc.md L86-L100; CPU docker image vllm/vllm-openai-cpu:latest-x86_64 and --block-size 128 documented",
+        "minor: Instruct model used with llm.generate without chat template in the first script (the post flags this at L345)"
+      ]
+    }
+  },
+  "top_issues": [
+    "Sources not traceable: V1 blog (L226), the throughput benchmark (L621, actually iotdigitaltwinplm Q2 2026) and the arXiv:2511.17593-citing blog (L608) are used but missing from the Sources list or unnamed",
+    "Unsourced heuristic formula 'saved compute ≈ h × p' (L280) not marked as the writer's estimate; design advice (L572 HPA on queue depth, L587 when to disaggregate) reads as documented fact",
+    "Defaults with dropped scope or stale framing: gpu_memory_utilization 0.92 without the 1.0 extensible-KV-cache branch (L424), VLLM_CPU_KVCACHE_SPACE presented without the docs' 'legacy, use --kv-cache-memory-bytes' note (L520); plus Korean style nits (English heading nouns L203/L589/L613, repeated figure intros)"
+  ]
+}

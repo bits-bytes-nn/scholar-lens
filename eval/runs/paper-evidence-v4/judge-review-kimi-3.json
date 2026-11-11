@@ -1,0 +1,307 @@
+{
+  "item": "review-kimi",
+  "run": 3,
+  "post": "/tmp/eval-paper/review-kimi-v4.md",
+  "source": "https://arxiv.org/html/2507.20534 (full text incl. Tables 1-6, Algorithm 1, App. B-G)",
+  "scores": {
+    "A": 8.0,
+    "B": 8.0,
+    "C": 7.0,
+    "D": 8.5,
+    "E": 7.0,
+    "F": 7.0
+  },
+  "type_scores": {
+    "R1": 7.5,
+    "R2": 8.0,
+    "R3": 8.0,
+    "G": 9.0,
+    "X1": 7.5
+  },
+  "score_evidence": {
+    "A": "Valid front matter (subtitle, paper_author, paper_doi, use_math), $$-only math, claim H2s. Deductions: L263 denominator '{% raw %}{{\\pi}_{\\mathrm{old}}{% endraw %}(y_{i}|x)' mixes Liquid into math and uses '|' while the numerator uses \\mid; L489 '### References' H3 under '## 한계와 시사점'; pre-training recipe/infra H2 (L276) placed after post-training (L234); QK-Clip results H2 (L427) detached from the method H2 (L69).",
+    "B": "Natural 입니다 register. L57 '동작 방식은 예를 들어 가상의 헤드 하나를 따라가 보면 쉽게 이해됩니다' (rewrite: '가상의 헤드 하나로 따라가 보겠습니다'); L208 '... 데 주목하면 됩니다', L316 '구조도에서 볼 흐름은', L294/L332/L348 same figure-lead-in shape; L256 '저울질할 여지를 가집니다' (rewrite: '저울질할 수 있습니다'); L467 '반대로 약한 지점도 표에 드러납니다.' then nothing; '앞서' 17 times.",
+    "C": "Concepts introduced before use, but heavy restatement: cap-then-decay L59, L124, L437, L473; 9B/53B >1000 L17, L44, L443; head example L57, L116, L437, L473; tau=30 L447 and L473; loss-curve paragraph L63 and L443. Section order breaks the arc (pre-training schedule L276 after RL L234).",
+    "D": "Hard parts helped at the right time: MLA exponent reasoning L103, worked gamma numbers L116, K=4 advantage toy L268, meeting-room trajectory L228, 1F1B/PP/EP definitions L288. Padding: three more head examples (L437, L473) and a second QK-Clip explanation.",
+    "E": "Tables copy cells verbatim (Table 1 L186, Table 2 L134, Table 3 subset L352/L378, Table 4 L409, Table 6 K2 column L455 all match). Deductions: the same image kimi-k2...-1.png used twice (L61, L441); paper numbering 'Figure 6' (L160) and 'Figure 1' (L366); L352 mixes different comparison models in one column.",
+    "F": "No numeric cell errors found. Deductions: L366 wrong absence claim (Table 3 has Claude Opus 4 tau2 81.8/60.0/57.0); L30 TL;DR scope (single attempt also trails Claude 72.7/72.5); L288 unmarked invented mechanism for small-EP balance; L393 'four items' where the table has five; L44 unmarked softmax/gradient explanation. 'temperature 0.0' (L344) is supported by App. C.",
+    "R1": "Deep on MuonClip (L69-124), architecture (L126-162), rephrasing (L164-194), agentic synthesis (L196-232), training systems (L276-304) and checkpoint engine (L306-336). Missing: RLVR domains (math/STEM pass@k, complex IF, faithfulness, coding sandbox, safety attack-target-judge), PTX loss, closed-loop critic refinement, temperature decay, 16-way PP/EP/ZeRO-1, English base results.",
+    "R2": "Layered intuition -> formula -> worked example for QK-Clip and the RL loss; length does not track difficulty because the QK-Clip story is retold (L427-449, L473).",
+    "R3": "TL;DR answers four questions with numbers and settings (L30 non-thinking tau2 66.1 vs 48.8); L30 omits that single-attempt SWE also trails Claude. Closing names author-stated limitations (L477-481) and writer questions (L483) without invented follow-up numbers.",
+    "G": "use_math true with $$; description 147 chars starting 'Kimi K2는', numbers from TL;DR; Liquid braces only inside {% raw %}; https arXiv link; no '|' in $$ on table rows.",
+    "X1": "Category Language-Models fits. Seven tags: two controlled-style (Agentic-AI, Mixture-of-Experts) plus five specific; MuonClip-Optimizer and QK-Clip overlap; 'Sparsity-Scaling-Law' is a minor part."
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "H2s L36, L69, L126, L164, L196, L234, L276, L306, L338, L372, L405, L427, L451 are claim noun phrases; only L469 '한계와 시사점' and H3s like L342 '평가 설정', L350 '주요 수치', L364 '해석' are topic headings."
+    },
+    "running_example": {
+      "status": "partly met",
+      "evidence": "A tracked head appears at L57, L116, L437, L473 and the meeting-room trajectory at L228 is reused at L232, but the head example is re-invented four times with different numbers (1000/40, 40/60/80/250, 64 heads) instead of one example followed through."
+    },
+    "mechanism_order": {
+      "status": "met",
+      "evidence": "QK-Clip: problem L44-53 -> naive vs per-head choice L87-93 -> MLA component exponents L97-103 -> Algorithm L107-112 -> worked numbers L116; RL loss L262 -> K=4 toy L268."
+    },
+    "facts_once": {
+      "status": "not met",
+      "evidence": "Cap-at-100-then-decay at L59, L124, L437, L473; 9B/53B logits >1000 at L17, L44, L443; 12.7%/70000 at L31, L433 and again L473; same loss-curve image and caption twice (L61-63, L441-443); tau=30 harmlessness L447 and L473; 30-s update L27, L308, L318."
+    },
+    "numbers_scoped": {
+      "status": "partly met",
+      "evidence": "Most numbers carry model/setting (L344 temperature 0.0, Avg@4; L358-359 single vs multi attempt; L409 shots). L30 drops the single-attempt scope; L393 miscounts rows."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Hypothetical examples labelled '가상' (L57, L116, L176, L228, L268, L437, L473); 'temperature 0.0' (L344) is in App. C. Unmarked writer mechanisms at L44 and L288; L366 asserts a missing number that Table 3 gives."
+    },
+    "writer_assessment_at_end": {
+      "status": "met",
+      "evidence": "L471-485: reusable parts, author-stated limitations (L477-481 match App. F.3, Sec 4.3, Sec 5, App. G), writer's open questions (L483) and deployment advice (L485)."
+    },
+    "length_fitted": {
+      "status": "partly met",
+      "evidence": "490 lines/~31k chars; the QK-Clip story is told twice (L69-124 and L427-449) while RLVR domains, PTX loss, critic refinement, temperature decay, the safety RL pipeline and 16-way PP/EP are absent."
+    },
+    "type_shape": {
+      "status": "partly met",
+      "evidence": "TL;DR four questions (L14-32) and closing (L469); but the pre-training schedule/infra H2 (L276) comes after post-training (L234), and the QK-Clip results H2 (L427) is separated from its method (L69) by all evaluations."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Figure lead-ins repeat one shape (L208 '이 흐름도에서는 ... 주목하면 됩니다', L294 '도식의 확대 패널에서는', L316 '구조도에서 볼 흐름은', L332 '타임라인에서는', L348 '막대 그래프에서'); '앞서' 17 times; L256 '여지를 가집니다'; L467 '반대로 약한 지점도 표에 드러납니다.' leads nowhere."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numbers": 12,
+    "sampling": "body paragraphs after the TL;DR (headings, images, display math and separators excluded; a list or table counts as one block); paragraph 3 then every third (3,6,9,...)",
+    "examples": [
+      {
+        "line": 44,
+        "claim": "9B active / 53B total MoE with vanilla Muon: max logit quickly >1000; loss spikes, occasional divergence",
+        "type": "number",
+        "verdict": "supported",
+        "source": "Sec 2.1"
+      },
+      {
+        "line": 75,
+        "claim": "msign gives equal singular values (full effective rank); Adam low-rank; 16B Moonlight shows higher singular-value entropy with Muon",
+        "type": "number/attribution",
+        "verdict": "supported",
+        "source": "App. E"
+      },
+      {
+        "line": 91,
+        "claim": "gamma=min(1,tau/S_max), S_max=max_h; alpha typically 0.5",
+        "type": "number",
+        "verdict": "supported",
+        "source": "Sec 2.1 naive implementation"
+      },
+      {
+        "line": 99,
+        "claim": "qC, kC scaled sqrt(gamma_h); qR gamma_h; shared kR untouched",
+        "type": "method",
+        "verdict": "supported",
+        "source": "Sec 2.1"
+      },
+      {
+        "line": 109,
+        "claim": "Newton-Schulz output x sqrt(max(n,m)) x 0.2 to match Adam RMS; W_t=W_{t-1}-eta(O_t+lambda W_{t-1})",
+        "type": "number",
+        "verdict": "supported",
+        "source": "Algorithm 1 lines 4-6"
+      },
+      {
+        "line": 146,
+        "claim": "experts +50%, total params +54%, active -13%",
+        "type": "number",
+        "verdict": "supported",
+        "source": "Table 2 delta column"
+      },
+      {
+        "line": 156,
+        "claim": "at validation loss 1.5, sparsity 48 needs 1.69x/1.39x/1.15x fewer FLOPs than 8/16/32",
+        "type": "number",
+        "verdict": "supported",
+        "source": "Sec 2.3"
+      },
+      {
+        "line": 186,
+        "claim": "SimpleQA 23.76 / 27.39 / 28.94 for (0,10), (1,10), (10,1)",
+        "type": "number/table",
+        "verdict": "supported",
+        "source": "Table 1"
+      },
+      {
+        "line": 240,
+        "claim": "Muon used in post-training and recommended for K2 fine-tuning; Muon-pretrained checkpoints do best with Muon fine-tuning",
+        "type": "attribution",
+        "verdict": "supported",
+        "source": "Sec 3.1"
+      },
+      {
+        "line": 250,
+        "claim": "K2 actor generates; K2 critic ranks by pairwise evaluation against core, prescriptive and human-annotated rubrics",
+        "type": "method",
+        "verdict": "supported",
+        "source": "Sec 3.2.2"
+      },
+      {
+        "line": 284,
+        "claim": "annealing LR 2e-5 -> 7e-6; 400B tokens at 4k then 60B at 32k; YaRN to 128k",
+        "type": "number",
+        "verdict": "supported",
+        "source": "Sec 2.5"
+      },
+      {
+        "line": 324,
+        "claim": "three equal-size buffers per GPU: one H2D, two IPC shared with the inference engine",
+        "type": "number",
+        "verdict": "supported",
+        "source": "App. G"
+      },
+      {
+        "line": 368,
+        "claim": "SWE-V 65.8 -> 71.6 multi-attempt vs Sonnet 80.2; authors say gap 'significantly' closed; Multilingual/SWE-lancer gaps smaller",
+        "type": "number",
+        "verdict": "supported",
+        "source": "Sec 4.1 and App. C (47.3 vs 51.0, 39.1 vs 40.8)"
+      },
+      {
+        "line": 378,
+        "claim": "Instruct table: AIME25 49.5, AIME24 69.6, GPQA 75.1, LCB 53.7, OJBench 27.1, IFEval 89.8, Multi-Challenge 54.1, SimpleQA 31.0, MMLU 89.5, MMLU-Redux 92.7, DROP 93.5, MRCR 55.0",
+        "type": "number/table",
+        "verdict": "supported",
+        "source": "Table 3"
+      },
+      {
+        "line": 455,
+        "claim": "red-team table, K2 column: 25 cells (e.g. Criminal 100/96.97/75.76/57.57/56.06; Security 77.84/82.93/87.80/43.90/68.29)",
+        "type": "number/table",
+        "verdict": "supported",
+        "source": "Table 6, all 25 Kimi-K2-Instruct cells"
+      }
+    ],
+    "outside_sample_findings": [
+      {
+        "line": 366,
+        "claim": "closed-model tau2 comparison only visible in Figure 1; '본문에는 이 비교에 대한 수치가 따로 나오지 않습니다'",
+        "verdict": "wrong",
+        "source": "Table 3 lists Tau2 retail/airline/telecom (Avg@4) for Claude Opus 4 81.8/60.0/57.0, Claude Sonnet 4 75.0/55.5/45.2, GPT-4.1 74.8/54.5/38.6 (K2 70.6/56.5/65.8)"
+      },
+      {
+        "line": 30,
+        "claim": "TL;DR: SWE-bench Verified 65.8%, '다만 다중 시도 기준으로는 Claude 4 Sonnet에 뒤집니다'",
+        "verdict": "misleading scope",
+        "source": "Table 3 single attempt: Claude Sonnet 4 72.7*, Claude Opus 4 72.5* > 65.8; the post itself says so at L358/L368"
+      },
+      {
+        "line": 288,
+        "claim": "'작은 EP 그룹에서는 한 장치가 더 많은 전문가를 맡으므로 장치 간 부하가 평균화되기 쉽습니다'",
+        "verdict": "unsupported",
+        "source": "Sec 2.4.2 only: 'Utilizing a smaller EP group also relaxes expert-balance constraints'; the mechanism is the writer's, unmarked; EP = 16 is omitted"
+      },
+      {
+        "line": 393,
+        "claim": "'수학·코딩·추론 네 항목'",
+        "verdict": "wrong (count)",
+        "source": "The post's own table has five such rows (AIME 2025, AIME 2024, GPQA-Diamond, LiveCodeBench v6, OJBench)"
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 14,
+    "na": 3,
+    "repeated_ids": [],
+    "items": {
+      "rl-section-duplicated": {
+        "status": "avoided",
+        "evidence": "One post-training H2 (L234) and one RL-infra H2 (L306); no duplicated headings."
+      },
+      "rl-subheading-levels": {
+        "status": "avoided",
+        "evidence": "SFT (L238), Gym framework (L244), critic (L248), K1.5 objective (L258), budget (L270) are H3 under the L234 H2."
+      },
+      "ppo-claim": {
+        "status": "avoided",
+        "evidence": "L260 'K1.5의 정책 최적화 알고리즘을 따릅니다'; no PPO."
+      },
+      "invented-budget-formula": {
+        "status": "avoided",
+        "evidence": "L272 prose: per-sample budget by task type, truncation and penalty; no formula."
+      },
+      "invented-ptx-formula": {
+        "status": "n/a",
+        "evidence": "PTX loss not mentioned."
+      },
+      "invented-temperature-formula": {
+        "status": "n/a",
+        "evidence": "Temperature decay schedule not mentioned."
+      },
+      "invented-env-code": {
+        "status": "avoided",
+        "evidence": "No code block; L336 'OpenAI Gym을 본뜬 통합 인터페이스'."
+      },
+      "invented-math-verifier": {
+        "status": "n/a",
+        "evidence": "Math/STEM verifiable rewards not described (L268 toy verifier is labelled 가상)."
+      },
+      "invented-logic-verifier": {
+        "status": "avoided",
+        "evidence": "No formal-logic verifier claim."
+      },
+      "invented-code-quality-eval": {
+        "status": "avoided",
+        "evidence": "L477 real execution sandboxes only; no quality/efficiency/security grading."
+      },
+      "invented-safety-monitoring": {
+        "status": "avoided",
+        "evidence": "Safety H2 (L451-467) is the Promptfoo red-team evaluation; no real-time monitoring."
+      },
+      "invented-self-refine-loop": {
+        "status": "avoided",
+        "evidence": "L250 'K2 critic이 루브릭 조합을 기준으로 응답들을 쌍별로 비교해 전체 순위를 매깁니다'."
+      },
+      "invented-human-rubric-content": {
+        "status": "avoided",
+        "evidence": "L254 '데이터 팀이 특정 지시 맥락에 맞춰 직접 작성합니다' matches Sec 3.2.2."
+      },
+      "rubric-limitation-garbled": {
+        "status": "avoided",
+        "evidence": "L478 '자기 한정과 헤징을 금지하고 단정적인 답을 선호 ... 확신을 과장할 수 있습니다' matches App. F.3."
+      },
+      "invented-infra-mechanisms": {
+        "status": "avoided",
+        "evidence": "L306-336 has no progressive loading, hierarchical broadcast or real-time debugging."
+      },
+      "missing-description": {
+        "status": "avoided",
+        "evidence": "L8 starts 'Kimi K2는', 147 chars; 15.5T, 66.1, 65.8 all in TL;DR (L26, L30)."
+      },
+      "arxiv-https": {
+        "status": "avoided",
+        "evidence": "L490 https://arxiv.org/pdf/2507.20534v2."
+      }
+    }
+  },
+  "extras": {
+    "absence_claims": [
+      "L366 (wrong: Table 3 has the numbers)",
+      "L483 '따로 분리해 측정되지 않았습니다' / '정량화한 결과가 없습니다' (true, framed as the writer's reading)"
+    ],
+    "invented_settings": "none; 'temperature 0.0' (L344) is stated in App. C ('we set the temperature to 0.0') — the v3 judge's 'unsupported temperature' finding was itself wrong",
+    "restatement": "cap-then-decay 4x, 9B/53B >1000 3x, 12.7%/70000 2-3x, loss-curve figure 2x, 30-s update 3x"
+  },
+  "top_issues": [
+    "Repetition: the QK-Clip story is told twice (L69-124 and L427-449) with the cap-then-decay fact 4x, a re-invented head example 4x (L57, L116, L437, L473) and the same loss-curve image and caption twice (L61, L441).",
+    "Wrong absence claim at L366 (Table 3 gives closed-model tau2 numbers) plus 'Figure 1'/'Figure 6' paper numbering (L160, L366); TL;DR L30 implies K2 trails Claude only with multiple attempts.",
+    "Order and coverage: pre-training schedule/infra after post-training (L276 after L234); no RLVR domains, PTX loss, critic refinement, temperature decay or safety RL pipeline; unmarked writer mechanisms at L44/L288; L263 Liquid raw and '|' inside math."
+  ]
+}

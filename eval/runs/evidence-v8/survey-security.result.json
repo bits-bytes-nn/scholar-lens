@@ -1,0 +1,109 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-security.json",
+  "title": "Breaking LLM Agents: Injection, Poisoning, Tool Abuse and Defenses",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-security-of-llm-based-ai-agents-prompt-injection-jailbreak-rag-poisoning-tool/2026-11-03-securing-llm-agents-from-prompt-injection-to-mcp-and-defenses.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-03-securing-llm-agents-from-prompt-injection-to-mcp-and-defenses.md",
+  "pr_url": null,
+  "warnings": [
+    "Figures arXiv does not serve were left out: https://arxiv.org/html/2503.00061v2/tex/figures/asr_defense_adaptive_attack_bar_spaced.png, https://arxiv.org/html/2503.00061v2/tex/figures/system.png",
+    "Evidence that misstates its quote was left out: E83 (Quote is the 'Real delim.' row (Completion with real delimiters), but claim/cell describe similar/close delimiters (유사/근)",
+    "Section 'GPT-3 앱의 목표 탈취에서 방어를 겨냥한 적응형 공격까지 이어진 지시·데이터 경계의 붕괴': check 1 sentence(s) the evidence may not support: rogue string은 출력시키려는 문구이고, private value는 유출 대상이 되는 비밀값이며, 구분 문자는 앞뒤 맥락을 끊는 기호입니다. (unsupported: No evidence defines what rogue string, private value, and delimiter each do; E5 only lists them as components.)",
+    "Section '안전 학습의 두 실패 모드에서 출발한 기울기 기반·블랙박스 자동 탈옥' still has: papers ['2307.02483', '2307.15043', '2310.03684', '2310.08419'] belong to this section but no sentence cites their evidence: cover each | the section stops mid-sentence: finish it",
+    "Section '구분자 분리에서 명령 계층과 선호 학습을 거쳐 설계 단계 격리로 옮겨 간 인젝션 방어': check 2 sentence(s) the evidence may not support: StruQ와 명령 계층은 모두 \"옳은 답을 내라\"는 지도 신호로 학습합니다. (unsupported: E130 says the instruction hierarchy fine-tunes GPT-3.5 Turbo with both supervised fine-tuning and RLHF, and E122 says it uses an RL-trained red-teamer. The evidence does not support describing it as trained only on a supervised 'give the right answer' signal.) | 이때 손실은 $$-\\log\\sigma(0.5)$$이고, $$y_l$$을 더 밀어낼수록 괄호 안 값이 커져 손실이 줄어듭니다. (numbers not in its evidence)",
+    "Section '구분자 분리에서 명령 계층과 선호 학습을 거쳐 설계 단계 격리로 옮겨 간 인젝션 방어' still has: ['97', '100', '36', '56'] already stated in '고정된 테스트 케이스에서 상태를 가진 도구 환경과 오용 과제로 넓어진 에이전트 보안 측정': refer back without repeating: Llama-7B에서 TAP는 97%에서 9%로 줄었지만 GCG는 97%에서 58%에 그쳤고 , Mistral-7B에서도 TAP가 100%에서 36%, GCG가 99%에서 56%로 내려가는 데 머물렀습니다 . | ['3.5'] already stated in '고정된 테스트 케이스에서 상태를 가진 도구 환경과 오용 과제로 넓어진 에이전트 보안 측정': refer back without repeating: 실험은 GPT-3.5 Turbo를 이 데이터와 능력 데이터로 지도 미세조정하고 RLHF로 학습했고, 기준선은 능력 데이터만으로 학습한 모델이며, 일반 능력은 유지되었습니다 . | ['34'] already stated in 'GPT-3 앱의 목표 탈취에서 방어를 겨냥한 적응형 공격까지 이어진 지시·데이터 경계의 붕괴': refer back without repeating: 학습에서 일부러 뺀 탈옥, 비밀번호 추출, 도구 기반 인젝션에서도 견고성이 최대 34% 올라, 계층 개념이 학습하지 않은 공격으로 일반화되었습니다 . | numbers ['0.5'] without evidence: 이때 손실은 $$-\\log\\sigma(0.5)$$이고, $$y_l$$을 더 밀어낼수록 괄호 안 값이 커져 손실이 줄어듭니다. | ['97'] already stated in '고정된 테스트 케이스에서 상태를 가진 도구 환경과 오용 과제로 넓어진 에이전트 보안 측정': refer back without repeating: Mistral-7B-Instruct와 Llama3-8B-Instruct에서 방어하지 않은 모델은 최적화 기반 공격에 각각 89%와 97%의 공격 성공률로 뚫렸습니다 .",
+    "Section '도구 설명, MCP 서버, 에이전트 간 메시지로 번진 공격 표면' still has: the section must start with its '## ' heading (도구 설명, MCP 서버, 에이전트 간 메시지로 번진 공격 표면) | papers ['2410.07283', '2502.14847', '2506.02040', '2506.01333', '10.14722/ndss.2026.230675'] belong to this section but no sentence cites their evidence: cover each",
+    "Section '공격 표면이 바뀔 때마다 무너지는 탐지 필터와 학습형 방어' still has: ['0.87'] already stated in 'GPT-3 앱의 목표 탈취에서 방어를 겨냥한 적응형 공격까지 이어진 지시·데이터 경계의 붕괴': refer back without repeating: PoisonedRAG는 이런 오염 문서에 패러프레이징 방어를 적용했지만, NQ의 블랙박스 설정에서 공격 성공률은 0.97에서 0.87로 떨어지는 데 그쳤습니다 . | ['50'] already stated in 'GPT-3 앱의 목표 탈취에서 방어를 겨냥한 적응형 공격까지 이어진 지시·데이터 경계의 붕괴': refer back without repeating: HotpotQA에서 $$k=50$$으로 늘려도 공격 성공률이 블랙박스 41%, 화이트박스 43%로 남았고, 컨텍스트가 길어진 만큼 비용도 늘었습니다 . | ['0.74'] already stated in '악성 문서 몇 개로 충분한 지식 베이스·장기 메모리·파인튜닝 데이터 오염': refer back without repeating: 퍼플렉시티 기반 탐지인 PPL과 PPL-W도 악성 도구 문서를 대부분 놓쳐 AUC가 각각 0.64, 0.74에 그쳤습니다 . | a standard section needs at least 1 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '공격 성공률과 유용성 비용 사이에서 기울어진 저울' still has: '다는 점' 3 times in one section; vary the sentence or drop the frame",
+    "Section '능력이 곧 취약점이 되는 역스케일링과 시스템 수준 설계로의 이동': check 1 sentence(s) the evidence may not support: ToolHijacker의 자연스러운 악성 도구 문서는 기존 학습형 방어와 탐지 기법을 모두 통과했습니다 [[E280]]. (unsupported: Evidence says the defenses are 'insufficient' and perplexity detection 'mostly' misses (AUC 0.64/0.74); it does not show the documents got past all defenses and detection methods.)",
+    "[references] line 640: cited only in a table: https://arxiv.org/abs/2310.03684"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3272.2,
+  "input_tokens": 2515804,
+  "output_tokens": 349019,
+  "estimated_cost_usd": 13.97,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 114,
+      "failed_calls": 0,
+      "input_tokens": 10571,
+      "output_tokens": 349019,
+      "cache_read_tokens": 1212785,
+      "cache_write_tokens": 1292448,
+      "cost_usd": 13.970008
+    },
+    "by_stage": {
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 14669,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 59147,
+        "cost_usd": 0.589131
+      },
+      "verify": {
+        "calls": 30,
+        "failed_calls": 0,
+        "input_tokens": 120,
+        "output_tokens": 45165,
+        "cache_read_tokens": 308078,
+        "cache_write_tokens": 587706,
+        "cost_usd": 3.965543
+      },
+      "draft": {
+        "calls": 44,
+        "failed_calls": 0,
+        "input_tokens": 176,
+        "output_tokens": 136835,
+        "cache_read_tokens": 715559,
+        "cache_write_tokens": 357021,
+        "cost_usd": 4.80873
+      },
+      "review": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 24097,
+        "cache_read_tokens": 13410,
+        "cache_write_tokens": 45472,
+        "cost_usd": 0.714836
+      },
+      "fix": {
+        "calls": 27,
+        "failed_calls": 0,
+        "input_tokens": 108,
+        "output_tokens": 127379,
+        "cache_read_tokens": 175738,
+        "cache_write_tokens": 243102,
+        "cost_usd": 3.833812
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 10119,
+        "output_tokens": 874,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.057956
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 114,
+        "failed_calls": 0,
+        "input_tokens": 10571,
+        "output_tokens": 349019,
+        "cache_read_tokens": 1212785,
+        "cache_write_tokens": 1292448,
+        "cost_usd": 13.970008
+      }
+    }
+  }
+}

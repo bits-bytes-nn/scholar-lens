@@ -1,0 +1,147 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/eval-guide/guide-vllm-v4.md",
+  "judge_run": 2,
+  "scores": {"A": 8.0, "B": 7.0, "C": 7.5, "D": 8.5, "E": 7.0, "F": 6.0, "T1": 7.5, "T2": 8.0, "T3": 8.5},
+  "score_evidence": {
+    "A": [
+      "L717: an image ('n=1 서빙 처리량 비교 ...') sits after the closing section's last paragraph, just before the Sources rule, so it is orphaned from the benchmark discussion at L691",
+      "L278-295: the vLLM-Omni diffusion section sits between the V1 engine and installation and does not touch the running example",
+      "Otherwise clean: no skipped heading levels, 36 fence markers, all paired; use_math true with $$ present; description 132 chars; two-level categories; no author key"
+    ],
+    "B": [
+      "The same intro sentence pattern repeats: L31 '간단한 수치로 감을 잡아 보겠습니다.', L69 '...따라가 보겠습니다.', L93 '숫자로 비교해 보겠습니다.', L244 '...따라가 보겠습니다.'",
+      "L293 calque that obscures the meaning: '해석된 self-attention 어텐션 백엔드(attention backend)가 `TORCH_SDPA`일 때만' -> 'self-attention에 실제로 선택된 백엔드가 `TORCH_SDPA`일 때만' (B capped at 7)",
+      "L154 English default verb: '프롬프트 단계의 계산은 사용자의 실제 작업 입력에만 수행합니다' -> '프롬프트 단계에서는 사용자의 실제 작업 입력만 계산합니다'",
+      "Version hedges stacked: L463 'v0.27.1 문서 기준으로', L473 'v0.27.1에서는', L479 'v0.27.1 기준으로' in three adjacent paragraphs; L260 'v0.8.1 문서 기준으로 ... v0.8.1 기준으로' twice in one paragraph",
+      "L405 heavy parenthetical hedge: '답변(서드파티 보고, 단일 GPU에서 `LLM.generate`를 쓰는 경우)은 ... 필요 없다고 하고, ... 권합니다'",
+      "L291 strained analogy: 'LLM 배치에서 요청마다 생성 길이가 달라도 되는 것과 같은 자유입니다.'"
+    ],
+    "C": [
+      "Facts stated twice: swapping deprecated in V1 with the same reason at L214 and L276; forum answer that LLM.generate queues all prompts at L254 and again at L405; beam search copying in old systems at L150 and L162",
+      "L691-693 describe curves for the one-output case ('A100과 A10G 모두 vLLM 곡선이 ...') but no one-output figure is shown there; the only figure carrying an n=1 caption is at L717",
+      "Cross-references are accurate otherwise (L210 back to the block size 16 at L107, L543 back to --ipc=host at L332, L596 back to max_num_seqs at L457/L470)"
+    ],
+    "D": [
+      "Strong worked examples where they are needed: block-table trace L69-83, CoW reference-count table L121-125, beam-search block table L141-146, shared-block count formula L131, recomputation 200+120 example L200, chunked-prefill trace L246-250, 410-token block arithmetic L93 (26 blocks, 6 empty: correct)",
+      "L291 analogy adds nothing; Omni section explains internals a vLLM reader will rarely need"
+    ],
+    "E": [
+      "L717: caption says n=1 with 'HF 14~24배, TGI 2.2~2.5배' but the image is perf_a100_n3_light.png (three parallel outputs; the blog's n=1 images are perf_a100_n1/perf_a10g_n1)",
+      "L268-274: the V1 status table merges several source rows into one cell per status and drops 'Prompt Logprobs with Prefix Caching', 'Structured Output Alternative Backends' and 'Request-level Structured Output Backend'; cells are not the source rows verbatim",
+      "Good use otherwise: OS analogy table L57-63, swap/recompute table L204-208, conditions table L680-687, Omni mode table L282-287 (matches the doc row for row)"
+    ],
+    "F": [
+      "Wrong: L717 caption/image mismatch (n=1 numbers on an n=3 chart)",
+      "Wrong (outside the sample): L316 'Python 3.12, ROCm 7.0, `glibc >= 2.35` 조합만 지원' - the current GPU installation page says 'Python 3.12, ROCm 10.0 and glibc >= 2.35' (changed 2026-10-18, before generation)",
+      "Stale: L649 `vllm:gpu_cache_usage_perc`, L653 `vllm:prefix_cache_hit_rate`, L655 `vllm:time_per_output_token_seconds_bucket` - current vLLM exports vllm:kv_cache_usage_perc, vllm:prefix_cache_hits/queries and vllm:inter_token_latency_seconds; the post attributes them to Parseable/GuideLLM and tells readers to check /metrics (L645), so this is a half deduction",
+      "All 14 other sampled claims match the paper, the blogs and the docs"
+    ],
+    "T1": [
+      "Install (L307-312), docker (L322-330), serve + curl models/chat (L350-372), offline generate/chat (L382-421), engine args, YAML --config, CUDA graph and multimodal snippets all use current APIs and parse",
+      "Kubernetes path does not run as pasted: no `helm repo add`/`helm install` for the chart and no KEDA install, so the ScaledObject in L561-592 has no CRD; L555 says to enable the serving engine serviceMonitor but the values.yaml leaves it out",
+      "L374 mentions the openai Python client but gives no code"
+    ],
+    "T2": [
+      "Covers the source topics in a sensible order: problem -> PagedAttention -> sharing -> scheduler/preemption -> V1 -> install -> entry points -> config -> memory -> k8s -> observability -> choice",
+      "L278-295 vLLM-Omni diffusion batching is a sidetrack for a vLLM guide"
+    ],
+    "T3": [
+      "Deep internals with design reasons (block size trade-off L105-107, all-or-nothing eviction L194, single KV manager under TP L174, kernel fusions L188, V1 process split L222-236, prefix caching overhead L258)",
+      "System fit: KEDA queue-based scaling with reason (L596), scale-down and fallback (L600-631), metrics and tracing paths (L635-670), failure modes and choice (L711-715) labelled as the writer's judgment",
+      "Version-pinned facts are named as that version's (v0.8.1 at L214, L260, L268)"
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "Most H2/H3 are claim noun phrases: L19 '배치 크기를 묶어 두는 KV 캐시 메모리 낭비', L164 '... 전부 아니면 전무 방식의 선점', L549 '대기 요청 수를 기준으로 KEDA가 확장하는 production-stack 배포'; topic-like L705 '대안과 각자의 자리', L711 '선택 기준과 실패 지점'"},
+    "running_example": {"status": "met", "evidence": "Qwen/Qwen2.5-1.5B-Instruct threads through L93, L131, L174, L224, L329, L351, L366, L393, L454, L467, L490, L504, L568, L703"},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "PagedAttention: problem L21-39 -> design L47-65 -> formula L97-103 -> numeric trace L69-83 and L93; CoW L111 -> table L121-125 -> count formula L131"},
+    "facts_said_once": {"status": "partly met", "evidence": "Repeated: V1 swapping deprecation L214/L276, forum batching answer L254/L405, beam-copy point L150/L162"},
+    "numbers_with_scope": {"status": "met", "evidence": "L23 'A100 40GB에서 13B', L264 'Llama 3.1 8B와 Llama 3.3 70B를 ShareGPT', table L680-687 gives model/GPU/sampling per row; exception L717 caption"},
+    "nothing_invented": {"status": "partly met", "evidence": "Writer examples are marked (L244 '이 숫자는 설명을 위한 값입니다', L224 '대략'); but L717 caption pairs n=1 numbers with an n=3 chart"},
+    "own_assessment_at_end": {"status": "met", "evidence": "L713 '이 글의 판단은 이렇습니다.' with when to choose vLLM/TGI/TensorRT-LLM, L715 failure modes"},
+    "length_fitted": {"status": "partly met", "evidence": "About 37k characters; internals get the space they need, but the Omni section L278-295 and CPU backend details L334-340 add length off the main path"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR L11-17, problem L19, architecture/mechanism from L45 before installation at L297, closes with choice and failure modes L711-715, non-official sources included"},
+    "korean_style": {"status": "partly met", "evidence": "입니다 register kept, Korean headings; repeated '~보겠습니다' openers (L31, L69, L93, L244), calque L293, '수행' L154, stacked version hedges L463-479"}
+  },
+  "sample": "Blank-line-separated non-heading blocks after the front matter (prose, lists, tables, code, images) numbered 1..180; sampled #2, #5, #8, ... (every third from #2). 15 claims taken from sampled blocks #5, #11, #50, #65, #80, #83, #86, #95, #101, #122, #140, #146, #152, #167, #179",
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 1,
+    "unverifiable": 0,
+    "numbers": 10,
+    "examples": [
+      {"line": 23, "claim": "A100 40GB, 13B model: about 65% weights, close to 30% KV cache", "verdict": "supported", "source": "arXiv 2309.06180 §1: 'Approximately 65% of the memory is allocated for the model weights ... Close to 30% of the memory is used to store the dynamic states'"},
+      {"line": 37, "claim": "existing systems use only 20.4%-38.2% of KV cache memory for token states", "verdict": "supported", "source": "§3: 'only 20.4% - 38.2% of the KV cache memory is used to store the actual token states'"},
+      {"line": 160, "claim": "sharing cuts parallel sampling/beam search memory up to 55%, up to 2.2x throughput (blog)", "verdict": "supported", "source": "vLLM blog 2023-06-20: 'cutting their memory usage by up to 55%. This can translate into up to 2.2x improvement in throughput'"},
+      {"line": 204, "claim": "swap vs recompute table: small blocks favour recompute, 16-64 comparable, recompute overhead never above 20% of swapping", "verdict": "supported", "source": "§7.3: 'recomputation overhead is never higher than 20% of swapping's latency. For medium block sizes from 16 to 64, the two methods exhibit comparable end-to-end performance'"},
+      {"line": 260, "claim": "v0.8.1: prompt logprobs only with prefix caching off; V1 logprobs from raw output before temperature/penalties", "verdict": "supported", "source": "v0.8.1 V1 User Guide, Semantic Changes: 'prompt logprobs are only supported when prefix caching is turned off via --no-enable-prefix-caching'; 'before applying any logits post-processing such as temperature scaling or penalty adjustments'"},
+      {"line": 268, "claim": "V1 status table (Optimized / Functional / WIP / Planned / Deprecated rows)", "verdict": "supported", "source": "v0.8.1 V1 User Guide Feature/Model table; statuses match, three source rows omitted and rows merged"},
+      {"line": 282, "claim": "vLLM-Omni step_execution x max_num_seqs -> REQUEST_BATCH/STEP_BATCH, RequestScheduler/StepScheduler", "verdict": "supported", "source": "vLLM-Omni Diffusion Continuous Batching, Overview table (identical four rows)"},
+      {"line": 314, "claim": "--torch-backend=auto picks the PyTorch backend from the CUDA driver; vllm download-kernels fetches FlashInfer precompiled kernels; skipping adds minutes on Hopper+", "verdict": "supported", "source": "gpu.cuda.inc.md: 'installs FlashInfer's precompiled kernels for the installed FlashInfer and CUDA versions. Without them, vLLM downloads and compiles kernels at startup, which can add several minutes on Hopper and newer GPUs'"},
+      {"line": 338, "claim": "CPU: weight shard + KV space over a NUMA node kills the worker with exitcode 9; legacy, use --kv-cache-memory-bytes", "verdict": "supported", "source": "cpu.md: 'the TP worker will be killed with `exitcode 9` due to out-of-memory. This is a legacy setting; use `--kv-cache-memory-bytes` instead.'"},
+      {"line": 444, "claim": "gpu-memory-utilization is per instance; kv-cache-memory-bytes ignores it; explicit float16/bfloat16 KV dtype must match model", "verdict": "supported", "source": "vllm/config/cache.py docstrings: 'This is a per-instance limit'; 'kv_cache_memory_bytes (when not-None) ignores gpu_memory_utilization'; 'An explicit float16 or bfloat16 must match the model data type'"},
+      {"line": 531, "claim": "audio hints are count/length; over-max hints clamped with a warning; mm_processor_cache_gb default 4 GiB", "verdict": "supported", "source": "conserving_memory.md: '`audio`: {\"count\": int, \"length\": int}', 'clamps it to the model's effective maximum and may log a warning'; multimodal.py 'mm_processor_cache_gb: float = Field(default=4, ge=0)'"},
+      {"line": 551, "claim": "production-stack Helm chart v0.1.11+ integrates KEDA autoscaling and monitoring via values.yaml", "verdict": "supported", "source": "Autoscaling with KEDA: 'With the vLLM Production Stack Helm chart (v0.1.11+), KEDA autoscaling and monitoring are integrated directly into the chart'"},
+      {"line": 600, "claim": "scaleDown stabilizationWindowSeconds 300, Percent 50 per 60 s; fallback failureThreshold 3, replicas 2; polling 15 s, cooldown 360 s, threshold 5, 1-3 replicas", "verdict": "supported", "source": "Autoscaling with KEDA §4 and §7 (Custom HPA Behavior, Fallback Configuration): same values"},
+      {"line": 680, "claim": "conditions table: 2-4x vs FT/Orca; 2.2x/4.3x concurrent requests vs Orca(Oracle)/(Max) on OPT-13B; up to 24x/3.5x; 14-24x/2.2-2.5x (n=1); 8.5-15x/3.3-3.5x (n=3); up to 30x LMSYS", "verdict": "supported", "source": "paper abstract/§1/§6.2 ('2.2× more requests at the same time than Orca (Oracle) and 4.3× more requests than Orca (Max)'); blog performance section and LMSYS paragraph"},
+      {"line": 717, "claim": "figure captioned 'n=1 서빙 처리량 비교 ... HF 14~24배, TGI 2.2~2.5배'", "verdict": "wrong", "source": "Image URL is perf_a100_n3_light.png; the blog shows that chart under 'three parallel output completions ... 8.5x - 15x than HF and 3.3x - 3.5x than TGI'; n=1 charts are perf_a100_n1_light.png / perf_a10g_n1_light.png"}
+    ],
+    "outside_sample": [
+      {"line": 316, "claim": "ROCm install supports only Python 3.12, ROCm 7.0, glibc >= 2.35", "verdict": "wrong", "source": "current GPU install page: 'To install the latest version of vLLM for Python 3.12, ROCm 10.0 and glibc >= 2.35' (gpu.rocm.inc.md changed 2026-10-18)"},
+      {"line": 649, "claim": "metric names vllm:gpu_cache_usage_perc, vllm:prefix_cache_hit_rate, vllm:time_per_output_token_seconds_bucket", "verdict": "stale (hedged at L645)", "source": "vllm/v1/metrics exports vllm:kv_cache_usage_perc, vllm:prefix_cache_hits/queries, vllm:inter_token_latency_seconds"}
+    ]
+  },
+  "checklist": {
+    "repeated": 1,
+    "avoided": 5,
+    "na": 0,
+    "repeated_ids": ["stale-third-party-names"],
+    "items": [
+      {"id": "dangling-cross-reference", "status": "avoided", "evidence": "No numbered chapter references; back-references resolve (L210 -> L107, L543 -> L332, L596 -> L457/L470, L703 -> L647-660)"},
+      {"id": "tag-remnant", "status": "avoided", "evidence": "No '</...>' closing-tag remnants in the file"},
+      {"id": "entity-leak", "status": "avoided", "evidence": "Only '&#124;' and '&amp;' inside Sources link text (L731-743), which kramdown renders as '|' and '&'"},
+      {"id": "unclosed-code-fence", "status": "avoided", "evidence": "36 fence markers, all paired; all six Python blocks parse"},
+      {"id": "stale-third-party-names", "status": "repeated", "evidence": "L649, L653, L655 take metric names from Parseable/GuideLLM that current vLLM no longer exports (kv_cache_usage_perc, prefix_cache_hits/queries, inter_token_latency_seconds); hedged at L645"},
+      {"id": "install-usage-centric", "status": "avoided", "evidence": "L19-295 cover the memory problem, PagedAttention, sharing, scheduler, preemption and V1 before installation at L297"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 45,
+    "system_architecture_line": 164,
+    "installation_first_line": 297,
+    "sources_total": 22,
+    "sources_unique": 20,
+    "duplicate_sources": ["Quickstart L722 and L742", "PagedAttention blog L731 (vllm.ai) and L743 (blog.vllm.ai)"],
+    "official_docs_share": "12/22 docs pages (11 docs.vllm.ai incl. vLLM-Omni and production-stack, 1 GitHub serve_args.md); 2 pinned to old versions (v0.8.1, v0.27.1)",
+    "non_official_share": "6/22 = 27% (Introl, vLLM forum, Fastio, Unsloth, Parseable, GuideLLM issue); plus paper and 3 vLLM blog posts as explanatory sources",
+    "opens_with_problem": true,
+    "closes_with_choice_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "single-node path runs as pasted; Kubernetes path does not",
+    "ok": [
+      "uv install L307-312 matches gpu.cuda.inc.md (uv pip install vllm --torch-backend=auto; vllm download-kernels)",
+      "docker run L322-330 matches the docs form (positional --model to vllm/vllm-openai)",
+      "vllm serve L351, curl /v1/models L357 and /v1/chat/completions L363-371 request shape matches the quickstart",
+      "offline LLM/SamplingParams script L382-401 and llm.chat(messages, sampling_params) L411-421 match LLM.chat's signature",
+      "LLM(...) engine-arg kwargs L450-459, CompilationConfig/CompilationMode.VLLM_COMPILE import L499-511, limit_mm_per_prompt dict form L519-529 and tensor_parallel_size L537-541 are valid in current source; all Python blocks parse",
+      "config.yaml with long-form keys + vllm serve --config L465-477 matches serve_args.md",
+      "L490 flags --max-model-len/--gpu-memory-utilization exist"
+    ],
+    "fails_or_misleads": [
+      "No helm repo add / helm install for vllm-stack and no KEDA install (kedacore chart); applying the L561 values without KEDA leaves the ScaledObject without its CRD",
+      "L561 values omit servingEngineSpec.serviceMonitor.enabled although L555 says to enable it; on a fresh install Prometheus may not scrape the engine, so the trigger never fires",
+      "L602 snippet is a fragment ('# ... (as above)') and is invalid on its own as a modelSpec",
+      "Metric names in the L647 table: three do not exist on current servers, so dashboards built from it stay empty",
+      "L374 mentions the openai Python client without code"
+    ]
+  },
+  "top_issues": [
+    "L717: n=3 benchmark chart captioned as n=1 with n=1 numbers, placed after the closing section; L691 describes n=1 curves that are never shown",
+    "Stale facts: ROCm 7.0 at L316 (docs say ROCm 10.0) and three metric names in the L647 table that current vLLM no longer exports",
+    "Kubernetes section is not runnable as pasted (no chart/KEDA install, serving-engine serviceMonitor missing); Korean style repeats '~보겠습니다' openers and has the L293 calque '해석된 self-attention 어텐션 백엔드'"
+  ]
+}

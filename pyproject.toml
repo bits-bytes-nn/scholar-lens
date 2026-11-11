@@ -10,13 +10,13 @@ python = "^3.12"
 arxiv = ">=2.1.3"
 beautifulsoup4 = ">=4.12.3"
 boto3 = ">=1.35.86,<2.0"
-faiss-cpu = ">=1.9.0.post1"
 httpx = ">=0.28.1"
-langchain-aws = ">=0.2.10,<1.0"
-langchain-community = ">=0.3.13,<1.0"
-langchain-core = ">=0.3.25,<1.0"
-langchain-text-splitters = ">=0.3.0,<1.0"
+langchain-aws = ">=1.0,<2.0"
+langchain-core = ">=1.2.22,<2.0"
+langchain-text-splitters = ">=1.1.2,<2.0"
 nltk = ">=3.9.1"
+# The in-memory code index (langchain_core's cosine similarity) needs it.
+numpy = ">=1.0.0"
 pillow = ">=11.1.0"
 pydantic = { extras = ["email"], version = ">=2.10.5" }
 pygithub = ">=2.8.1"
@@ -26,6 +26,7 @@ pyyaml = ">=6.0.3"
 requests = ">=2.32.5"
 tenacity = ">=8.0.0"
 resvg-py = ">=0.5.0"
+strands-agents = "1.63.0"
 
 [tool.poetry.scripts]
 scholar-lens = "scholar_lens.cli:main"
@@ -43,6 +44,8 @@ moto = { extras = ["s3", "sns", "ssm", "batch", "sts"], version = ">=5.0" }
 responses = ">=0.25"
 ruff = ">=0.6"
 mypy = ">=1.11"
+import-linter = "^2.15"
+pip-audit = "^2.10.1"
 
 [build-system]
 requires = ["poetry-core"]
@@ -54,7 +57,7 @@ testpaths = ["tests"]
 pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
-addopts = "-ra -q --strict-markers"
+addopts = "-ra --strict-markers"
 
 [tool.coverage.run]
 source = ["scholar_lens"]
@@ -102,3 +105,178 @@ exclude = "(cdk\\.out|logs|papers)"
 #   names, not the dynamic `str` we pass.
 # - misc: Pydantic class-level field defaults accessed via the class object.
 disable_error_code = ["call-overload", "misc"]
+
+# Dependency rules of the layers (docs/engine.md, 5.1): the domain is pure,
+# the application depends on the domain, the adapters on the domain and the
+# application's ports, the sections engine is wired by the composition
+# root only, and only the entrypoints and the composition root read the
+# configuration. Third-party SDKs are imported by the adapters and the sections
+# engine only.
+[tool.importlinter]
+root_package = "scholar_lens"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "The domain imports nothing of the other layers or the SDKs"
+type = "forbidden"
+source_modules = ["scholar_lens.domain"]
+forbidden_modules = [
+    "scholar_lens.application",
+    "scholar_lens.adapters",
+    "scholar_lens.sections_engine",
+    "scholar_lens.configs",
+    "scholar_lens.bootstrap",
+    "scholar_lens.entrypoints",
+    "scholar_lens.cli",
+    "boto3",
+    "botocore",
+    "httpx",
+    "requests",
+    "strands",
+    "langchain_core",
+]
+
+[[tool.importlinter.contracts]]
+name = "The application imports the domain only"
+type = "forbidden"
+source_modules = ["scholar_lens.application"]
+forbidden_modules = [
+    "scholar_lens.adapters",
+    "scholar_lens.sections_engine",
+    "scholar_lens.configs",
+    "scholar_lens.bootstrap",
+    "scholar_lens.entrypoints",
+    "scholar_lens.cli",
+    "boto3",
+    "botocore",
+    "httpx",
+    "requests",
+    "strands",
+    "langchain_core",
+]
+
+[[tool.importlinter.contracts]]
+name = "The adapters import the domain and the application's ports only"
+type = "forbidden"
+source_modules = ["scholar_lens.adapters"]
+forbidden_modules = [
+    "scholar_lens.application.checkpoints",
+    "scholar_lens.application.evidence_writer",
+    "scholar_lens.application.guide_engine",
+    "scholar_lens.application.paper_engine",
+    "scholar_lens.application.post_engine",
+    "scholar_lens.application.run",
+    "scholar_lens.application.survey_engine",
+    "scholar_lens.application.use_cases",
+    "scholar_lens.sections_engine",
+    "scholar_lens.configs",
+    "scholar_lens.bootstrap",
+    "scholar_lens.entrypoints",
+    "scholar_lens.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "The sections engine imports the domain, the ports and the adapters only"
+type = "forbidden"
+source_modules = ["scholar_lens.sections_engine"]
+forbidden_modules = [
+    "scholar_lens.application.checkpoints",
+    "scholar_lens.application.evidence_writer",
+    "scholar_lens.application.guide_engine",
+    "scholar_lens.application.paper_engine",
+    "scholar_lens.application.post_engine",
+    "scholar_lens.application.run",
+    "scholar_lens.application.survey_engine",
+    "scholar_lens.application.use_cases",
+    "scholar_lens.configs",
+    "scholar_lens.bootstrap",
+    "scholar_lens.entrypoints",
+    "scholar_lens.cli",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only the composition root imports the sections engine"
+type = "forbidden"
+source_modules = [
+    "scholar_lens.domain",
+    "scholar_lens.application",
+    "scholar_lens.adapters",
+    "scholar_lens.configs",
+    "scholar_lens.entrypoints",
+    "scholar_lens.cli",
+]
+forbidden_modules = ["scholar_lens.sections_engine"]
+# The entrypoints reach the sections engine through the composition root.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Only the entrypoints and the composition root read the configuration"
+type = "forbidden"
+source_modules = [
+    "scholar_lens.domain",
+    "scholar_lens.application",
+    "scholar_lens.adapters",
+    "scholar_lens.sections_engine",
+]
+forbidden_modules = ["scholar_lens.configs"]
+
+[[tool.importlinter.contracts]]
+name = "Only the adapters and the sections engine import the SDKs"
+type = "forbidden"
+source_modules = [
+    "scholar_lens.domain",
+    "scholar_lens.application",
+    "scholar_lens.configs",
+    "scholar_lens.bootstrap",
+    "scholar_lens.entrypoints",
+    "scholar_lens.cli",
+]
+forbidden_modules = [
+    "boto3",
+    "botocore",
+    "httpx",
+    "requests",
+    "strands",
+    "langchain_core",
+    "langchain_aws",
+    "langchain_community",
+    "langchain_text_splitters",
+    "github",
+]
+# The entrypoints and the composition root build adapters, which import them.
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "Web research does not depend on the review plan"
+type = "forbidden"
+source_modules = ["scholar_lens.adapters.web.research"]
+forbidden_modules = ["scholar_lens.domain.review_plan"]
+
+[[tool.importlinter.contracts]]
+name = "The draft checks are independent of every writer"
+type = "forbidden"
+source_modules = ["scholar_lens.sections_engine.section_loop"]
+forbidden_modules = [
+    "scholar_lens.sections_engine.explainer",
+    "scholar_lens.sections_engine.summarizer",
+    "scholar_lens.adapters.web.guide_research",
+    "scholar_lens.application.use_cases",
+]
+allow_indirect_imports = true
+
+[[tool.importlinter.contracts]]
+name = "The survey stages do not use the guide or review generators"
+type = "forbidden"
+source_modules = [
+    "scholar_lens.application.use_cases.survey_plan",
+    "scholar_lens.application.use_cases.survey_write",
+    "scholar_lens.adapters.scholarly.candidates",
+    "scholar_lens.adapters.bedrock.survey_calls",
+]
+forbidden_modules = [
+    "scholar_lens.application.use_cases.guide",
+    "scholar_lens.application.use_cases.paper",
+    "scholar_lens.adapters.web.guide_research",
+    "scholar_lens.sections_engine",
+]
+allow_indirect_imports = true

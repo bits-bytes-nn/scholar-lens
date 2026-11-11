@@ -2,7 +2,7 @@
 # below shows the code default; omit a key to keep it, except
 # `resources.project_name`, which is required once `resources` is present.
 # Unknown keys are errors.
-# `cdk deploy` bakes this file into the Batch image: re-run `cdk deploy` after
+# `cdk deploy --all` bakes this file into the Batch image: re-run `cdk deploy --all` after
 # editing it, or Batch jobs keep the old values.
 
 resources:
@@ -11,7 +11,7 @@ resources:
   profile_name:                    # local AWS profile (Batch uses its job role)
   default_region_name: ap-northeast-2
   bedrock_region_name: us-west-2
-  s3_bucket_name:                  # existing bucket; required for `cdk deploy` and Batch runs
+  s3_bucket_name:                  # existing bucket; required for `cdk deploy --all` and Batch runs
   s3_prefix: scholar-lens
   vpc_id:
   subnet_ids:
@@ -31,11 +31,8 @@ resources:
     summary_category: Paper Summaries
     tech_guide_category: Tech Guides
     survey_category: Paper Surveys   # a type the blog's post conventions must list
-    # Upload figures to S3 with a public-read ACL (blog images normally come
-    # from the blog repository, so keep this off).
-    public_assets: false
 
-# Any *_model_id accepts a LanguageModelId value (scholar_lens/src/constants.py),
+# Any *_model_id accepts a LanguageModelId value (scholar_lens/domain/constants.py),
 # e.g. anthropic.claude-fable-5-1 for the highest quality at a higher price.
 paper:
   figure_analysis_model_id: anthropic.claude-haiku-5-5
@@ -48,8 +45,9 @@ code:
   embed_model_id: amazon.titan-embed-text-v2:0
   chunk_size: 1024
   chunk_overlap: 256
-  # Index at most this many of the repos' most relevant Python files / chunks
-  # (vendored libraries, tests and files over 100 KB are skipped).
+  # Read at most this many of the repos' most relevant Python files; index at
+  # most this many chunks (the code index is built only for the sections
+  # review engine; vendored libraries, tests and files over 100 KB are skipped).
   max_files: 150
   max_chunks: 400
 
@@ -59,6 +57,12 @@ citations:
   prefer_full_text: false
 
 explanation:
+  # Writing engine: sections (plan, scored sections, edit, finalize) or
+  # evidence (reading agents record checked evidence; docs/redesign.md).
+  engine: sections
+  reader_model_id: anthropic.claude-sonnet-5-5   # evidence engine: reading
+  min_total_chars: 25000                         # evidence engine: prose length
+  max_total_chars: 55000
   # Plans the review from the whole paper and edits the finished article.
   paper_planning_model_id: anthropic.claude-opus-5-5
   paper_finalization_model_id: anthropic.claude-opus-5-5
@@ -74,42 +78,105 @@ explanation:
   max_synthesis_attempts: 3
   max_sections: 20
   max_edit_rounds: 2              # 2nd round for coverage gaps or skipped edits
-  # Hard total-token ceiling for one run (null = no limit); a LoRA-length
+  # sections engine: hard total-token ceiling for one run (null = no limit); a LoRA-length
   # paper uses ~1.4M.
   max_total_tokens: 8000000
+  max_cost_usd: 40               # evidence engine: hard ceiling (USD, null = none)
+  chars_per_reader: 15000        # evidence engine: paper characters per reading agent
 
 summary:
   summary_model_id: anthropic.claude-opus-5-5
+  engine: sections                               # or evidence
+  reader_model_id: anthropic.claude-sonnet-5-5   # evidence engine: reading
+  min_total_chars: 2500                          # evidence engine: prose length
+  max_total_chars: 4500
   summarizer_enable_thinking: false
   thinking_effort: medium
-  max_total_tokens: 1000000        # hard ceiling (null = no limit)
+  max_total_tokens: 1000000        # sections engine: hard ceiling (null = no limit)
+  max_cost_usd: 12                 # evidence engine: hard ceiling (USD)
+  chars_per_reader: 40000          # evidence engine: paper characters per reading agent
 
 tech_guide:
+  # The evidence engine writes the guide (docs/redesign.md): the relevance
+  # model gates the sources, plans the searches and files the guide; reading
+  # agents use synopsis_model_id, the outline and sections writing_model_id,
+  # the checks evaluation_model_id.
   relevance_model_id: anthropic.claude-haiku-5-5
   synopsis_model_id: anthropic.claude-sonnet-5-5
   writing_model_id: anthropic.claude-opus-5-5
   evaluation_model_id: anthropic.claude-opus-5-5
-  writer_enable_thinking: false
-  evaluator_enable_thinking:       # null = same as writer_enable_thinking
   thinking_effort: medium
-  # Fact-check each section against the sources (one extra call per section).
-  verify_grounding: true
   # Derive web-search queries from the docs and reference material (needs
   # TAVILY_API_KEY or BRAVE_API_KEY) across three intents (usage, internals
   # and design, production integration), and fetch the top result pages into
   # the corpus, taken round-robin across the queries (12 = the top two results
-  # of each query). Each section reads at most ~60k characters of its most
-  # relevant pages, so more pages mainly grow the one outline call.
+  # of each query).
   auto_research: true
   max_research_queries: 6
   fetch_top_results: 12
+  # Search results are ranked by source authority (official docs, the
+  # project's repository, then the rest), then publication year, then search
+  # rank. At most this many fetched result pages are third-party; demoted
+  # classes below count as third-party and rank last.
+  max_third_party_pages: 4
+  # Of the fetched result pages, this many are kept for primary non-official
+  # material (papers, the project's design docs and posts, reference-quality
+  # pages) while such results remain, so official pages cannot fill every
+  # slot. Bounded by max_third_party_pages; demoted classes never count.
+  min_secondary_pages: 3
+  # A requested docs page whose path names no version makes official the
+  # deepest prefix of its path that this share of its own same-host links
+  # stay under (other products, a blog or a forum on the host are not).
+  official_scope_link_share: 0.6
+  # Domain classes to demote: class name -> host patterns ("example.com"
+  # with its subdomains, "*.example.com", "forum.*"). Edit or add classes;
+  # an empty map demotes nothing.
+  demoted_domains:
+    forum:
+      - stackoverflow.com
+      - "*.stackexchange.com"
+      - reddit.com
+      - news.ycombinator.com
+      - "discuss.*"
+      - "forum.*"
+      - "forums.*"
+      - "community.*"
+    social:
+      - x.com
+      - twitter.com
+      - linkedin.com
+      - facebook.com
+      - youtube.com
+    aggregator:
+      - "*.libhunt.com"
+      - stackshare.io
+      - alternativeto.net
+  # Domains the search backends leave out entirely (Tavily exclude_domains,
+  # Brave -site:), e.g. [pinterest.com].
+  excluded_domains: []
+  # The gathered corpus (queries, results, pages and their source records) is
+  # saved under a hash of the inputs (local work dir and S3 guides/sources/)
+  # and reused by a rerun with the same inputs within this many days, so
+  # reruns and evaluations write from the same sources. 0 = always gather
+  # again; `guide --fresh-sources` gathers again once.
+  source_snapshot_ttl_days: 7
   # At most this many sections (3-30); the outline plans within it.
-  max_sections: 14
-  min_quality_score: 75
-  max_revision_attempts: 1
-  # Soft limit: past it, remaining sections skip evaluate/revise/grounding;
-  # past 1.5x the run aborts.
-  max_total_tokens: 3000000
+  max_sections: 11
+  # Hard ceiling on one run's estimated cost (USD).
+  max_cost_usd: 60
+  # Pages read and the guide's prose characters (Korean).
+  max_sources_read: 40
+  min_total_chars: 25000
+  max_total_chars: 45000
+  # Run the guide's Python examples in order in an AgentCore Code
+  # Interpreter sandbox (no credentials; Batch: the stack's interpreter,
+  # which can install the docs' packages) and fix a block that fails as
+  # pasted. code_interpreter_id is for local runs (default: AWS's system
+  # interpreter, no network).
+  run_examples: false
+  code_interpreter_id: null
+  run_block_timeout_s: 60
+  run_timeout_s: 600  # at most 840 (a synchronous call may take 15 minutes)
 
 survey:
   # Plan stage (`survey plan`): scope call, then the selection call.
@@ -124,18 +191,15 @@ survey:
   candidate_pool: 60
   # Soft limit: past it the repair round is skipped; past 1.5x the run aborts.
   max_total_tokens: 300000
-  # Write stage (`survey write --plan`): one card call per paper (cached by
-  # paper, card schema, model and language), one outline call, per section a
-  # writer, an evaluator, up to max_revision_attempts revisions and a
-  # grounding pass, then one finalization call (description, taxonomy).
+  # Write stage (`survey write --plan`, the evidence engine: reading agents
+  # record checked evidence, the outline gives it to sections, claim-checked
+  # drafts): card_model_id reads (and is the writer's fallback),
+  # outline_model_id plans the outline and writes the finalization
+  # (description, taxonomy), writing and evaluation as named.
   card_model_id: anthropic.claude-sonnet-5-5
   outline_model_id: anthropic.claude-opus-5-5
   writing_model_id: anthropic.claude-opus-5-5
   evaluation_model_id: anthropic.claude-opus-5-5
-  card_source_chars: 150000        # of a core paper's arXiv HTML text
-  min_quality_score: 75
-  max_revision_attempts: 1
-  verify_grounding: true
   # Length in characters of prose (Korean; other languages x2.5): each paper
   # adds its share to its lineage section, other sections their depth's size,
   # and the total is scaled into [min_total_chars, max_total_chars].
@@ -143,9 +207,8 @@ survey:
   chars_per_supporting_paper: 800
   min_total_chars: 20000
   max_total_chars: 70000
-  # Soft limit on one write run: past it sections skip evaluation, revision
-  # and grounding; past 1.5x the run aborts.
-  write_max_total_tokens: 4500000
+  # Hard ceiling on one write run's estimated cost (USD).
+  write_max_cost_usd: 60
 
 # Language of every generated artifact (e.g. Korean, English).
 output_language: Korean

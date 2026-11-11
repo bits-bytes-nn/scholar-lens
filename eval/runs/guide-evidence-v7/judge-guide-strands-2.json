@@ -1,0 +1,100 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/eval-guide/guide-strands-v7.md",
+  "judge_run": 2,
+  "sample": "paragraph blocks (non-heading, code/table blocks count as one) from paragraph 2, every third; 232 blocks, 77 sampled; 15 claims drawn from sampled blocks",
+  "scores": {"A": 7.5, "B": 8.0, "C": 6.5, "D": 8.5, "E": 8.0, "F": 8.0, "T1": 6.5, "T2": 8.5, "T3": 8.0},
+  "score_notes": {
+    "A": "TL;DR, claim H2s, no body H1, use_math with $$ present, description 125 chars. Deduction: the setup section '## 패키지 하나와 자격증명 하나로 시작하는 글자 세기 에이전트' sits at L1018, second to last, after every control section, while the install command already appears inside the limits section (L131-134).",
+    "B": "Natural Korean 입니다 register overall. Deductions: '~한다' comments in code blocks (L916 '쓰기를 막는다', L927 '실행되지 않는다', L1000 '거부된다'); 'L1080 ... 메시지가 뒤섞이고 기록이 손상됩니다' states the overlap hazard as if it happens under the default THROW mode; dense TypeScript asides in nearly every section (L174, L222, L268, L307, L397, L505, L527, L586, L779, L841, L1095).",
+    "C": "L1076 '이 블록이 이후 섹션의 출발점입니다' points forward although every section it names (한도, 훅, 재시도, 컨텍스트 관리, 구조화 출력, 개입) came before. letter_counter defined twice (L322-330, again L1046-1061 with a ValueError guard). file_editor imported from strands.vended_tools in some blocks (L318, L535, L1034) and from strands_tools in others (L605, L712, L749, L912), with L905 claiming the quickstart uses strands_tools.",
+    "D": "Hard parts get numeric walk-throughs: token-overshoot table (L162-166), turns=2 side-effect case (L170), HookOrder mixed-order table (L278-284), throttle retries 1+2s (L468) and 4+8+16+32+64=124s (L517-521), structured-output attempt table (L793-798), intervention precedence table (L881-887). Slight padding from repeated full prompt string.",
+    "E": "Tables used where comparison helps (stop reasons L186-192, writable hook properties L290-301, CacheConfig L700-705, intervention methods L865-871); ASCII flows for loop, hook order, middleware, HITL. No real agent-loop/architecture figure; L27-34 ASCII diagram is rough.",
+    "F": "15/15 sampled claims supported or unverifiable (0 wrong). Outside the sample: L905 '퀵스타트처럼 strands_tools에서 file_editor를 가져오고' is wrong (quickstart imports from strands.vended_tools and says to prefer vended tools over the community package; strands_tools has no file_editor). L1036 AnthropicModel snippet drops the quickstart's required max_tokens=4096. -2 for the wrong import attribution/API path.",
+    "T1": "Running example mostly runs (fake-model harness, strands-agents 1.64.0): L139, L314 (hook+resume, 4 model calls, answer.txt written), L1067, L1087 succeed. Fails as pasted: L605/L712/L749/L912 ImportError 'cannot import name file_editor from strands_tools' (also with strands-agents-tools 0.9.0 installed), which cascades to L803 NameError LetterCountReport and L971 NameError WriteBudget; L971 needs strands-agents[cedar] (cedarpy) not mentioned; L687 needs strands_harness, no install line; L1036 AnthropicModel without max_tokens -> KeyError 'max_tokens' on first request. With the import fixed and cedar installed, all running-example blocks execute.",
+    "T2": "Covers the source topics in a sensible order: loop, limits/stop reasons, hooks, middleware, retry, conversation management, context_manager/caching, structured output, interventions/HITL, deployment/concurrency, choice. Grounded in fetched pages.",
+    "T3": "Internals explained (recursive event_loop_cycle L75, 7-tuple stop payload L107-117, hooks outside middleware chain L412-420/L503, retry strategy outside middleware L448/L470, proactive compression formula L629-633, after_model_call Guide has no cap and Deny not allowed L1012). Failure-mode table at the end has only two rows (L1194-1197); limits/retry/compression failure modes are in the body but not consolidated."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "H2s are claim noun phrases, e.g. L121 '사이클 경계에서만 검사되는 호출 단위 한도와 두 갈래의 종료 경로', L507 '스로틀링만 재시도하는 기본 지수 백오프와 그 교체 지점'."},
+    "running_example": {"status": "met", "evidence": "Letter-counter + file_editor agent and the strawberry prompt thread every section (L25, L85, L170, L311, L468, L515, L600, L744, L905, L1099, L1171)."},
+    "mechanism_design_code_example": {"status": "met", "evidence": "Limits: mechanism L160 -> design consequence L168 -> code L138 -> numeric table L162-166; retry: L513 -> L521 -> L533 -> 124s sum."},
+    "facts_once": {"status": "partly met", "evidence": "Top-of-iteration limit check restated at L15, L123, L160, L1199; Guide retry has no cap at L1012 and L1014; letter_counter defined twice (L322, L1046)."},
+    "numbers_scoped": {"status": "met", "evidence": "Python vs TypeScript scope given (L174, L513 'Python에서는 ... 128초'); illustrative numbers labelled (L160 '숫자는 설명을 위한 예시입니다')."},
+    "nothing_invented": {"status": "partly met", "evidence": "Examples labelled as examples (L85, L196, L600); but L905 false quickstart attribution and nonexistent strands_tools.file_editor import."},
+    "own_assessment_at_end": {"status": "met", "evidence": "L1201 '이 글의 판단은 이렇습니다. 도구가 몇 개 안 되고 ...'."},
+    "length_fitted": {"status": "partly met", "evidence": "~66.8K-char body; TypeScript asides and repeated full prompt add length without helping the Python reader."},
+    "type_specific_shape": {"status": "partly met", "evidence": "Opens with TL;DR and the problem (L11-42), architecture first (L44), ends with when to choose and failure modes (L1180-1201); but setup/quickstart is placed at L1018 after all controls."},
+    "korean_style": {"status": "met", "evidence": "입니다 register, Korean headings; minor '~한다' in code comments (L916, L927, L1000)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 1,
+    "examples": [
+      {"line": 15, "claim": "Default retry only retries throttling errors with exponential backoff", "verdict": "supported", "source": "retry-strategies: 'Default retry strategies handle throttling errors (ModelThrottledException) ... Other exceptions propagate immediately without retry.'"},
+      {"line": 23, "claim": "The loop builds on the ReAct paradigm", "verdict": "supported", "source": "AWS Open Source Blog: 'This approach builds upon the ReAct paradigm'"},
+      {"line": 52, "claim": "event_loop module processes messages, executes tools, handles errors, manages recursive cycles; event_loop_cycle is an async generator; invocation_state holds request_state, event_loop_cycle_id, event_loop_cycle_span", "verdict": "supported", "source": "API strands.event_loop.event_loop, event_loop_cycle docstring"},
+      {"line": 107, "claim": "EventLoopStopEvent event['stop'] is a 7-tuple (StopReason, Message, EventLoopMetrics, Any, Sequence[Interrupt]|None, BaseModel|None, Checkpoint|None)", "verdict": "supported", "source": "API page: 'The final EventLoopStopEvent payload (event[\"stop\"]) is a 7-tuple'"},
+      {"line": 127, "claim": "Four optional caps (turns, output tokens, total tokens, failed structured-output attempts); each a positive integer in Python; no default limit", "verdict": "supported", "source": "lifecycle-controls 'Each cap must be a positive integer'; agent-loop 'No limit applies unless you pass one'"},
+      {"line": 178, "claim": "Agent-loop page lists precedence turns > total > output; lifecycle page appends structured-output attempts", "verdict": "supported", "source": "agent-loop 'turns, then total tokens, then output tokens'; lifecycle-controls '... then structured output attempts'"},
+      {"line": 274, "claim": "HookOrder.SDK_FIRST -100, DEFAULT 0, SDK_LAST 100; lower runs first; not enforced bounds; reverse rule applies within the same order group", "verdict": "supported", "source": "hooks page HookOrder list and 'Within the same order group, Before events preserve registration order and After events reverse it.'"},
+      {"line": 448, "claim": "Middleware retry example tries up to three times with 2**attempt backoff and is an alternative to the retry strategy, which runs outside the chain", "verdict": "supported", "source": "middleware page: 'for attempt in range(3)', 'asyncio.sleep(2 ** attempt)', 'This is an alternative to the agent's retry strategy ... outside the middleware chain'"},
+      {"line": 513, "claim": "Default: 6 total attempts (5 retries), 4s initial delay doubling, Python max_delay 128s; waits 4+8+16+32+64=124s", "verdict": "supported", "source": "retry-strategies: 'up to 5 times (6 total attempts) ... starting at 4 seconds', max_delay 128. Note: installed strands-agents 1.64.0 ModelRetryStrategy signature has max_delay=240; the docs page says 128. The 124s sum is unaffected."},
+      {"line": 625, "claim": "proactive_compression=True uses threshold 0.7; count_tokens uses tiktoken cl100k_base, else chars/4 for text and /2 for JSON", "verdict": "supported", "source": "conversation-management 'Use True for the default 0.7 threshold'; API strands.models.model count_tokens docstring"},
+      {"line": 700, "claim": "CacheConfig fields ttl, tools_ttl/system_prompt_ttl (TTL string/True/False; tools_ttl None defers to deprecated cache_tools), strategy auto/anthropic, cache_key for OpenAI/LiteLLM/Mistral derived from session manager", "verdict": "supported", "source": "API strands.models.model CacheConfig attributes"},
+      {"line": 865, "claim": "Allowed actions per intervention method (before_tool_call adds Confirm; after_tool_call only Proceed/Transform; after_model_call Proceed/Guide/Transform)", "verdict": "supported", "source": "interventions page 'Lifecycle Methods' table"},
+      {"line": 964, "claim": "Confirm with response skips the pause; default evaluate accepts True, 'y', 'yes' case-insensitively", "verdict": "supported", "source": "interventions: 'The default accepts True, \"y\", or \"yes\" (case-insensitive).'"},
+      {"line": 1167, "claim": "May 2025 Strands intro video shows containerising to Fargate, Lambda, EC2 with a deploy toolkit", "verdict": "unverifiable", "source": "YouTube uploadDate 2025-05-16 confirms the date; chapter '08:28 How to get code from Strands Agents into production' exists, but the Fargate/Lambda/EC2 detail is not in the description and the transcript was not retrievable."},
+      {"line": 1178, "claim": "Builder Center observability demo had 3 cycles per run (book_flight example)", "verdict": "supported", "source": "Builder Center observability article: '\"total_cycles\": 3 ... Three cycles here.'"}
+    ],
+    "outside_sample_findings": [
+      {"line": 905, "claim": "퀵스타트처럼 strands_tools에서 file_editor를 가져오고", "verdict": "wrong", "source": "Python quickstart: 'from strands.vended_tools import file_editor' and 'Use tools from the Strands Harness SDK (vended tools) ... instead of a separate community package'; strands_tools 0.9.0 has no file_editor."},
+      {"line": 1036, "claim": "AnthropicModel(model_id=\"claude-sonnet-5\")", "verdict": "wrong (code)", "source": "Quickstart passes max_tokens=4096; AnthropicModelConfig max_tokens is Required; format_request raises KeyError 'max_tokens'."}
+    ]
+  },
+  "checklist": {
+    "repeated": 3,
+    "avoided": 1,
+    "na": 1,
+    "repeated_ids": ["shared-agent-throw-scope", "shared-agent-history-leak", "result-fields-incomplete"],
+    "items": [
+      {"id": "loop-diagram-remote", "status": "avoided", "evidence": "No image links at all (no '![' in the post); the loop is drawn as ASCII at L27-34. No local /assets/ diagram either."},
+      {"id": "shared-agent-throw-scope", "status": "repeated", "evidence": "L1080 '한 인스턴스에서 호출이 겹치면 메시지가 뒤섞이고 기록이 손상됩니다' and L1084 'THROW ... 이미 실행 중인 에이전트를 다시 호출하면 ConcurrencyException' never tie THROW to invoke_async or say that sync agent(...) in an async handler blocks the event loop."},
+      {"id": "shared-agent-history-leak", "status": "repeated", "evidence": "Per-request agents are recommended (L1080, L1099), but the post never says a shared agent carries the previous request's conversation into the next, and never recommends invoke_async in async handlers."},
+      {"id": "result-fields-incomplete", "status": "repeated", "evidence": "stop_reason is shown (L150, L207, L1126) but metrics.get_summary() never appears; L1076 only says the result '메시지, 메트릭, 트레이스를 담고 있습니다'."},
+      {"id": "multi-agent-subject", "status": "n/a", "evidence": "No multi-agent execution-unit sentence; L268 mentions only multi-agent lifecycle events."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 44,
+    "internals_first_line": 52,
+    "sources_total": 22,
+    "non_official_sources": 6,
+    "non_official_share": 0.27,
+    "non_official_list": ["YouTube intro video", "AWS Open Source Blog", "DEV Community", "Builder Center Part 1", "Builder Center observability", "LaunchDarkly tutorial"],
+    "opens_with_problem": true,
+    "closes_with_choice_and_failure_modes": true,
+    "closing_note": "L1180-1201 covers when to choose vs LangGraph/Swarm/structured workflows; failure-mode table has only two rows.",
+    "setup_section_line": 1018
+  },
+  "runnable_code": {
+    "verdict": "partly runnable",
+    "env": "uv venv Python 3.12, strands-agents 1.64.0 (+otel, anthropic), strands-agents-tools 0.9.0; Bedrock/Anthropic stream patched with a scripted fake model, no paid calls",
+    "runs": ["L139 limits", "L199 handle", "L229 run", "L314 hooks+resume (4 model calls, answer.txt written)", "L360/L378 ToolInterceptor", "L429/L451/L479 middleware registration", "L534/L555 retry", "L667 stash", "L1032 Anthropic construct", "L1043/L1067 quickstart (answer.txt written)", "L1087 idempotency_token", "L1102 handle_request", "L1149 normalize_records"],
+    "fails": [
+      "L605, L712, L749, L912: ImportError cannot import name 'file_editor' from 'strands_tools' (cascades: L803 NameError LetterCountReport, L971 NameError WriteBudget)",
+      "L971: CedarAuthorization requires cedarpy (pip install 'strands-agents[cedar]'), not mentioned",
+      "L687: strands_harness not installed by the post's pip line",
+      "L1036: AnthropicModel without max_tokens -> KeyError 'max_tokens' at first request"
+    ],
+    "after_fix": "Replacing strands_tools with strands.vended_tools and installing the cedar extra, all running-example blocks execute in order (L803 structured output, L908 HITL stdio, L971 Cedar deny for bob)."
+  },
+  "top_issues": [
+    "Four running-example blocks import file_editor from strands_tools (L605, L712, L749, L912), which does not exist, and L905 wrongly says the quickstart does so; the structured-output and intervention examples fail as pasted.",
+    "Setup/quickstart section sits at L1018 near the end yet calls itself the starting point for later sections (L1076); letter_counter is defined twice (L322, L1046).",
+    "Deployment section repeats two of three human-fixed checklist defects (no invoke_async/async-handler scope for THROW, no history carry-over warning) and the result example still lacks metrics.get_summary(); AnthropicModel snippet omits required max_tokens."
+  ]
+}

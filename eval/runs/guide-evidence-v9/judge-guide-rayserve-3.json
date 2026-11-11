@@ -1,0 +1,102 @@
+{
+  "item": "guide-rayserve",
+  "judge": "judge-3",
+  "post": "/tmp/eval-guide/guide-rayserve-v9.md",
+  "scores": {"A": 6.0, "B": 7.5, "C": 7.5, "D": 8.0, "E": 6.5, "F": 7.0, "T1": 6.5, "T2": 8.0, "T3": 6.0},
+  "score_evidence": {
+    "A": "Arc is sound (TL;DR L11 -> problem L17 -> units L43 -> request path L137 -> composition L183 -> local loop L388 -> FastAPI L460 -> streaming L643 -> config L961 -> KubeRay L1080 -> assessment L1128). But the config section is mangled: the reconfigure code block L967-1025 has every indented line flattened to one space and opens with an empty line; the YAML block L1037-1047 keeps only keys ('runtime_env:', 'pip:', 'user_config:' twice) with all values gone; the serve status block L1055-1072 lost 'status: RUNNING' and every 'RUNNING: 1'. description is 113 characters (L5), under the 120 minimum; category 'Language-Models' (L6) is a poor fit for a general serving framework.",
+    "B": "Mostly natural '입니다' prose. Over-long sentence-like headings: L17 '정적 서빙 그래프 대신 프로그래머블 파이썬 API로 다중 모델 추론을 다루는 Ray Serve의 자리', L785, L961. Calque '단일 진실 공급원(single source of truth)' L963 (rewrite: '설정의 기준이 되는 파일'). Formulaic 'L111 세 단위의 관계를 예제에 대입하면 다음과 같이 정리됩니다.', 'L171 숫자를 넣어 한 번 따라가 봅니다' (no numbers follow). Table cell 'L1110 상태 보고 | 상태 보고' says nothing.",
+    "C": "Cross-references are accurate ('요청 경로 절에서 본', L421, L509). Repetition: the same pip install command at L58 and L397; TL;DR L13-15 is restated almost verbatim by L19-23; 'laptop to Kubernetes with almost no code change' appears at L15, L23, L1134; per-deployment scaling is explained at L133, L242-244 and L1134. Running-example drift: L41 promises the FastAPI step wraps the ingress class, but L466-502 converts the standalone Translator, never Summarizer.",
+    "D": "Good help where it is hard: resource arithmetic L131 (2 x 0.2 = 0.4 CPU, 5 replicas per CPU), chaining formula L325, cancellation table L732-736 tied to Translator.translate having no await (L738). Padding: L25 stack-position paragraph, L171 'worked example' without numbers, near-full copies of the TF/sklearn tutorial training scripts L804-927.",
+    "E": "Useful tables (units L113, ray_actor_options L123, response passing L382, frameworks L793, alternatives L1140) and ASCII flow diagrams labelled as the author's. No real architecture diagram (controller/proxy/replica) anywhere. Corrupted code/YAML/status blocks L967-1072 are unusable visuals. L1107-1112 table has a duplicated cell.",
+    "F": "All 15 sampled claims are supported by the official pages. Out of sample: the reconfigure code L974-1024 is not the production guide's code - both classes lost @serve.deployment, 'from ray import serve' and 'from typing import Dict' are gone while Dict is used, Summarizer.summarize calls self.model.generate(min_length=..., max_length=...) without input_ids/num_beams/early_stopping (L1007-1010), and Summarizer.__init__ lacks the docs' self.min_length/self.max_length defaults. L1074 asserts '위 출력에서는 두 디플로이먼트 모두 ... 레플리카 1개씩' about an output block that no longer shows any RUNNING count. L1053 says serve deploy goes to a local Ray cluster but omits the docs' 'ray start --head' step.",
+    "T1": "Verified on a private local cluster (Ray 2.60.0): the running example text_ml.py assembled as L402-417 instruct returns 200 with \"C'était le meilleur des temps, c'était le pire des temps,\"; the FastAPI Translator answers query-param requests and returns 422 for json= bodies, as L505 warns; Hello/World, Adder/Multiplier (=12), _to_object_ref, stream=True handle, both StreamingResponse examples (cancel message printed) and the FastAPI path/wrapper examples all run. The production half does not: the reconfigure file raises IndentationError, the YAML has no values, and serve deploy lacks ray start.",
+    "T2": "Covers the official pages in a sensible learning order (getting started, key concepts, composition, HTTP/FastAPI, streaming, cancellation, ML tutorials, production guide, examples). Autoscaling and batching are only named (L133, L1134), not taught, although the index lists them as core primitives.",
+    "T3": "Internals stop at deployment/replica/actor; the Serve controller is never mentioned, the proxy appears only in passing (L137, L735), and there is no request routing, autoscaling or batching mechanism. Sources are 9/9 official docs (0% non-official). Good on failure modes (cancellation L728-783, sync generator blocking L726, cloudpickle limit L599) and on when to choose (L1128-1163). The KubeRay section (L1080-1118) defers manifest, install and apply to unlinked guides (L1099)."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "Noun-phrase claim headings throughout (L43, L137, L183, L643), though several are overlong (L17, L785, L961)."},
+    "running_example": {"status": "partly met", "evidence": "Summarizer->Translator runs from L27 to KubeRay L1082 and the assessment L1132; the FastAPI step uses standalone Translator instead (L466), and the config-step version of the example is corrupted (L967-1025)."},
+    "mechanism_design_code_example": {"status": "partly met", "evidence": "Chaining L284-338 and cancellation L728-783 follow the order; architecture/controller and autoscaling have no mechanism treatment."},
+    "facts_said_once": {"status": "not met", "evidence": "pip install twice (L58, L397); TL;DR restated in L19-23; laptop-to-K8s thrice (L15, L23, L1134); per-deployment scaling three times (L133, L244, L1134)."},
+    "numbers_with_scope_unit": {"status": "met", "evidence": "L131 '논리 CPU 기준으로 2 x 0.2 = 0.4개', L595 '기본 5초', L781 '1.0초에 10'."},
+    "nothing_invented": {"status": "partly met", "evidence": "Claims are docs-grounded, but the reconfigure code L974-1024 diverges from the docs' code and L1074 describes values missing from the shown output."},
+    "own_assessment_at_end": {"status": "met", "evidence": "L1161-1163 '이 글의 판단' says when to pick Ray Serve, Triton/TorchServe or hosted platforms."},
+    "length_fitted": {"status": "partly met", "evidence": "1,176 lines; the ML-framework section L785-959 copies tutorial training scripts in full, while the hard parts (architecture, autoscaling) get nothing."},
+    "type_specific_shape": {"status": "partly met", "evidence": "Opens with TL;DR and problem (L11-21) and closes with when-to-choose and limits (L1128-1163); no architecture-first section or diagram; no non-official design sources."},
+    "korean_style": {"status": "partly met", "evidence": "Register is consistent; calques like '단일 진실 공급원' (L963) and formulaic intro sentences (L111, L171, L380)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "sampling": "Prose paragraphs counted after front matter (outside code fences, headings, tables and the source list): 132 paragraphs; took paragraphs 3, 6, 9, ... and picked claims from them and the code/tables they introduce.",
+    "examples": [
+      {"line": 19, "para": 3, "claim": "framework-agnostic: PyTorch, TensorFlow, Keras, Scikit-Learn, arbitrary Python; any framework version", "verdict": "supported", "source": "serve/index.html 'Serve is framework-agnostic ... PyTorch, TensorFlow, and Keras, to Scikit-Learn models, to arbitrary Python business logic'; tutorials/serve-ml-models 'you can use any version of TensorFlow/PyTorch/sklearn'"},
+      {"line": 53, "para": 12, "claim": "@serve.deployment goes on a class, or on a function for simple cases", "verdict": "supported", "source": "key-concepts 'use the @serve.deployment decorator on a Python class (or function for simple use cases)'"},
+      {"line": 109, "para": 18, "claim": "application = unit of upgrade; one ingress deployment; callable via route_prefix over HTTP or a DeploymentHandle", "verdict": "supported", "source": "key-concepts 'An application is the unit of upgrade in a Ray Serve cluster ... Applications can be called via HTTP at the specified route_prefix or in Python using a DeploymentHandle'"},
+      {"line": 129, "para": 21, "claim": "all decorator parameters are optional", "verdict": "supported", "source": "getting_started 'All these parameters are optional, so feel free to omit them'"},
+      {"line": 171, "para": 30, "claim": "Translator has num_replicas=2 (0.2 CPU, 0 GPU each) and requests are load-balanced across replicas", "verdict": "supported", "source": "getting_started '@serve.deployment(num_replicas=2, ray_actor_options={\"num_cpus\": 0.2, \"num_gpus\": 0})', 'Requests are load balanced across these replicas'"},
+      {"line": 284, "para": 42, "claim": "a DeploymentResponse passed to another handle call resolves to the first call's output; no await needed", "verdict": "supported", "source": "model_composition 'You don't need to await the first response ... Ray Serve passes the output of the first call, instead of the DeploymentResponse object, directly to the second call'"},
+      {"line": 325, "para": 45, "claim": "Adder(increment=1) then Multiplier(multiple=2) on input 5 gives (5+1)x2 = 12", "verdict": "supported", "source": "model_composition 'assert response.result() == 12, \"(5 + 1) * 2 = 12\"'; also ran it: 12"},
+      {"line": 342, "para": 48, "claim": "nested DeploymentResponse passing is fully deprecated; top-level args/kwargs still supported; use _to_object_ref()", "verdict": "supported", "source": "model_composition 'Passing a DeploymentResponse to downstream handle calls in nested objects is fully deprecated and no longer supported ... Passing a DeploymentResponse object as a top-level argument or keyword argument is still supported'"},
+      {"line": 390, "para": 54, "claim": "four packages: pip install \"ray[serve]\" transformers requests torch", "verdict": "supported", "source": "getting_started 'pip install \"ray[serve]\" transformers requests torch'"},
+      {"line": 509, "para": 69, "claim": "route_prefix /my_app + @app.get(\"/fetch_data\") -> /my_app/fetch_data", "verdict": "supported", "source": "http-guide 'if your Serve application has route_prefix = /my_app and you decorate a method with @app.get(\"/fetch_data\"), then you can call that method by sending a GET request to the path /my_app/fetch_data'"},
+      {"line": 595, "para": 75, "claim": "Uvicorn keep-alive default 5 s; set keep_alive_timeout_s in http_options; cluster-global, not updatable at runtime", "verdict": "supported", "source": "http-guide 'By default, Uvicorn keeps HTTP connections alive for 5 seconds between requests ... This config is global to your Ray cluster, and you can't update it during runtime'"},
+      {"line": 682, "para": 81, "claim": "with max=10 the client receives chunks '0'..'9', the first near 0 s", "verdict": "supported", "source": "http-guide output 'Got result 0.0s after start: '0'' ... '0.9s ... '9''; reproduced locally"},
+      {"line": 872, "para": 96, "claim": "TF client sends a random 28*28 array under key \"array\" and gets prediction and file back", "verdict": "supported", "source": "tutorials/serve-ml-models 'requests.get(\"http://localhost:8000/\", json={\"array\": np.random.randn(28 * 28).tolist()})'; __call__ returns {\"prediction\": ..., \"file\": ...}"},
+      {"line": 1051, "para": 108, "claim": "serve build model:translator_app -o config.yaml copies num_replicas/ray_actor_options, adds grpc_options and a default, editable app name shown under applications: in serve status", "verdict": "supported", "source": "develop-and-deploy 'The serve build command adds a default application name that can be modified'; generated YAML has grpc_options, num_replicas: 2, num_cpus: 0.2; status shows 'app1:'"},
+      {"line": 1105, "para": 117, "claim": "RayService/KubeRay handle four things: health checking, status reporting, failure recovery/tolerance, (zero-downtime) upgrades", "verdict": "supported", "source": "production-guide 'automatically handles ... health checking, status reporting, failure recovery, and upgrades'; develop-and-deploy 'KubeRay supports zero-downtime upgrades, status reporting, and fault tolerance'"}
+    ],
+    "out_of_sample_findings": [
+      {"line": "974-1024", "issue": "reconfigure version of text_ml.py does not match the production guide: no @serve.deployment, missing serve/Dict imports, generate() without input_ids, no min_length/max_length defaults in __init__; indentation flattened (IndentationError when pasted)"},
+      {"line": "1037-1047", "issue": "serve_config.yaml shows only keys; host/port, name, route_prefix, import_path, pip list, deployments and user_config values are all missing"},
+      {"line": 1074, "issue": "says the shown status output has one RUNNING replica per deployment, but the block L1055-1072 contains no status or RUNNING lines"},
+      {"line": 1053, "issue": "serve deploy to a local cluster without the docs' 'ray start --head'"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 1,
+    "na": 1,
+    "repeated_ids": [],
+    "items": [
+      {"id": "arch-diagram-relative-link", "verdict": "avoided", "evidence": "No image or link with empty text or a ../_images/ path; the only links are the absolute docs URLs in Sources (L1168-1176). Note: the post has no architecture diagram at all, so the positive half of the check is not demonstrated."},
+      {"id": "proxy-env-ray-start-unsupported", "verdict": "n/a", "evidence": "No proxy env-var section; 'ray start' does not appear in the post."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 43,
+    "architecture_note": "L43 introduces deployment/replica/application; Serve's own architecture (controller, proxy, replicas) is never laid out; proxy first mentioned at L137 in passing, controller never.",
+    "non_official_source_share": "0/9 (0%)",
+    "opens_with_problem": true,
+    "opens_with_problem_evidence": "TL;DR L11, then the problem of multi-model, multi-framework pipelines vs static YAML graphs L17-21",
+    "closes_with_when_and_failure_modes": true,
+    "closes_evidence": "L1128-1163: strengths, alternatives table, missing lifecycle/optimization, operational pitfalls (cancellation, sync stream consumption, FastAPI serialization), the author's assessment",
+    "description_length": 113
+  },
+  "runnable_code": {
+    "verdict": "running example runs as pasted (local dev path); production/config path does not",
+    "environment": "uv venv, Python 3.12, ray 2.60.0, transformers 5.22.1, torch 2.15.0; private local cluster via ray.init(address='local', _temp_dir under /tmp/judge-gv9-ray3), Serve HTTP on 127.0.0.1:56697 (snippets' 8000 replaced by that port only)",
+    "results": {
+      "text_ml.py (L405-412 imports + Translator L71-96 + Summarizer L203-231 + app)": "OK: 200, \"C'était le meilleur des temps, c'était le pire des temps,\"",
+      "FastAPI Translator L469-502": "OK with params={'text': ...} -> 'Bonjour monde!'; json= body -> 422 (matches L505)",
+      "Hello/World L253-279": "OK 'Hello world!'",
+      "Adder/Multiplier L289-320": "OK, assert == 12",
+      "_to_object_ref L347-375": "OK",
+      "stream=True handle L691-721": "OK [0,1,2,3,4]",
+      "FastAPI paths L514-534 and wrapper L544-562": "OK",
+      "StreamingResponse L652-679 and cancel L743-778": "OK; 'Cancelled! Exiting.' printed after chunk '10' at 1.0 s",
+      "reconfigure text_ml.py L969-1024": "FAIL: IndentationError on compile; even re-indented it lacks @serve.deployment, imports and input_ids",
+      "serve_config.yaml L1039-1046": "FAIL: values missing, not deployable"
+    },
+    "not_run": "factory pattern (needs opentelemetry), TF/PyTorch/sklearn tutorials, serve build/deploy CLI, KubeRay"
+  },
+  "top_issues": [
+    "Config section corrupted: reconfigure code L967-1025 is flattened and diverges from the docs (no @serve.deployment, missing imports, generate() without input_ids); YAML L1037-1047 and serve status L1055-1072 lost all values, so L1074 describes output the reader cannot see.",
+    "Architecture and internals are thin: no controller/proxy architecture or diagram, autoscaling and batching only named; 0% non-official sources; the KubeRay section defers everything to unlinked guides.",
+    "Repetition and padding: pip install twice, TL;DR restated in the intro, laptop-to-K8s three times, full tutorial training scripts copied (L804-927); description 113 chars."
+  ]
+}

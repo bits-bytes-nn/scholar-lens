@@ -1,0 +1,107 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/eval-guide/guide-vllm-v7.md",
+  "judge_run": 2,
+  "sampling": "body paragraphs (non-heading blocks after front matter, 183 total), starting at paragraph 2 and every third; claims chosen from sampled paragraphs",
+  "scores": {"A": 9, "B": 8, "C": 8, "D": 9, "E": 9, "F": 7, "T1": 9, "T2": 8, "T3": 9},
+  "deductions": {
+    "A": ["L13 TL;DR is one 17-sentence paragraph with a second paragraph at L15; heavy for a TL;DR"],
+    "B": [
+      "L13 '논문의 설계에서는 블록이 바닥나면 ... 선점합니다. 논문 설계에서 선점된 요청은 ...' repeats the subject frame in consecutive sentences -> merge: '논문 설계에서는 블록이 바닥나면 가장 늦게 온 요청을 통째로 선점하고, CPU 스왑이나 재계산으로 복구합니다.'",
+      "L125 'V1 아키텍처 소개 글은 ... V1 아키텍처 소개 글의 벤치마크에서는 ... 그 글은 ...' names the same source three times in three sentences",
+      "Formulaic figure intros repeated: L31 '그림에서는 ... 보면 됩니다', L43 '애니메이션에서 볼 부분은 두 가지입니다', L81 '그림에서는 ... 흐름을 보면 됩니다', L101 '... 순간을 따라가면 됩니다' (redesign 5.1 Korean rule: vary figure-introduction sentences)",
+      "L15/L621/L635 mixes untranslated 'compute-bound' into Korean headings/prose ('compute-bound 부하') -> '연산이 병목인 부하'"
+    ],
+    "C": [
+      "Same headline numbers restated: 24x vs HF at L13, L19, L629; 60~80% waste at L13, L17 (heading), L25; '4% 미만' at L13 and L65",
+      "L235 a hedging paragraph about an unnamed 'third-party blog' three-queue scheduler interrupts the V1 recomputation flow and adds nothing actionable"
+    ],
+    "D": ["Worked examples are well placed (L67 100-token block waste, L174 chunked-prefill budget, L227 800-token recompute, L466 KV byte budget); minor over-explanation of OS analogies (L39, L91, L109, L123 each restate the OS analogy)"],
+    "E": ["L645 engine table lacks the source's workload/concurrency column (Chat (Med), concurrency 32), so the cells read as a general ranking"],
+    "F": [
+      "L641-L651: the throughput table (Triton-TRT 5210, SGLang 4880, vLLM 4250, TGI 3120) is credited to 'Deploybase의 엔진 비교 글 ... 같은 글은 저자 내부 측정이라는 단서를 달고'; the numbers are in the iotdigitaltwinplm Q2 2026 benchmark (Llama-3.3-70B, 8x H200, 4-bit GPTQ, Chat (Med) row, concurrency 32); the Deploybase page has none of them. Misattribution, and '기본 설정' drops the concurrency-32 scope",
+      "L125 and L262 cite the 'V1 아키텍처 소개 글'/'vLLM V1 블로그' (prefix caching <1% drop, 1.7x throughput) but it is not in the Sources list (L662-L678); numbers check out against the vLLM V1 alpha post, the citation is missing",
+      "Unlisted or unnamed sources: L184 'Medium의 한 해설(2026-06-25)', L235 and L454 '한 서드파티 블로그', L452 'cmwilhelm' report; none is traceable from the Sources list"
+    ],
+    "T2": ["L641-L652 third-party engine benchmarks (Deploybase/iotdigitaltwinplm, Introl's footnoted 793 vs 41 tok/s Ollama comparison) pad the closing with weakly sourced numbers"]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L17 '메모리의 60~80%를 버리던 기존 KV 캐시 관리라는 병목', L202 '블록이 바닥날 때 늦게 온 요청을 통째로 내보내는 선점과 재계산 복구'"},
+    "running_example": {"status": "met", "evidence": "Qwen/Qwen2.5-1.5B-Instruct used from L87 through install, LLM, serve, memory, CPU docker (L567) and TP (L598)"},
+    "mechanism_order": {"status": "met", "evidence": "PagedAttention: problem L27 -> design L37 -> formula L73 -> worked table L57 and L67; chunked prefill L172-L182"},
+    "facts_once": {"status": "partly met", "evidence": "24x at L13/L19/L629; 60~80% at L13/L17/L25"},
+    "numbers_scoped": {"status": "partly met", "evidence": "most numbers carry model/GPU/dataset (L23, L629, L262); L645 table loses its concurrency-32 workload scope"},
+    "nothing_invented": {"status": "partly met", "evidence": "illustrative numbers labelled as assumptions (L174, L227, L460); L641 benchmark misattributed to Deploybase"},
+    "writer_assessment_end": {"status": "met", "evidence": "L658 '이 글의 판단은 다음과 같습니다 ...'"},
+    "length_fitted": {"status": "met", "evidence": "679 lines; length goes to internals and memory budgeting, install kept to L283-L325"},
+    "type_shape": {"status": "met", "evidence": "TL;DR L11, problem L17, architecture/internals L35-L282 before install L283, closes with when-to-choose and failure modes L621-L658"},
+    "korean_style": {"status": "partly met", "evidence": "입니다 register held; repeated figure-intro formula (L31, L43, L81, L101) and repeated source naming (L125)"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 1,
+    "examples": [
+      {"line": 15, "claim": "server starts at http://localhost:8000; one model at a time", "verdict": "supported", "source": "quickstart.md: 'By default, it starts the server at http://localhost:8000 ... currently hosts one model at a time'"},
+      {"line": 23, "claim": "13B on A100 40GB: ~65% weights, ~30% KV cache", "verdict": "supported", "source": "arXiv 2309.06180 §1: 'Approximately 65% ... model weights ... Close to 30% ... dynamic states'"},
+      {"line": 53, "claim": "figure caption: block size 4, 7-token prompt, physical blocks 7, 1, 3", "verdict": "supported", "source": "paper §4.3: 'physical blocks 7 and 1 ... allocates a new physical block (physical block 3)'"},
+      {"line": 87, "claim": "ShareGPT best at 16-128, Alpaca 16 and 32; default block size 16", "verdict": "supported", "source": "paper §7.2: 'block sizes from 16 to 128 lead to the best performance ... vLLM sets its default block size as 16'"},
+      {"line": 111, "claim": "beam table: freed 2,4,5,8; new 9-12; shared 0,1,3; 6; 7", "verdict": "supported", "source": "paper §4.4: 'frees ... (blocks 2, 4, 5, 8) ... (blocks 9-12) ... share blocks 0, 1, 3; candidates 0 and 1 share block 6, ... 2 and 3 ... block 7'"},
+      {"line": 125, "claim": "V1 prefix caching <1% throughput drop at 0% hit rate; on by default in V1, off in V0", "verdict": "supported", "source": "vLLM V1 alpha blog (2025-01-27) §3; note: source missing from the post's Sources list"},
+      {"line": 168, "claim": "--max-num-batched-tokens accepts 1k=1000, 1K=1024, 25.6k; priority policy: lower value first, ties by arrival", "verdict": "supported", "source": "vllm/engine/arg_utils.py human_readable_int_args includes max_num_batched_tokens (k decimal, K binary); config/scheduler.py policy docstring"},
+      {"line": 262, "claim": "V1 up to 1.7x over V0 without multi-step; Llama 3.1 8B / 3.3 70B on ShareGPT, Qwen2-VL on VisionArena", "verdict": "supported", "source": "vLLM V1 alpha blog: 'up to 1.7x higher throughput compared to V0 (without multi-step scheduling)'"},
+      {"line": 300, "claim": "--torch-backend=auto / UV_TORCH_BACKEND, cu126 example; pip --extra-index-url .../whl/cu129", "verdict": "supported", "source": "quickstart.md L33; gpu.cuda.inc.md L32"},
+      {"line": 314, "claim": "ROCm wheel at https://wheels.vllm.ai/rocm/, Python 3.12, ROCm 7.0, glibc >= 2.35", "verdict": "supported", "source": "quickstart.md L59-L63"},
+      {"line": 438, "claim": "--attention-backend; NVIDIA CUDA choices FLASH_ATTN or FLASHINFER", "verdict": "supported", "source": "quickstart.md L319-L331"},
+      {"line": 547, "claim": "CPU: VLLM_CPU_KVCACHE_SPACE in GiB, default 0 = no override; --block-size multiple of 32, default 128", "verdict": "supported", "source": "installation/cpu.md L296, L302"},
+      {"line": 576, "claim": "docker run ... --ipc=host vllm/vllm-openai:latest --model ...; Podman --device nvidia.com/gpu=all with docker.io/vllm/vllm-openai:latest", "verdict": "supported", "source": "gpu.cuda.inc.md pre-built-images L279-L312"},
+      {"line": 629, "claim": "blog: up to 24x vs HF, 3.5x vs TGI; single output 2.2-2.5x, three parallel outputs 3.3-3.5x vs TGI; LLaMA-7B A10G, LLaMA-13B A100 40GB", "verdict": "supported", "source": "blog.vllm.ai 2023-06-20 'Beyond State-of-the-art Performance'"},
+      {"line": 645, "claim": "engine table Triton-TRT 5210 / SGLang 4880 / vLLM 4250 / TGI 3120 tok/s, attributed to Deploybase, 'default settings'", "verdict": "wrong", "source": "numbers are the iotdigitaltwinplm Q2 2026 benchmark row 'Chat (Med), concurrency 32, Llama-3.3-70B 8x H200 4-bit GPTQ'; deploybase.ai page has no such table"}
+    ],
+    "numeric_claims": 12
+  },
+  "checklist": {
+    "note": "human_fixes.yaml has fixes: [] for guide-vllm; the notes' generic guide defects were used as checks",
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "items": [
+      {"id": "nonexistent-chapter-refs", "status": "avoided", "evidence": "no 'N장' references; L99 cross-ref names an existing subsection '블록 매니저와 블록 테이블의 역할 분담' (L45)"},
+      {"id": "tag-remnant", "status": "avoided", "evidence": "no '</path></name>' or other closing-tag text in body"},
+      {"id": "entity-leak", "status": "avoided", "evidence": "no &gt;/&lt;/&amp; in body; Sources titles use &#124;/&#91; escapes that render as | and ["},
+      {"id": "unclosed-fence", "status": "avoided", "evidence": "even fence count; all six python blocks parse"},
+      {"id": "stale-third-party-cli-flags", "status": "avoided", "evidence": "L393 old 'python -m vllm.entrypoints.openai.api_server' is labelled as the 2023 blog's form; all current flags match docs"},
+      {"id": "install-usage-centric", "status": "avoided", "evidence": "internals L35-L282 precede install at L283"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 35,
+    "internals_span": "L35-L282 (PagedAttention, sharing, scheduler, preemption, V1 processes) before install L283",
+    "sources_total": 17,
+    "non_official_sources": 7,
+    "non_official_share": 0.41,
+    "non_official_note": "third-party: DhanushKumar Medium, Introl, Spheron, SitePoint, iotdigitaltwinplm, Unsloth, Deploybase; the paper and vLLM blog are counted as explanatory project sources",
+    "opens_with_problem": true,
+    "closes_with_choice_and_failure_modes": true,
+    "runnable_code": {
+      "verdict": "runs as pasted (static check; no install, model download or GPU)",
+      "checks": [
+        "install L294-L297 matches quickstart exactly",
+        "offline LLM/SamplingParams L336-L354 and llm.chat L367-L373 parse and match quickstart API",
+        "CompilationConfig(cudagraph_capture_sizes=...) import from vllm.config matches conserving_memory.md and config/compilation.py",
+        "--max-model-len 4k valid (human-readable ints); --api-key with two keys documented",
+        "docker GPU/CPU commands match installation docs; examples/features/sharded_state/load_sharded_state_offline.py exists (HTTP 200)",
+        "tensor_parallel_size=2 for Qwen2.5-1.5B is divisible (12 heads, 2 KV heads); needs 2 GPUs",
+        "curl chat request matches quickstart shape plus an Authorization header that is valid only when --api-key is set (stated at L419)"
+      ]
+    },
+    "external_images": "3 vllm.ai blog-assets URLs return HTTP 200"
+  },
+  "top_issues": [
+    "L641-L651 engine throughput table credited to Deploybase is from the iotdigitaltwinplm Q2 2026 benchmark, and drops its Chat (Med)/concurrency-32 scope",
+    "Cited sources missing from the Sources list: the vLLM V1 blog (L125, L262), 'Medium의 한 해설(2026-06-25)' (L184), unnamed 'third-party blog' (L235, L454), cmwilhelm report (L452)",
+    "Repetition and formula: 24x/60~80%/4% restated three times; figure intros follow one '...보면 됩니다' pattern (L31, L43, L81, L101)"
+  ]
+}

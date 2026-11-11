@@ -1,0 +1,260 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/guide-compare/blind/guide-strands-X.md",
+  "judge_run": 2,
+  "sdk_checked": "strands-agents 1.64.0 (PyPI, scratch venv with anthropic/ollama/openai/gemini extras, cedarpy, strands-harness 0.3.4, strands-dynamodb-storage 0.2.0); @strands-agents/sdk + tsc for TypeScript blocks; docs fetched 2026-11-08 (site shows SDK Python v1.64.0)",
+  "sampling": "Run 2: re-read the artifact and sampled 15 claims (limits/concurrency/structured output/hooks/providers), at least 8 numeric, checked against the fetched official pages, the API reference and SDK 1.64.0 source.",
+  "scores": {
+    "A": 8.0,
+    "B": 8.5,
+    "C": 8.5,
+    "D": 8.5,
+    "E": 8.5,
+    "F": 8.5,
+    "T1": 9.0,
+    "T2": 8.5,
+    "T3": 8.5
+  },
+  "score_evidence": {
+    "A": "TL;DR, problem-first arc and real tables render cleanly; deductions: orphan section '### 루프의 경계마다 놓인 제어 지점' (L49) holds one dangling sentence '티켓 에이전트의 요구사항도 하나씩 이 지점에 대응합니다.' (L51) with no list of the points; stray leading space in ' 모델은 오류 메시지를 ...' (L244).",
+    "B": "Precise, consistent terms (정지 사유, 개입 핸들러, 호출 상태); deductions: documentation-diffing inside the body ('Agent Loop 페이지는 turns, total tokens, output tokens 순으로 적었고 ...' L716 -> '여러 한도가 동시에 걸리면 턴, 전체 토큰, 출력 토큰, 구조화 출력 시도 순으로 보고됩니다'; '훅 안내 페이지에는 ... API 문서에는 ...' L518); long dense paragraphs (L147, L462).",
+    "C": "Strong back-references ('앞서 본 정지 이벤트 튜플의 일곱 번째 항목' L850, '앞서 본 handle_ticket의 Agent(...) 줄을 아래 함수 호출로 바꾸면' L881) and one running example; deduction for the orphan L49-51 section that promises a mapping it never gives.",
+    "D": "Hard parts get numbers at the right moment: soft token limit 18,500 -> 22,500 (L714), retry waits 2s+4s (L900), history growth of six messages (L63-76), unbounded Guide retry cost (L382); easy install kept short (L618-664).",
+    "E": "Tables where comparison helps (stop reasons L82-92, action/method matrix L323-329, checkpoints L726-731, failure modes L1055-1061); no loop diagram image (the text history at L65-74 substitutes); TicketTriage code block repeated (L177, L270).",
+    "F": "Claims sampled against docs are supported (retry defaults, HookOrder values, 7-tuple, checkpoints, harness defaults); deduction: L1063 '(전체 허용 와일드카드로도 면제되지 않음)' is not in the HITL page (approve-before-acting only says 'A negated tool always prompts and can't be trusted'). max_delay 240 (L879) follows the API reference and SDK code; the retry-strategies guide page says 128.",
+    "T1": "Whole Python program runs end to end with a fake model (see runnable_code); real flags (limits, cancel_signal, idempotency_token, checkpointing, retry_strategy, record_direct_tool_call). Missing: AgentResult metrics example; S3 session needs real AWS.",
+    "T2": "Covers the input pages (agent loop, hooks) and the gathered sources in a sensible order: loop -> structured output -> interventions/HITL -> hooks -> setup -> lifecycle -> retry/observability -> persistence -> choice. Hooks cookbook items (fixed tool args, propagate exceptions, tool count limits) and multi-agent sessions are skipped.",
+    "T3": "Internals and design reasons: recursion via recurse_event_loop (L123), limit check placement (L121), ToolSpec annotations as untrusted (L145), intervention precedence vs last-write-wins hooks (L317), single-writer sessions (L1013); fits into larger system (per-request agents, AgentCore Evaluations, harness). Less depth on hook event contract (BeforeToolsEvent/AfterToolsEvent, AttributeError guard) and storage layout."
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "Big sections are claim noun phrases: L16 '반복할수록 커지는 히스토리와 두 갈래로 퍼지는 실패', L149 '스키마를 도구로 바꾸어 검증된 객체를 얻는 구조화 출력', L852 '스로틀링에만 걸리는 기본 재시도와 OpenTelemetry로 보는 실행 경로'."
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Ticket-triage agent introduced at L20 and carried through TicketTriage (L177), lookup_order/refund_order (L341-349), Cedar alice/bob (L466-501), handle_ticket (L823), build_session_agent (L993), harness choice (L1045)."
+    },
+    "mechanism_design_code_example": {
+      "status": "met",
+      "evidence": "Retry: mechanism L858, attempt table L860-867, parameters L875-879, code L887-897, worked 2s+4s=6s L900; token budget soft limit L714 with 18,500->22,500 example."
+    },
+    "facts_said_once": {
+      "status": "partly met",
+      "evidence": "After-event Deny has no effect is stated at L331, L380 and L1063; TicketTriage class is defined twice (L177, L270); stop reason vs exception split at L45 and L846."
+    },
+    "numbers_with_scope_unit": {
+      "status": "met",
+      "evidence": "Numbers carry scope/unit: 'HookOrder.SDK_FIRST(-100) ... MODEL_ROUTING(50)' with which doc gives which (L518); retry table with seconds (L860-867); '버전 1.47.0 기준' attributed (L953)."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "L1063 adds '(전체 허용 와일드카드로도 면제되지 않음)' which no source states; illustrative numbers are labelled ('가상의 티켓 요청' L714, '예시' L63)."
+    },
+    "writer_assessment_at_end": {
+      "status": "met",
+      "evidence": "L1065 '이 글의 판단으로는, 프로덕션 에이전트의 안전성은 확률적인 장치가 아니라 결정적인 장치에서 나옵니다' plus L1045 Agent-vs-harness judgement."
+    },
+    "length_fitted": {
+      "status": "met",
+      "evidence": "1,091 lines for a broad multi-page topic; easy install part is short (L612-664), hard parts (limits, interventions) get worked examples."
+    },
+    "type_specific_shape": {
+      "status": "met",
+      "evidence": "Opens with ## TL;DR (L10) and a problem section (L16); architecture/loop internals (L53-147) precede setup (L612); closes with choice and failure-mode table (L1019-1063)."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Natural 입니다 register overall; source-page talk in body ('Agent Loop 페이지는 ... 적었고, Production Lifecycle Controls 페이지는 ... 덧붙였습니다' L716; '훅 안내 페이지에는 ... API 문서에는' L518); leading space at L244."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numbers_among_checked": 9,
+    "examples": [
+      {
+        "line": 712,
+        "claim": "Unknown limit key or non-positive value raises TypeError",
+        "verdict": "supported",
+        "source": "api agent __call__: 'TypeError - If limits contains an unrecognized key or a value that is not a positive integer'"
+      },
+      {
+        "line": 755,
+        "claim": "Overlapping call raises ConcurrencyException; concurrent_invocation_mode default THROW",
+        "verdict": "supported",
+        "source": "agent-loop: 'either THROW (the default) or UNSAFE_REENTRANT ... raises ConcurrencyException'"
+      },
+      {
+        "line": 757,
+        "claim": "Same idempotency_token waits for original and returns same AgentResult; IdempotencyAbortedError if original ends without result",
+        "verdict": "supported",
+        "source": "agent-loop 'Deduplicating retried requests'"
+      },
+      {
+        "line": 111,
+        "claim": "event_loop_cycle handles a turn in seven steps",
+        "verdict": "supported",
+        "source": "api strands.event_loop.event_loop: seven lifecycle bullets from 'Initializing cycle state and metrics' to 'Error handling and recovery'"
+      },
+      {
+        "line": 261,
+        "claim": "Attempts counted per failed model response; other tool calls before the forced retry not counted",
+        "verdict": "supported",
+        "source": "structured-output-behavior 'Limit attempts'"
+      },
+      {
+        "line": 241,
+        "claim": "Example dates 2025-07-22 rejected with 'due_date must be after 2026-10-12', then 2026-10-13 passes",
+        "verdict": "supported",
+        "source": "structured-output-behavior example steps 1-4"
+      },
+      {
+        "line": 155,
+        "claim": "A call with a schema goes through five steps, ending with tool removal",
+        "verdict": "supported",
+        "source": "structured-output-behavior 'How it works' five-step list"
+      },
+      {
+        "line": 512,
+        "claim": "add_callback raises ValueError on uninferable type, async AgentInitializedEvent callback, empty list",
+        "verdict": "supported",
+        "source": "api hooks.registry add_callback Raises"
+      },
+      {
+        "line": 321,
+        "claim": "Intervention handlers have five lifecycle methods with distinct allowed actions",
+        "verdict": "supported",
+        "source": "interventions: 'Intervention handlers can override five lifecycle methods' table"
+      },
+      {
+        "line": 850,
+        "claim": "checkpointing=True pauses at after_model/after_tools, stop_reason 'checkpoint', resume via checkpointResume; default False",
+        "verdict": "supported",
+        "source": "api agent checkpointing parameter; runtime probe returned stop_reason 'checkpoint'"
+      },
+      {
+        "line": 1007,
+        "claim": "DynamoDBStorage needs string pk partition key and sk sort key; native TTL",
+        "verdict": "supported",
+        "source": "Lesson 9: 'a string pk partition key and string sk sort key is all it needs'; 'native TTL so stale sessions expire themselves'"
+      },
+      {
+        "line": 287,
+        "claim": "Example attempt cap structured_output_attempts=3",
+        "verdict": "supported",
+        "source": "structured-output-behavior 'Limit attempts' example limits={'structured_output_attempts': 3}"
+      },
+      {
+        "line": 646,
+        "claim": "AnthropicModel(model_id='claude-sonnet-5', max_tokens=4096)",
+        "verdict": "supported",
+        "source": "quickstart/python; real constructor accepted the arguments"
+      },
+      {
+        "line": 660,
+        "claim": "OllamaModel(host='http://localhost:11434', model_id='llama3.1')",
+        "verdict": "supported",
+        "source": "quickstart/python Ollama example"
+      },
+      {
+        "line": 76,
+        "claim": "Three cycles produce six messages and cycle 3 sees the five before it",
+        "verdict": "supported",
+        "source": "Writer's labelled example (L63); arithmetic consistent with agent-loop message accumulation"
+      }
+    ],
+    "off_sample_findings": [
+      {
+        "line": 1063,
+        "claim": "'!' negation not exempt even under allow-all wildcard",
+        "verdict": "unsupported",
+        "source": "Not in approve-before-acting or interventions pages"
+      },
+      {
+        "line": 684,
+        "claim": "Heading says the ToolContext parameter name is fixed to tool_context",
+        "verdict": "supported with conflict",
+        "source": "state page: 'the parameter must be named tool_context'; tools.decorator API: context may be a string naming another parameter"
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 1,
+    "avoided": 2,
+    "na": 2,
+    "repeated_ids": [
+      "result-fields-incomplete"
+    ],
+    "items": [
+      {
+        "id": "loop-diagram-remote",
+        "status": "avoided",
+        "evidence": "No image links at all; the loop is shown as a labelled text history (L65-74), so no remote docs-host image."
+      },
+      {
+        "id": "shared-agent-throw-scope",
+        "status": "n/a",
+        "evidence": "No shared module-level agent warning; ConcurrencyException is described generically per the docs (L755)."
+      },
+      {
+        "id": "shared-agent-history-leak",
+        "status": "avoided",
+        "evidence": "'A fresh agent per message keeps tickets from sharing conversation history' (L190) and per-request agents (L777, L825); invoke_async is not recommended (partial)."
+      },
+      {
+        "id": "result-fields-incomplete",
+        "status": "repeated",
+        "evidence": "stop_reason is used (L289, L841) but no example prints result.metrics.get_summary(); metrics appear only in prose (L680, L953)."
+      },
+      {
+        "id": "multi-agent-subject",
+        "status": "n/a",
+        "evidence": "No multi-agent minimal-unit sentence."
+      }
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 12,
+    "architecture_note": "TL;DR (L12) states the loop and stop-reason mechanics; the full internals section starts at L53 (event_loop_cycle L96-123, 7-tuple L125-139, tool layer L141-147), before installation at L612.",
+    "sources_total": 22,
+    "sources_listed": 22,
+    "sources_non_official": 2,
+    "non_official_share": 0.091,
+    "non_official_list": [
+      "Agentic Design - Strands SDK - Part 1 (The BIG DATA guy, Substack)",
+      "Observability for AI Agents with OpenTelemetry (AWS Builder Center, community author)"
+    ],
+    "opens_with_problem": true,
+    "opens_note": "L16-47: context exhaustion and split failure paths framed as the problem before mechanisms.",
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "closes_note": "L1019-1065: Agent vs harness, AgentCore Evaluations vs Evals SDK, failure-mode table L1055-1061, writer judgement L1065."
+  },
+  "runnable_code": {
+    "verdict": "runs",
+    "passed": [
+      "All 27 Python blocks except the event_loop_cycle signature excerpt (L101) executed in reading order with a scripted fake model and AWS credentials removed: structured output (L170, L209 validation retry 2 model calls, L264), interventions + HITL stdin approval with PII redaction visible to the approver (L336-458), Cedar alice prompted / bob denied (L469), RetryOnToolError (L542, flaky tool retried once), resume hook (L586), first run (L673), ToolContext (L689), cancel-aware tool (L736), idempotency (L760), Outcome/handle_ticket (L780-844), retry strategies (L884-946), harness create_harness (L1036).",
+      "Probes: handle_ticket -> COMPLETED; limits={'turns':1} -> limit_turns -> BUDGET_EXCEEDED; pre-set cancel_signal -> 'cancelled'; record_direct_tool_call=False adds 0 messages; checkpointing=True -> stop_reason 'checkpoint'; take_snapshot(preset='session') returns Snapshot; real AnthropicModel/OllamaModel constructors accept the shown arguments."
+    ],
+    "failed": [
+      "L101 event_loop_cycle signature excerpt (no body; reference, not meant to run).",
+      "L988 build_session_agent needs a real S3 bucket (StorageError without credentials) - expected, not a code defect."
+    ],
+    "notes": "No TypeScript blocks. The code forms one coherent program; later blocks reuse lookup_order/refund_order as the text says (L670). AgentResult.metrics.get_summary() is never shown."
+  },
+  "other_sdk_as_python": "None found; TypeScript differences are labelled as such (L165, L248, L755, L900, L949).",
+  "topic_taught_twice": "After-event Deny no-op (L331, L380, L1063); TicketTriage class twice (L177, L270, flagged as a rewrite at L295); stop reason vs exception (L45, L846).",
+  "causes_scope_beyond_sources": "L1063 wildcard qualifier; harness recommendation (L1045) and closing (L1065) are marked as the writer's judgement.",
+  "edit_residue": [
+    "L49-51 orphan subsection with one dangling sentence",
+    "L244 leading space before a paragraph"
+  ],
+  "top_issues": [
+    "L1063: '(전체 허용 와일드카드로도 면제되지 않음)' adds a rule no source states (HITL page only says a negated tool always prompts and can't be trusted).",
+    "L49-51: orphan subsection '루프의 경계마다 놓인 제어 지점' contains one sentence ('티켓 에이전트의 요구사항도 하나씩 이 지점에 대응합니다.') and never lists the points - edit residue.",
+    "No AgentResult metrics example: result.metrics.get_summary() is never shown (checklist result-fields-incomplete repeated); body also diffs documentation pages instead of stating facts (L518, L716)."
+  ]
+}

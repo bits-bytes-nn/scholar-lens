@@ -1,0 +1,105 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-rlhf.json",
+  "title": "From RLHF to DPO and GRPO: Preference Optimization for LLM Alignment",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-llm-rlhf-dpo-da36ac9a/2026-11-07-from-rlhf-to-dpo-and-grpo-preference-optimization-for-llm-alignment.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-from-rlhf-to-dpo-and-grpo-preference-optimization-for-llm-alignment.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '참조 모델과 별도 SFT 단계를 덜어낸 순위·오즈비·길이 정규화 목적': check 5 sentence(s) the evidence may not support: RRHF는 PPO 파이프라인의 정책·가치·참조·보상 모델 묶음을 하나의 언어 모델 학습으로 바꿉니다 [[E106]]. (unsupported: E106 is only the figure caption 'Workflow of RRHF compared with PPO'; the specific bundle of policy/value/reference/reward models replaced by one LM is not given in evidence.) | PPO 쪽은 여러 모델이 상호작용하며 온라인으로 샘플링하고, RRHF 쪽은 이미 모은 응답들을 보상 순서대로 정렬해 한 모델에 넣습니다 [[E106]]. (unsupported: Details of the figure (PPO multi-model online sampling vs RRHF sorting pre-collected responses) are not stated in the cited caption.) | TL;DR 쌍으로 예를 들면, 가상의 선택 요약의 $$p$$가 -1.2이고 거절 요약이 -0.9라면 순위가 뒤집혀 있으므로 손실은 0.3입니다. (numbers not in its evidence) | OPT-125M, 350M, 1.3B를 UltraFeedback으로 학습해 테스트셋 보상 분포를 비교하면, 기대 보상을 끌어올리는 정도에서 ORPO가 RLHF·DPO와 대등하거나 더 낫습니다 [[E200]]. (numbers not in its evidence) | 보고된 이득도 대부분 7B 이하 모델과 LLM 판정자 기반 벤치마크에서 나왔습니다. (numbers not in its evidence)",
+    "Section '참조 모델과 별도 SFT 단계를 덜어낸 순위·오즈비·길이 정규화 목적' still has: numbers ['1.2', '0.9', '0.3'] without evidence (cite it; an illustration of your own ends with [[EX]]): TL;DR 쌍으로 예를 들면, 가상의 선택 요약의 $$p$$가 -1.2이고 거절 요약이 -0.9라면 순위가 뒤집혀 있으므로 손실은 0.3입니다. | ['1.2', '0.9', '0.3'] already stated in '보상 모델과 KL 페널티 위에 세운 PPO 파이프라인과 그 과최적화': refer back without repeating: TL;DR 쌍으로 예를 들면, 가상의 선택 요약의 $$p$$가 -1.2이고 거절 요약이 -0.9라면 순위가 뒤집혀 있으므로 손실은 0.3입니다. | numbers ['125M', '350M', '1.3B'] are not in the cited evidence: OPT-125M, 350M, 1.3B를 UltraFeedback으로 학습해 테스트셋 보상 분포를 비교하면, 기대 보상을 끌어올리는 정도에서 ORPO가 RLHF·DPO와 대등하거나 더 낫습니다 . | numbers ['7B'] without evidence (cite it; an illustration of your own ends with [[EX]]): 보고된 이득도 대부분 7B 이하 모델과 LLM 판정자 기반 벤치마크에서 나왔습니다.",
+    "Section '브래들리-테리를 넘어 선호 게임의 내시 균형을 쫓는 온-정책 학습': check 1 sentence(s) the evidence may not support: 이상적인 갱신 규칙은 Freund와 Schapire의 곱셈 가중치 업데이트로, 응답마다 현재 정책을 상대로 한 승률에 비례해 확률을 늘립니다 [[E222]]. (unsupported: E222's update multiplies the probability by exp(η·win rate); it does not raise the probability in proportion to the win rate itself.)",
+    "Section '가치 모델 대신 그룹 평균을 베이스라인으로 삼는 검증 가능한 보상 RL': check 2 sentence(s) the evidence may not support: 보상 모델을 갱신하며 RL을 두 차례 반복하면 성능이 크게 오르고, 특히 첫 반복의 효과가 큽니다 [[E194]]. (unsupported: Evidence says iterative RL (two rounds) helps, especially the first; it does not mention updating the reward model between iterations.) | 온도 0.7에서 $$K$$를 늘려 가며 보면, RL은 다수결 정확도 Maj@K를 높이지만 $$K$$개 중 하나라도 맞히는 Pass@K는 높이지 못합니다 [[E183]]. (numbers not in its evidence)",
+    "Section '가치 모델 대신 그룹 평균을 베이스라인으로 삼는 검증 가능한 보상 RL' still has: numbers ['0.7'] are not in the cited evidence: 온도 0.7에서 $$K$$를 늘려 가며 보면, RL은 다수결 정확도 Maj@K를 높이지만 $$K$$개 중 하나라도 맞히는 Pass@K는 높이지 못합니다 .",
+    "Section '단순함, 안정성, 데이터 신선도 사이의 맞교환' still has: evidence ['E220'] was already referred back to once; do not restate it again: SPPO에서도 라운드마다 프롬프트당 $$K$$개 응답을 새로 만들고, 그 사이의 승률을 구하려 선호 오라클에 $$O(K^2)$$번 질의합니다 . | evidence ['E215'] was already referred back to once; do not restate it again: NLHF는 실험의 목적이 우열 증명이 아니라고 적었고 , Online IPO는 요약 과제 하나에서만 평가했으며 , SPPO는 UltraFeedback 한 데이터셋과 일부 벤치마크로 실험 범위를 제한했습니다 .",
+    "Section '길이 편향, 능력 퇴행, 증폭의 한계로 남은 열린 문제': check 2 sentence(s) the evidence may not support: 오프라인 반복 DPO와 IPO도 출력이 길어졌고, SPPO는 그 증가 폭이 상대적으로 작았을 뿐입니다 [[E233]]. (unsupported: Evidence gives DPO/IPO length increases but does not say these were offline runs; 'offline' is an added characterization.) | 참조 모델이 전혀 못 푸는 프롬프트는 그룹 안의 모든 출력이 실패해 학습 신호가 사라지고, 증폭할 대상도 없습니다 [[E268]]. (unsupported: E268 only states the fixed point is 0 (no amplification); the mechanism of all group outputs failing and the learning signal vanishing is not in the evidence.)"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2614.2,
+  "input_tokens": 1716236,
+  "output_tokens": 301773,
+  "estimated_cost_usd": 12.0142,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 67,
+      "failed_calls": 0,
+      "input_tokens": 365102,
+      "output_tokens": 301773,
+      "cache_read_tokens": 486377,
+      "cache_write_tokens": 864757,
+      "cost_usd": 12.014207
+    },
+    "by_stage": {
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 14335,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 61647,
+        "cost_usd": 0.594951
+      },
+      "verify": {
+        "calls": 23,
+        "failed_calls": 0,
+        "input_tokens": 229072,
+        "output_tokens": 47497,
+        "cache_read_tokens": 324947,
+        "cache_write_tokens": 398540,
+        "cost_usd": 3.988908
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 68553,
+        "cache_read_tokens": 24876,
+        "cache_write_tokens": 244196,
+        "cost_usd": 2.60217
+      },
+      "review": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 29589,
+        "cache_read_tokens": 15724,
+        "cache_write_tokens": 58858,
+        "cost_usd": 0.892537
+      },
+      "fix": {
+        "calls": 20,
+        "failed_calls": 0,
+        "input_tokens": 120269,
+        "output_tokens": 140818,
+        "cache_read_tokens": 120830,
+        "cache_write_tokens": 101516,
+        "cost_usd": 3.853345
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 15669,
+        "output_tokens": 981,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.082296
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 67,
+        "failed_calls": 0,
+        "input_tokens": 365102,
+        "output_tokens": 301773,
+        "cache_read_tokens": 486377,
+        "cache_write_tokens": 864757,
+        "cost_usd": 12.014207
+      }
+    }
+  }
+}

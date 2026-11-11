@@ -1,0 +1,154 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.ray.io/en/latest/serve/getting_started.html",
+  "title": "Ray Serve in Practice: Deployments, Composition, and KubeRay Ops",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-ray-serve-in-practice-deployments-composition-and-kuberay-ops/2026-11-06-ray-serve-in-practice-deployments-composition-and-kuberay-ops.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-06-ray-serve-in-practice-deployments-composition-and-kuberay-ops.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '디플로이먼트·레플리카·애플리케이션·인그레스로 이루어진 Serve의 기본 단위' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 소개한 분할 GPU가 바로 이 값으로 표현됩니다.",
+    "Section '액터·GCS·bottom-up 스케줄러로 이루어진 Ray 기반 계층' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 아래 내용은 앞서 언급한 Ray 원 논문이 제시한 설계입니다.",
+    "Section '설치부터 serve run과 첫 POST 요청까지 이어지는 Translator 최소 실행': check 1 sentence(s) the evidence may not support: 명령은 기본적으로 터미널을 점유한 채 로그를 콘솔에 계속 출력하고, Ctrl-C를 누르면 클러스터의 Serve를 종료합니다 [[E107]]. (unsupported: Only the Ray 2.59.0 page says Ctrl-C shuts down Serve on the cluster, and the sentence drops the version qualifier; the 2.60 Getting Started page says Ctrl-C tears down the application.)",
+    "Section 'KubeRay RayService로 운영하는 Kubernetes 프로덕션 배포': check 1 sentence(s) the evidence may not support: GCS(Global Control Store)는 헤드 노드에서 클러스터의 메타데이터를 보관하는 저장소입니다. (unsupported: No evidence places GCS on the head node or calls it a store for cluster metadata today. The only GCS evidence is the 2017 paper's sharded design.)",
+    "Section '레플리카 수·동시성 한도·백프레셔로 조정하는 스케일링과 튜닝': check 1 sentence(s) the evidence may not support: 레플리카 하나가 $$0.25$$장을 요청하므로 GPU 한 장의 몫에 $$1 / 0.25 = 4$$개의 레플리카가 들어가고, 레플리카 4개 전체가 요청하는 양은 $$4 \\times 0.25 = 1$$장입니다. (numbers not in its evidence)",
+    "Section '레플리카 수·동시성 한도·백프레셔로 조정하는 스케일링과 튜닝' still has: numbers ['0.25'] without evidence: 레플리카 하나가 $$0.25$$장을 요청하므로 GPU 한 장의 몫에 $$1 / 0.25 = 4$$개의 레플리카가 들어가고, 레플리카 4개 전체가 요청하는 양은 $$4 \\times 0.25 = 1$$장입니다.",
+    "Section 'Ray 대시보드와 KubeRay Prometheus·Grafana로 구성하는 관측성' still has: ['2.51'] already stated in 'KubeRay RayService로 운영하는 Kubernetes 프로덕션 배포': refer back without repeating: 엔진 메트릭 로깅은 Ray 2.51부터 기본으로 켜져 있으며, LLM 디플로이먼트를 설정할 때 `log_engine_metrics: False`를 주면 끌 수 있습니다 .",
+    "Section '독립 확장이 필요한 Python 파이프라인에 맞고 모델별 최적화 서버로는 부족한 선택지': check 1 sentence(s) the evidence may not support: 2024년 11월에 보고된 KubeRay 이슈 #2557에서는 샘플 Serve 설정에서 디플로이먼트 두 개를 제거하자 RayService가 준비 상태에 도달하지 못하고 대기 상태에 머물렀고, 하나만 제거했을 때는 정 (numbers not in its evidence)",
+    "Section '독립 확장이 필요한 Python 파이프라인에 맞고 모델별 최적화 서버로는 부족한 선택지' still has: numbers ['2024', '11', '2557'] without evidence: 2024년 11월에 보고된 KubeRay 이슈 #2557에서는 샘플 Serve 설정에서 디플로이먼트 두 개를 제거하자 RayService가 준비 상태에 도달하지 못하고 대기 상태에 머물렀고, 하나만 제거했을 때는 정상 동작했습니다. | ['2024', '11', '2557'] already stated in 'KubeRay RayService로 운영하는 Kubernetes 프로덕션 배포': refer back without repeating: 2024년 11월에 보고된 KubeRay 이슈 #2557에서는 샘플 Serve 설정에서 디플로이먼트 두 개를 제거하자 RayService가 준비 상태에 도달하지 못하고 대기 상태에 머물렀고, 하나만 제거했을 때는 정상 동작했습니다.",
+    "Section 'KubeRay RayService로 운영하는 Kubernetes 프로덕션 배포': guide review problems left as they were: The guide says to copy the YAML into Kubernetes \"그대로\", but `import_path: text_ml:app` cannot be imported on the Ray pods. Nothing ships text_ml.py: there is no  | The multi-app example uses `import_path: model:translator_app`, but the guide never creates a model.py. The FastAPI Translator file is never given a name. That  | Two facts are explained again here. The GCS definition repeats the Ray 기반 계층 section. user_config without restart, the host/port restriction, and the rolling_up",
+    "self-reference '앞 절': 앞 절에서 본 것처럼 Serve의 구성 요소는 모두 Ray"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3402.3,
+  "input_tokens": 2766806,
+  "output_tokens": 407461,
+  "estimated_cost_usd": 17.786,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 170,
+      "failed_calls": 0,
+      "input_tokens": 18144,
+      "output_tokens": 407461,
+      "cache_read_tokens": 790193,
+      "cache_write_tokens": 1958469,
+      "cost_usd": 17.786062
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2617,
+        "output_tokens": 197,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00036
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2786,
+        "output_tokens": 578,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000568
+      },
+      "read": {
+        "calls": 41,
+        "failed_calls": 0,
+        "input_tokens": 96,
+        "output_tokens": 25455,
+        "cache_read_tokens": 236334,
+        "cache_write_tokens": 56173,
+        "cost_usd": 0.442441
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 5958,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 19706,
+        "cost_usd": 0.217706
+      },
+      "verify": {
+        "calls": 58,
+        "failed_calls": 0,
+        "input_tokens": 232,
+        "output_tokens": 129157,
+        "cache_read_tokens": 424967,
+        "cache_write_tokens": 988857,
+        "cost_usd": 7.698357
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 53330,
+        "cache_read_tokens": 44880,
+        "cache_write_tokens": 283293,
+        "cost_usd": 2.501241
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 37008,
+        "cache_read_tokens": 24072,
+        "cache_write_tokens": 96206,
+        "cost_usd": 1.231054
+      },
+      "fix": {
+        "calls": 38,
+        "failed_calls": 0,
+        "input_tokens": 152,
+        "output_tokens": 154845,
+        "cache_read_tokens": 59940,
+        "cache_write_tokens": 514234,
+        "cost_usd": 5.692654
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 12141,
+        "output_tokens": 933,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001681
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 17544,
+        "output_tokens": 1708,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002609
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 41,
+        "failed_calls": 0,
+        "input_tokens": 96,
+        "output_tokens": 25455,
+        "cache_read_tokens": 236334,
+        "cache_write_tokens": 56173,
+        "cost_usd": 0.442441
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 126,
+        "failed_calls": 0,
+        "input_tokens": 504,
+        "output_tokens": 380298,
+        "cache_read_tokens": 553859,
+        "cache_write_tokens": 1902296,
+        "cost_usd": 17.341012
+      }
+    }
+  }
+}

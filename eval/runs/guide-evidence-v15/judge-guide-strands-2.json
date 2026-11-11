@@ -1,0 +1,302 @@
+{
+ "item": "guide-strands",
+ "post": "/tmp/eval-guide/guide-strands-v15.md",
+ "judge_run": 2,
+ "sdk_checked": "strands-agents 1.64.0 with [anthropic,ollama,otel,cedar] extras (cedarpy 4.12.2), strands-agents-tools 0.9.0 and bedrock-agentcore 1.25.4 in a temp venv (Python 3.14); strands-harness 0.3.4 confirmed on PyPI; docs from strandsagents.com index.md pages (agent-loop, hooks, interventions, cedar-authorization, approve-before-acting, lifecycle-controls, state, structured-output, structured-output-behavior, retry-strategies, session-management, quickstart/python, deploy_to_bedrock_agentcore), harness-sdk README and strands-py README, and the non-official posts (Langfuse comparison, AWS ML deep dive, DEV Community OTEL post, LinkedIn deep dive, Datadog blog, Cipher Projects comparison, AWS market surveillance post) fetched 2026-11-07; Python blocks exercised in reading order with a scripted fake Model (BedrockModel patched to the fake; no paid model call); every block run with AWS credentials removed (env -u AWS_PROFILE/AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN/AWS_BEARER_TOKEN_BEDROCK, AWS_CONFIG_FILE=/dev/null, AWS_SHARED_CREDENTIALS_FILE=/dev/null)",
+ "sampling": "248 blank-line paragraphs after front matter (fenced blocks kept whole, headings and list runs as one paragraph); paragraphs 2,5,8,...,248; claims drawn from those paragraphs",
+ "scores": {
+  "A": 8.0,
+  "B": 7.5,
+  "C": 7.5,
+  "D": 8.0,
+  "E": 8.5,
+  "F": 6.5,
+  "T1": 7.5,
+  "T2": 8.0,
+  "T3": 8.5
+ },
+ "score_evidence": {
+  "A": "Claim headings, no skipped levels, real tables, fenced code with one-word info strings, $$ math with use_math true, description 134 characters. Deductions: the stop-reason table is printed twice (L82 and L656); topic headings remain (L31, L952, L975); the AgentCore Runtime subsection (L1033-L1039) ends on '이후 배포 절차는 ... 나뉩니다' with no procedure; the monorepo table (L35-L41) is peripheral to an SDK guide.",
+  "B": "Mostly natural '입니다' prose keeping English terms. Deductions: L950 '이 표는 각 저장소의 성격을 한눈에 정리한 그림입니다' (rewrite: delete, or '세 상태를 표로 비교하면 위와 같습니다'); L289 '남은 핸들러가 모두 자동으로 건너뛰어집니다' (rewrite '프레임워크가 남은 핸들러를 건너뜁니다'); formulaic table leads '각 값이 뜻하는 바를 정리했습니다' (L80), '표로 정리했습니다' (L200), '순서를 표로 정리했습니다' (L447), '처리 방식을 정리했습니다' (L654); L1039 dangling closing sentence.",
+  "C": "Accurate back-references (L289, L589, L624, L777, L954, L1001, L1037). Deductions: L175 and L216 use safe_alternative_tool/review_refund and send_email that are never defined; repeated passages (L96/L664, L666/L899/L1118, L804/L1098) read as restarts; L1080 blends DEV Community and AWS blog content under one attribution.",
+  "D": "Hard parts get numbers where they appear: context growth 72,000 vs 15,000 (L130-L136), attempt counting (L501-L505), 11,500 overshoot (L642), 124 s vs 20 s (L823), CustomRetry counter never resets (L895), symlink risk (L1027). Deductions: the interrupt-resume input is described (L614) but never shown, although the L595 handler depends on it; loop basics re-explained after the TL;DR (L57, L74).",
+  "E": "Tables where comparison helps (stop reasons L82, decisions per method L202, on_error L253, SO trace L449, retry parameters L827, state L944, failure modes L1116), text diagrams (L61, L1064, L1104), one display equation (L132). Deductions: the second stop-reason table (L656) duplicates the first; the max_delay description cell (L831) is not the docs cell.",
+  "T1": "Exercised in reading order with a fake model; nearly all blocks run. Deductions: the Cedar + HITL block (L551) denies alice's refund for float amounts (refund_order takes amount: float, L345), so its headline behaviour fails with realistic input; no interrupt-resume code (L614); no AgentCore Runtime deploy code; L175/L216 handlers target tools never defined; no get_summary() example.",
+  "T2": "Covers the sources in a sensible order (layers -> loop/stop reasons/history -> hooks/interventions -> install/tools/structured output -> HITL/Cedar -> limits/cancel/concurrency -> retry -> state/sessions -> AgentCore/observability -> choice). Deductions: AgentCore Runtime is description only; observability setup leans on third-party posts; the harness/monorepo opener (L31-L49) is padding for an SDK guide.",
+  "T3": "Explains mechanisms and why: schema-as-tool reusing the loop (L366), typed decisions vs last-write-wins hooks (L192, L196), Guide position semantics and uncapped retries (L212), top-of-iteration limits and cache tokens (L640, L646), cooperative cancellation by executor (L689), single-writer sessions and non-atomic creation (L1023), symlink trust boundary (L1027), loop-vs-graph durability (L1098). Deductions: AgentCore interfaces (entrypoint, session header) absent; docs/code drift on max_delay not noted.",
+  "F": "Sample: 15 of 15 supported. Off-sample: L583/L551 Cedar + float refund denies alice (-2), L1080 misattribution (-0.5), L831 mixed-source cell with unmentioned 128 vs 240 drift (-0.5), L589/L1027 framing (-0.5)."
+ },
+ "principles": {
+  "claim_headings": {
+   "status": "partly met",
+   "evidence": "Most headings are claims ('L51 중단 사유로 분기하며 대화 기록에 쌓이는 모델–도구 반복 구조', 'L622 루프 반복이 시작될 때만 검사되는 limits', 'L708 한 번에 하나만 받는 에이전트와 요청당 새 에이전트'); topic headings remain at L31 '하네스와 SDK의 위치', L952 '대화 기록과 에이전트 상태', L975 '모델에 보이지 않는 호출 상태'."
+  },
+  "running_example": {
+   "status": "met",
+   "evidence": "Customer-support agent (lookup_order, refund_order, TicketTriage, RefundAuth, RefundReasonValidator, Cedar alice/bob, RefundApproval, handle_request, RetryOnToolError, build_support_agent) from L23 through the trace sketch (L1064) and the LangGraph hybrid (L1104)."
+  },
+  "mechanism_design_code_example": {
+   "status": "met",
+   "evidence": "Structured output: schema-as-tool and why (L366) -> five steps (L370) -> TicketTriage/FollowUp code (L382, L420) -> 2025-07-22 example (L449) -> attempt counting (L501-L505); limits: top-of-iteration rule (L640) -> 9,000+2,500 example (L642); retry: schedule (L814) -> 124 s vs 20 s (L823) -> reduced strategy (L835); context: 72,000 vs 15,000 tokens (L130-L136)."
+  },
+  "facts_said_once": {
+   "status": "partly met",
+   "evidence": "Stop-reason table twice (L82, L656); limit_* signal three times (L15, L96, L664); tool-error path three times (L666, L899, L1118); stateless interrupt caveat twice (L804, L1098). on_error and structured output no longer repeated."
+  },
+  "numbers_with_scope_unit": {
+   "status": "met",
+   "evidence": "SDK scope kept (Python/TypeScript labels throughout); illustrative numbers labelled ('가상의 숫자로' L130, '따져 보겠습니다' L642); 1.47.0 scoped to the DEV post (L1080); Datadog price dated to its blog (L1086); retry defaults with units (L812, L831)."
+  },
+  "nothing_invented": {
+   "status": "partly met",
+   "evidence": "The Cedar + float-amount combination (L345 with L551) makes the promised 'alice is prompted' path fail; L1080 credits the DEV post with the AWS blog's regression advice; L1027 tenant-prefix advice reads as documented; L831 description cell is from the SDK docstring, not the docs table."
+  },
+  "writer_assessment_at_end": {
+   "status": "met",
+   "evidence": "L1126 '이 글의 판단은 이렇습니다': Strands alone with interventions/limits/retry/sessions for minutes-long requests; graph framework for next-day approvals or fixed settlement steps, Strands only on judgement nodes."
+  },
+  "length_fitted": {
+   "status": "partly met",
+   "evidence": "1,150 lines, about 46k non-space characters; depth on interventions, limits, retry and sessions is warranted, but the duplicated stop-reason table and repeated facts (about 1.5k characters), the loop basics restated after the TL;DR (L57) and the monorepo table (L35-L41) add length."
+  },
+  "type_specific_shape": {
+   "status": "met",
+   "evidence": "TL;DR (L11-L15) and the growing-loop problem (L21) open the post; architecture (L31, L51) and hooks/interventions (L147) precede installation (L293); closes with model-driven loop vs graph and failure modes (L1090-L1126)."
+  },
+  "korean_style": {
+   "status": "partly met",
+   "evidence": "Natural '입니다' prose overall; defects: L950 '이 표는 각 저장소의 성격을 한눈에 정리한 그림입니다.' (a table called a picture; delete or '세 상태를 표로 비교하면 위와 같습니다'), L289 '남은 핸들러가 모두 자동으로 건너뛰어집니다' (rewrite '프레임워크가 남은 핸들러를 건너뜁니다'), the repeated table lead '...정리했습니다.' (L80, L200, L447, L654), L1039 dangling '이후 배포 절차는 ... Python과 TypeScript로 나뉩니다.' with no procedure."
+  }
+ },
+ "claims": {
+  "checked": 15,
+  "supported": 15,
+  "unsupported": 0,
+  "wrong": 0,
+  "unverifiable": 0,
+  "examples": [
+   {
+    "line": 132,
+    "claim": "Six model calls resend sum_{k=0}^{5}(2000 + 4000k) = 72,000 tokens",
+    "verdict": "supported",
+    "source": "Writer's labelled example; 6×2,000 + 4,000×15 = 72,000."
+   },
+   {
+    "line": 155,
+    "claim": "HookOrder.SDK_FIRST -100, DEFAULT 0, SDK_LAST 100; not enforced bounds; ±inf for absolute order",
+    "verdict": "supported",
+    "source": "Hooks ordering section verbatim."
+   },
+   {
+    "line": 307,
+    "claim": "Default provider Amazon Bedrock with Claude Sonnet 4.6 in us-west-2; no model object needed",
+    "verdict": "supported",
+    "source": "Quickstart: 'Amazon Bedrock is the default provider, using Claude Sonnet 4.6 in the us-west-2 region'."
+   },
+   {
+    "line": 319,
+    "claim": "AnthropicModel(model_id='claude-sonnet-5', max_tokens=4096) after pip install 'strands-agents[anthropic]'; callback_handler=None silences console output",
+    "verdict": "supported",
+    "source": "Quickstart Anthropic tab and 'To silence the streamed console output, pass callback_handler=None'."
+   },
+   {
+    "line": 447,
+    "claim": "Model first sends 2025-07-22, receives 'due_date must be after 2026-10-12', retries with 2026-10-13",
+    "verdict": "supported",
+    "source": "Structured output behavior example, verbatim (the docs' dates, not today's)."
+   },
+   {
+    "line": 499,
+    "claim": "Limit 3: lookup (0), failed validation (1), text then failed forced retry (2), retried forced retry fails (3), stop before the next model call",
+    "verdict": "supported",
+    "source": "Docs counting rule; exercised: limit_structured_output_attempts after 5 model calls, structured_output None."
+   },
+   {
+    "line": 626,
+    "claim": "limits turns 5, output_tokens 2000, total_tokens 10000 with limit_turns/limit_total_tokens branches",
+    "verdict": "supported",
+    "source": "Agent loop invocation limits example, verbatim values."
+   },
+   {
+    "line": 670,
+    "claim": "30-second threading.Timer sets the caller-owned event; the agent never sets or clears it",
+    "verdict": "supported",
+    "source": "Lifecycle controls cancellation example and 'The agent never sets or clears the caller-owned event.'"
+   },
+   {
+    "line": 722,
+    "claim": "Same idempotency_token waits and returns the same AgentResult; a different token raises ConcurrencyException; an aborted original raises IdempotencyAbortedError",
+    "verdict": "supported",
+    "source": "Lifecycle controls and agent loop idempotency sections."
+   },
+   {
+    "line": 812,
+    "claim": "Without configuration, throttling is retried up to 5 times (6 attempts) with backoff from 4 s",
+    "verdict": "supported",
+    "source": "Retry strategies: 'retry throttling errors up to 5 times (6 total attempts) with exponential backoff starting at 4 seconds'; exercised."
+   },
+   {
+    "line": 835,
+    "claim": "ModelRetryStrategy(max_attempts=3, initial_delay=2, max_delay=60) via retry_strategy",
+    "verdict": "supported",
+    "source": "Retry strategies customizing example; exercised a subclass with initial_delay 2: sleeps 2, 4."
+   },
+   {
+    "line": 938,
+    "claim": "Discarded attempts' ToolStreamEvent already reached callers; only the final ToolResultEvent enters history",
+    "verdict": "supported",
+    "source": "Hooks: 'intermediate streaming events (ToolStreamEvent) from discarded attempts will have already been emitted ... Only the final attempt's ToolResultEvent ...'"
+   },
+   {
+    "line": 1017,
+    "claim": "Manager storage beats agent storage; with neither Python falls back to LocalFileStorage('./.strands/') and TypeScript fails at init",
+    "verdict": "supported",
+    "source": "Session management storage section verbatim."
+   },
+   {
+    "line": 1035,
+    "claim": "AgentCore Runtime supports Strands, LangChain, LangGraph, CrewAI, MCP/A2A and Bedrock/OpenAI/Gemini models; thousands of concurrent sessions in seconds",
+    "verdict": "supported",
+    "source": "Deploy to AgentCore page, verbatim."
+   },
+   {
+    "line": 1076,
+    "claim": "LinkedIn deep dive: spans carry the prompt, model parameters, token usage and tool input/output",
+    "verdict": "supported",
+    "source": "LinkedIn: 'a span which can include metadata like the prompt, model parameters (temperature, max tokens, etc.), and token usage counts ... recording which tool was called and the input/output.'"
+   }
+  ],
+  "off_sample_findings": [
+   {
+    "line": 583,
+    "claim": "With the Cedar + HumanInTheLoop stack and the guide's refund_order(order_id: str, amount: float), alice's refund goes to the approval prompt",
+    "verdict": "wrong",
+    "source": "Exercised: refund_order(amount=10.0) (and any float such as 49.99) returns 'DENIED: Cedar evaluation failed: failed to build request: data did not match any variant of untagged enum RawCedarValueJson' for alice; Cedar has no float type, so only an integer amount (10) reaches the prompt ('Approve \"refund_order\"? ... (y/n/t)'). bob is denied by policy either way. The docs' example tool (delete_files) has no float input."
+   },
+   {
+    "line": 1080,
+    "claim": "Paragraph attributed to the DEV Community post: watch loops per interaction, model latency, prompt/completion tokens; a spike in tool error rate or token use is a regression signal",
+    "verdict": "unsupported",
+    "source": "DEV post: get_summary() metrics and the 1.47.0 latencyMs TODO caveat. The loops-per-interaction/latency/token list and 'sudden spike in tool error rates or a jump in token usage per query might signal a regression' are the AWS ML deep-dive blog's (and the LinkedIn post's) wording, not the DEV post's."
+   },
+   {
+    "line": 831,
+    "claim": "ModelRetryStrategy max_delay row: default 128, 'Upper bound in seconds for the exponential backoff.'",
+    "verdict": "supported",
+    "source": "Retry strategies table gives 128 with 'Maximum seconds to wait between retries. Caps the exponential growth.'; the description cell is the SDK docstring (strands/event_loop/_retry.py), whose constructor defaults max_delay to 240. The table mixes two sources and the docs/code drift is no longer mentioned."
+   },
+   {
+    "line": 589,
+    "claim": "The HITL handler, which asks a person when the classifier fails, is on the fail-safe side of the on_error policy",
+    "verdict": "unsupported",
+    "source": "on_error values are throw/proceed/deny (interventions); approve-before-acting says a classifier outage makes the handler ask a person. 'fail-safe' is the writer's label, not one of the documented on_error modes."
+   },
+   {
+    "line": 1027,
+    "claim": "In shared volumes or multi-tenant containers, separate directories or S3 prefixes per tenant and expire sessions with a TTL",
+    "verdict": "unsupported",
+    "source": "Session management: restrict permissions, do not load untrusted sessions, symlinks are not blocked; TTL appears under Session Cleanup. Per-tenant directory/prefix separation is the writer's advice, written as documented practice."
+   }
+  ]
+ },
+ "checklist": {
+  "repeated": 2,
+  "avoided": 2,
+  "na": 1,
+  "repeated_ids": [
+   "shared-agent-throw-scope",
+   "result-fields-incomplete"
+  ],
+  "items": [
+   {
+    "id": "loop-diagram-remote",
+    "status": "avoided",
+    "evidence": "No image links at all; the loop is a text diagram (L61-L72) and the trace and graph sketches are text (L1064, L1104)."
+   },
+   {
+    "id": "shared-agent-throw-scope",
+    "status": "repeated",
+    "evidence": "L710 'Python에서 이미 실행 중인 에이전트를 다시 호출하면 ConcurrencyException이 발생합니다' and L1122 '중복 호출을 거부합니다'. Neither ties THROW to overlapping invoke_async calls nor says a sync agent(...) inside an async def handler blocks the event loop and serializes requests instead of raising."
+   },
+   {
+    "id": "shared-agent-history-leak",
+    "status": "avoided",
+    "evidence": "L401 '# A fresh agent per message keeps tickets from sharing conversation history', L738 '요청마다 새 에이전트를 만드는 편이 낫습니다', L782 same comment in handle_request, L414 'invoke_async도 같은 인자를 받습니다'. Weak: the leak is stated only in code comments and invoke_async is not recommended for async handlers."
+   },
+   {
+    "id": "result-fields-incomplete",
+    "status": "repeated",
+    "evidence": "L118 prints result.stop_reason and L121 agent.messages, but no example calls result.metrics.get_summary(); L1080 describes cycles, tokens, per-tool counts and timings without naming the method or showing output."
+   },
+   {
+    "id": "multi-agent-subject",
+    "status": "n/a",
+    "evidence": "No sentence about the smallest execution unit of multi-agent patterns; multi-agent appears only at L25 and in the LangGraph hybrid (L1102)."
+   }
+  ]
+ },
+ "extras": {
+  "architecture_first_line": 31,
+  "architecture_note": "Monorepo/harness-vs-SDK layers at L31-L49, then the loop cycle, stop reasons, history and context limits (L51-L145) and hooks/interventions (L147-L291) before installation (L293); structured output internals follow installation in the same section.",
+  "sources_total": 20,
+  "sources_non_official": 7,
+  "non_official_share": 0.35,
+  "non_official_list": [
+   "Langfuse framework comparison",
+   "AWS ML blog technical deep dive",
+   "DEV Community OTEL post",
+   "LinkedIn deep dive",
+   "Datadog blog",
+   "Cipher Projects OpenAI Agents SDK vs LangGraph",
+   "AWS ML blog market surveillance (LangGraph + Strands)"
+  ],
+  "opens_with_problem": true,
+  "opens_note": "TL;DR (L11-L15), then 'while 루프가 불어나는 경로' (L21-L25): the hand-written loop grows turn limits, budgets, cancellation, validated output, persistence, guardrails and tracing.",
+  "closes_with_when_to_choose_and_failure_modes": true,
+  "closes_note": "L1090-L1126: model-driven loop vs workflow graph (LangGraph, OpenAI Agents SDK durability), LangGraph-hosts-Strands-node hybrid, failure-mode table (L1116-L1124) and the writer's choice rule (L1126)."
+ },
+ "runnable_code": {
+  "verdict": "Every Python block pastes and runs in reading order against SDK 1.64.0 with a fake model and no AWS credentials, except where the guide's own pieces collide: the Cedar + HumanInTheLoop block (L551) denies alice's refund for any float amount because refund_order (L345) takes amount: float and Cedar cannot encode floats, so the documented 'alice is prompted' path only works for integer amounts. The S3 session block needs AWS by design; AgentCore Runtime deployment has no code (L1039 ends with '이후 배포 절차는 ... 나뉩니다'); the interrupt-resume input is described (L614) but never shown; result.metrics.get_summary() is never shown.",
+  "passed": [
+   "L106 Agent(messages=[2 seeded]) -> stop_reason end_turn, 4 messages, first model call sees 3 messages",
+   "L157 add_hook with HookOrder.SDK_FIRST/SDK_LAST: 'I run first' then 'I run last'",
+   "L175 RefundInterceptor, L216 RefundReasonValidator/PiiRedactor, L263 RefundAuth define without error (no runnable demo: safe_alternative_tool and send_email are never defined)",
+   "L327 lookup_order/refund_order: three model calls (tool_use, tool_use, end_turn), 6 messages, call inputs 1/3/5 messages",
+   "L382 triage: TicketTriage tool added next to lookup_order; 'high | billing | Charged twice'",
+   "L420 FollowUp: past date fed back as tool error 'Validation failed for FollowUp ... due_date must be after 2026-11-07', second call valid",
+   "L458 forced retry: user message 'You must format the previous response as structured output.' with tool_choice FollowUp, then StructuredOutputException",
+   "L470 stream_async: one 'result' event with ReplyDraft",
+   "L499-L509 structured_output_attempts=3 with lookup, invalid TicketTriage, text, forced fail, forced fail -> limit_structured_output_attempts after 5 model calls, structured_output None, triage falls back to other/medium",
+   "L543 Cedar without a TicketTriage permit denies the structured-output tool ('Access denied by Cedar policy') and the call raises StructuredOutputException; with the permit the object is returned",
+   "L551 with an integer amount: alice prompted once ('Approve \"refund_order\"? ... (y/n/t)') then refunded; bob denied by Cedar without a prompt",
+   "L595 RefundApproval: stop_reason interrupt (refund-approval); resumed with [{'interruptResponse': {'interruptId': ..., 'response': 'yes'}}] -> refund runs",
+   "L626 limits turns/output/total accepted; L642 9,000 + 2,500 = 11,500 with total_tokens 10000 alone -> 4 model calls, limit_total_tokens",
+   "L672 cancel_signal with 30 s timer; L691 normalize_order_ids through the agent -> 'A1\\nB2'",
+   "L712 ConcurrentInvocationMode.UNSAFE_REENTRANT, L724 idempotency_token accepted",
+   "L742+L779 handle_request: COMPLETED with text; looping tools -> BUDGET_EXCEEDED, text None",
+   "L812-L821 default retry: ModelThrottledException after 6 attempts, sleeps 4, 8, 16, 32, 64",
+   "L854 MyRetryStrategy(max_attempts=4, initial_delay=2): two TimeoutErrors retried with sleeps 2, 4; L871 CustomRetry: two errors retried with 2 s sleeps then end_turn",
+   "L901 RetryOnToolError(max_retries=1): failing lookup_order executed twice, second succeeds",
+   "L958 agent.state set -> {'customer_tier': 'gold', 'refund_count': 1}; lambda -> ValueError",
+   "L979 current_customer reads invocation_state 'c-1'; result.state == {}",
+   "L1003 LocalFileStorage SnapshotSessionManager: new agent restores 2 messages, agent_id 'default'",
+   "L1053 StrandsTelemetry().setup_otlp_exporter() runs after the [otel] install"
+  ],
+  "failed": [
+   "L551 'alice의 환불은 승인 프롬프트를 거친다' fails with the guide's refund_order(amount: float): 'DENIED: Cedar evaluation failed: failed to build request: data did not match any variant of untagged enum RawCedarValueJson' for amount 10.0 or 49.99",
+   "L1003 build_support_agent with S3Storage raises StorageError at construction without AWS credentials (expected; reads snapshot_latest.json from S3)",
+   "L175 RefundInterceptor needs a safe_alternative_tool and a review_refund tool the guide never defines; L216 PiiRedactor targets send_email, never defined",
+   "L614 interrupt resume: the response shape ({'interruptResponse': {'interruptId', 'response'}}) is not shown, so the L595 handler cannot be resumed from the guide alone",
+   "L1029-L1039 AgentCore Runtime: no entrypoint, package or deploy command; L1080 metrics: no get_summary() call"
+  ],
+  "notes": "Fake model streams Bedrock-shaped events; BedrockModel and the default model are patched to it; asyncio.sleep patched to record waits. Docs give max_delay default 128 s (L831 follows them) while the installed ModelRetryStrategy defaults to 240 s. The L626 block also sets output_tokens 2000, which would trip before the L642 total-token example when most tokens are output (exercised: limit_output_tokens after 2 calls at 50% output share); the example reads as total-only."
+ },
+ "other_sdk_as_python": "none found: TypeScript differences are labelled (L198, L373, L460, L497, L541, L736, L848, L995, L999, L1017, L1023)",
+ "topic_taught_twice": "yes, less than v13: the stop-reason table appears twice (L82-L94 meanings, L656-L662 handling, both listing limit_* and content_filtered), 'limit_* is a normal budget signal, not a failure' three times (L15, L96, L664), 'tool-body errors go back to the model, hook failures and exhausted retries propagate' three times (L666, L899, L1118), and 'the stateless per-request pattern does not resume interrupts' twice (L804, L1098). on_error and structured output are now taught once.",
+ "causes_scope_beyond_sources": "Mostly within the sources. Beyond them: per-tenant directory/S3-prefix separation written as practice (L1027), the 'fail-safe' label for HITL (L589), and the DEV Community attribution of the AWS blog's regression-signal advice (L1080). Writer advice is mostly marked as such (L145 '편이 먼저', L823 '기본값이 긴 편', L1080 '편이 안전'). The L543 TicketTriage-permit inference goes beyond the docs but holds when exercised.",
+ "top_issues": [
+  "Cedar + HITL block (L551) fails its own promise: the running example's refund_order(amount: float) (L345) makes Cedar deny alice's refund ('Cedar evaluation failed ... RawCedarValueJson') for any non-integer amount, so the approval prompt never appears with realistic input.",
+  "Facts still taught more than once: the stop-reason table twice (L82, L656), the limit_* 'normal budget signal' three times (L15, L96, L664), the tool-error path three times (L666, L899, L1118), the stateless-interrupt caveat twice (L804, L1098).",
+  "Gaps in runnable coverage and checklist misses: no interrupt-resume input (L614), no AgentCore Runtime deploy code (L1039 dangling), no result.metrics.get_summary() (checklist result-fields-incomplete), THROW not tied to invoke_async (shared-agent-throw-scope); L1080 credits the AWS blog's regression advice to the DEV post."
+ ]
+}

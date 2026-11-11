@@ -1,0 +1,721 @@
+{
+ "item": "guide-rayserve",
+ "kind": "guide",
+ "source": "https://docs.ray.io/en/latest/serve/getting_started.html",
+ "criteria_note": "Scored A-G, X1 and guide-specific T1-T3 (R*, U*, S1 do not apply). Claims checked against docs.ray.io/en/latest (Ray 2.60.0, fetched 2026-11-09) and Ray master source (serve/_private/replica.py, constants.py, scripts.py). Code was read, not executed. Prose length = body minus front matter, headings, fenced code, display math, tables, images and the Sources list. Means: X 7.91, Y 7.36.",
+ "X": {
+  "prose_length_chars": 29883,
+  "scores": {
+   "A": {
+    "score": 8,
+    "reason": "Opens with ## TL;DR (L11) and claim-shaped noun-phrase headings (L17, L142, L617, L1080); architecture right after concepts. Deductions: the install command is given twice (L92 'pip install \"ray[serve]\" transformers torch', L263 'pip install \"ray[serve]\"'); the MLflow __call__ excerpt L381-392 repeats L368-376 verbatim; the GCS section L1076-1078 is a heading plus one sentence."
+   },
+   "B": {
+    "score": 8,
+    "reason": "Natural 입니다 register, few formulaic sentences ('다음과 같습니다.' once). Deductions: terminology mixes an English noun with Korean particles while translating its sibling ('deployment는 Ray Serve의 중심 개념입니다' L55 vs '레플리카' L61; rewrite '디플로이먼트는...'); 'Deployment, replica, application: 스케일과 업그레이드의 세 단위' heading in mixed scripts (L49)."
+   },
+   "C": {
+    "score": 6.5,
+    "reason": "Cross-references broken: L1070 '앞서 Translator에 추가한 `reconfigure` 경로로' refers to a reconfigure method the post never adds; L256 promises 'GCS 장애 허용 설정은 뒤의 KubeRay 섹션에서 다룹니다' but L1078 gives one sentence and no config; L719 starts a worked example ('예를 들어 ... `num_gpus: 0.0`만 적었다고 해 보겠습니다.') and never states the result. Otherwise the Translator→Summarizer running example threads the whole post (L57, L166, L218, L1039)."
+   },
+   "D": {
+    "score": 8,
+    "reason": "Hard parts get worked examples at the point of use: power-of-two with A=3,B=1,C=5,D=2 (L182), 480/48/24 ratio arithmetic (L233), code-vs-config merge table (L713), backpressure 2x100=200 (L678). Minor over-explanation: '$$(5+1)\\times 2 = 12$$' (L539)."
+   },
+   "E": {
+    "score": 8,
+    "reason": "Eight relevant figures with Korean alt text and absolute URLs (architecture L152, autoscaling L216, dashboards L812-820), parameter/default tables (L657), failure table (L245), update table (L1032), ASCII request-path diagram (L168). Deduction: duplicated code excerpt L381-392; ASCII diagrams labelled illustrative but the first one (L27) adds little."
+   },
+   "F": {
+    "score": 7.5,
+    "reason": "27 of 28 checked claims match the docs. One fabricated cross-reference that breaks the running example: L1070 '앞서 Translator에 추가한 `reconfigure` 경로로 레플리카 재시작 없이 반영되므로' while the config at L754 sets 'user_config: language: french' for a Translator without reconfigure (Ray raises 'user_config ... specified but deployment ... missing reconfigure method')."
+   },
+   "G": {
+    "score": 9,
+    "reason": "description 125 chars, longer than title, opens with 'Ray Serve는', no numbers; use_math true with $$ at L539; fences have single-word info strings; no Liquid. Title carries a version ('Ray Serve 2.60'), which dates quickly."
+   },
+   "X1": {
+    "score": 9,
+    "reason": "Data-Architecture is a valid topic and fits a serving library; controlled tags Model-Serving and MLOps; specific tags (Deployment-Handle, Power-of-Two-Choices, KubeRay) name what the post covers."
+   },
+   "T1": {
+    "score": 7,
+    "reason": "Most code runs as written (L97-130, L270-306, L404-474, L557-594). Break: following the post, 'serve deploy serve_config.yaml' (L779) with 'user_config: language: french' (L754) fails because the post's Translator has no reconfigure, yet L783-804 shows HEALTHY. 'mv serve_quickstart_composed.py text_ml.py' (L730) is a reasonable bridge."
+   },
+   "T2": {
+    "score": 8,
+    "reason": "Covers concepts, request path, autoscaling, composition, config precedence, CLI/REST, KubeRay in a sensible order, all grounded. Thin or missing: HTTP guide features (streaming responses, cancellation, middlewares), monitoring metrics; GCS FT setup only named (L1078)."
+   },
+   "T3": {
+    "score": 8,
+    "reason": "Explains internals and design reasons: controller/proxy/replica roles (L148), handle path skipping step 2 (L166), two autoscaling signals and why (L218), what GCS keeps vs loses (L243-250), in-place vs zero-downtime (L1032), alternatives table (L1090) and selection criteria (L1110). Deduction: 17/17 sources are official docs; no design write-ups or papers beyond the linked IEEE paper."
+   }
+  },
+  "principles": {
+   "claim headings": {
+    "verdict": "met",
+    "evidence": "'컨트롤러 안의 오토스케일러와 액터별 장애 복구 범위' (L206), '죽은 컨트롤러가 멈추는 것은 트래픽이 아니라 스케일링' (L235), '코드보다 config 파일이 이기는 deployment 파라미터 우선순위' (L617)."
+   },
+   "a running example": {
+    "verdict": "met",
+    "evidence": "Text ML app announced at L57 and reused in routing (L166), autoscaling (L218), config (L692), KubeRay (L1039)."
+   },
+   "mechanism -> design choice -> code -> worked example": {
+    "verdict": "met",
+    "evidence": "Request lifecycle (L160-166) -> power of two choices (L180) -> numeric walk-through (L182); config merge rule (L711) -> table (L713)."
+   },
+   "facts said once": {
+    "verdict": "partly met",
+    "evidence": "Controller-failure behaviour appears in TL;DR (L15), L237 and table L249; KubeRay-only recovery at L15, L250, L256, L1106; install twice (L92, L263)."
+   },
+   "numbers with variant, scope and unit": {
+    "verdict": "met",
+    "evidence": "'100KiB 이상' (L204), defaults with units in table L664-667, 'Ray 2.32.0에서 100에서 5로' (L678)."
+   },
+   "nothing invented": {
+    "verdict": "partly met",
+    "evidence": "Illustrative values are labelled ('한도를 가상의 값 5로 잡았다고 가정' L182), but L1070 invents a reconfigure method 'added earlier'."
+   },
+   "writer's own assessment at the end": {
+    "verdict": "met",
+    "evidence": "'이 글의 판단은 이렇습니다...' (L1110) with concrete conditions (three+ stages, mixed CPU/GPU, bursty traffic)."
+   },
+   "length fitted to difficulty": {
+    "verdict": "met",
+    "evidence": "~29.9k prose characters; trivial setup is short, routing/autoscaling/config precedence get the space."
+   },
+   "type-specific shape (guide: problem + TL;DR first, architecture before config detail, non-official sources, ends with when to choose / failure)": {
+    "verdict": "partly met",
+    "evidence": "TL;DR L11, problem L19, architecture L142 before config L617, ends with when to choose (L1080) and failure points (L1102); but 0 non-official sources."
+   },
+   "Korean style": {
+    "verdict": "met",
+    "evidence": "Consistent 입니다, varied sentence shapes, low hedging; minor English/Korean term mixing ('deployment는' L55)."
+   }
+  },
+  "claims": {
+   "checked": 28,
+   "numbers_checked": 14,
+   "supported": 27,
+   "unsupported": 0,
+   "wrong": 1,
+   "error_rate": 0.036,
+   "items": [
+    {
+     "claim": "max_ongoing_requests defaults to 5",
+     "line": 662,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/configure-serve-deployment.html",
+     "passage": "Defaults to 5 (note the default changed from 100 to 5 in Ray 2.32.0)"
+    },
+    {
+     "claim": "default changed from 100 to 5 in Ray 2.32.0",
+     "line": 678,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/configure-serve-deployment.html",
+     "passage": "the default changed from 100 to 5 in Ray 2.32.0"
+    },
+    {
+     "claim": "max_queued_requests default -1 (no limit), per caller (proxy or handle)",
+     "line": 663,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/configure-serve-deployment.html",
+     "passage": "queued at each caller (proxy or DeploymentHandle)... Defaults to -1 (no limit)"
+    },
+    {
+     "claim": "health_check_period_s default 10s",
+     "line": 664,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/configure-serve-deployment.html",
+     "passage": "Defaults to 10s"
+    },
+    {
+     "claim": "health_check_timeout_s default 30s",
+     "line": 665,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/configure-serve-deployment.html",
+     "passage": "Defaults to 30s"
+    },
+    {
+     "claim": "graceful_shutdown_wait_loop_s default 2s",
+     "line": 666,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/configure-serve-deployment.html",
+     "passage": "Defaults to 2s"
+    },
+    {
+     "claim": "graceful_shutdown_timeout_s default 20s",
+     "line": 667,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/configure-serve-deployment.html",
+     "passage": "Defaults to 20s"
+    },
+    {
+     "claim": "request objects 100KiB+ go through the object store with zero-copy read",
+     "line": 204,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/architecture.html",
+     "passage": "Larger request objects (100KiB+) are written to the object store and the replica can read them via zero-copy read"
+    },
+    {
+     "claim": "REST API on dashboard port, default 8265, changeable with --dashboard-port",
+     "line": 909,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/api/index.html",
+     "passage": "The dashboard port is 8265 by default. This port can be changed using the --dashboard-port argument"
+    },
+    {
+     "claim": "at least 2:1 ingress-to-LLMServer replica ratio",
+     "line": 226,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/llm/architecture/overview.html",
+     "passage": "We recommend keeping at least a 2:1 ratio between the number of ingress replicas and LLMServer replicas"
+    },
+    {
+     "claim": "same-node routing; cross-node RPC costs only a few ms of TTFT",
+     "line": 188,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/llm/architecture/overview.html",
+     "passage": "only a few milliseconds impact on TTFT at high concurrency"
+    },
+    {
+     "claim": "target_ongoing_requests 48 (LLMServer) / 24 (ingress) example",
+     "line": 233,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/llm/architecture/overview.html",
+     "passage": "(for example, 48) ... (for example, 24)"
+    },
+    {
+     "claim": "RayServeHandle/RayServeSyncHandle fully removed as of Ray 2.10",
+     "line": 615,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/model_composition.html",
+     "passage": "fully removed as of Ray 2.10"
+    },
+    {
+     "claim": "ray_actor_options valid keys accelerator_type, memory, num_cpus, num_gpus, object_store_memory, resources, runtime_env",
+     "line": 688,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/configure-serve-deployment.html",
+     "passage": "Valid options are: accelerator_type, memory, num_cpus, num_gpus, object_store_memory, resources, and runtime_env"
+    },
+    {
+     "claim": "serve.config.GangSchedulingConfig exists in the Python API",
+     "line": 688,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/api/index.html",
+     "passage": "serve.config.GangSchedulingConfig"
+    },
+    {
+     "claim": "serve.config.AggregationFunction is an alpha API",
+     "line": 222,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/api/index.html",
+     "passage": "serve.config.AggregationFunction PublicAPI (alpha)"
+    },
+    {
+     "claim": "power of two choices from the IEEE paper, no replica above max_ongoing_requests",
+     "line": 180,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/architecture.html",
+     "passage": "power of two choices scheduling strategy (link ieeexplore 963420), subject to the constraint that no replica is handling more than max_ongoing_requests"
+    },
+    {
+     "claim": "controller death: traffic continues, autoscaling paused, previous metrics lost",
+     "line": 237,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/architecture.html",
+     "passage": "requests can still be sent via HTTP, gRPC and DeploymentHandle, but autoscaling is paused... all previous metrics collected are lost"
+    },
+    {
+     "claim": "Without KubeRay, Ray Serve cannot recover from a cluster failure",
+     "line": 256,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/architecture.html",
+     "passage": "If you aren't using KubeRay, when the Ray cluster fails, Ray Serve cannot recover."
+    },
+    {
+     "claim": "serveConfigV2 change is applied in place; rayClusterConfig change triggers zero-downtime upgrade switching head-svc selector; NewCluster default; NewClusterWithIncrementalUpgrade uses fewer resources",
+     "line": 1072,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/cluster/kubernetes/user-guides/rayservice.html",
+     "passage": "RayService updates the selector of the head service ... default NewCluster upgrade strategy ... NewClusterWithIncrementalUpgrade strategy, which uses fewer resources"
+    },
+    {
+     "claim": "rayVersion determines the Autoscaler sidecar image",
+     "line": 1072,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/cluster/kubernetes/user-guides/rayservice.html",
+     "passage": "This field determines the Autoscaler sidecar image, and triggers a zero downtime upgrade"
+    },
+    {
+     "claim": "replicas/minReplicas/maxReplicas/scaleStrategy.workersToDelete do not trigger an upgrade; RayService shows 2, RayCluster stays 1",
+     "line": 1074,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/cluster/kubernetes/user-guides/rayservice.html",
+     "passage": "Only the fields managed by Ray autoscaler... don't trigger a zero downtime upgrade ... Replicas: 2 ... Replicas: 1"
+    },
+    {
+     "claim": "enableInTreeAutoscaling must be True; GKE Autopilot, EKS Cluster Autoscaler",
+     "line": 1026,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/kubernetes.html",
+     "passage": "you need to set enableInTreeAutoscaling to True ... AutoPilot ... Cluster Autoscaler"
+    },
+    {
+     "claim": "/-/routes usable as node health check endpoint",
+     "line": 995,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/kubernetes.html",
+     "passage": "allowing you to use /-/routes as the endpoint for node health checks"
+    },
+    {
+     "claim": "serve run accepts only multi-application config files; one import path at a time",
+     "line": 770,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/multi-app.html",
+     "passage": "serve run only supports running multi-application config files ... can only run one application import path at a time"
+    },
+    {
+     "claim": "PUT removes apps not in config; DELETE has no effect if Serve not running",
+     "line": 913,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/api/index.html",
+     "passage": "removes all applications not listed in the new config ... Has no effect if Serve is not running"
+    },
+    {
+     "claim": "MLflow built-in REST server not optimized for high-concurrency GPU workloads",
+     "line": 1096,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/model-registries.html",
+     "passage": "MLflow's built-in REST server isn't optimized for high-concurrency GPU workloads"
+    },
+    {
+     "claim": "user_config: language french in the Text ML serve_config (L754) works with the post's Translator, and the in-place update goes through 'the reconfigure path added to Translator earlier'",
+     "line": 1070,
+     "verdict": "wrong",
+     "source": "https://github.com/ray-project/ray/blob/master/python/ray/serve/_private/replica.py",
+     "passage": "raise RayServeException('user_config or rank specified but deployment ... missing reconfigure method'); the post's Translator (L415-437) has no reconfigure and the post never adds one"
+    }
+   ]
+  },
+  "checklist": {
+   "repeated": 0,
+   "avoided": 1,
+   "na": 1,
+   "repeated_ids": [],
+   "details": [
+    {
+     "id": "arch-diagram-relative-link",
+     "verdict": "avoided",
+     "evidence": "L152 '![Serve 애플리케이션을 이루는 컨트롤러, 프록시, 레플리카 액터의 관계도](https://docs.ray.io/en/latest/_images/architecture-2.0.svg)'; no empty-text or ../_images links anywhere."
+    },
+    {
+     "id": "proxy-env-ray-start-unsupported",
+     "verdict": "n/a",
+     "evidence": "The post has no proxy or Serve environment-variable section; 'ray start --head' appears only before 'serve deploy' (L776)."
+    }
+   ]
+  },
+  "extras": {
+   "architecture_first_line": 15,
+   "architecture_section_line": 142,
+   "architecture_position_share": 0.13,
+   "sources_total": 17,
+   "non_official_sources": 0,
+   "non_official_share": 0.0,
+   "opens_with_problem": true,
+   "opens_with_problem_evidence": "TL;DR L11 then 'tensor-in, tensor-out' problem L19-33",
+   "closes_with_when_to_choose_and_failure_modes": true,
+   "closes_evidence": "'Ray Serve가 맞는 경우와 TorchServe·MLflow·BentoML이 나은 경우' (L1080), '배포 환경과 실패 지점' (L1102), '선택 기준' (L1108)",
+   "images": 8,
+   "description_chars": 125
+  },
+  "top_issues": [
+   "Running example breaks and a cross-reference is fabricated: config sets user_config for Translator (L754, L1050) but the post's Translator has no reconfigure, so deploy fails; L1070 claims a reconfigure 'added earlier'.",
+   "Loose ends: unfinished ray_actor_options example (L719), GCS FT promised at L256 but given one sentence (L1078), duplicated install and code excerpt (L263, L381-392).",
+   "All 17 sources are official docs; no explanatory or third-party material."
+  ]
+ },
+ "Y": {
+  "prose_length_chars": 43419,
+  "scores": {
+   "A": {
+    "score": 6,
+    "reason": "No TL;DR; opens with a topic heading '## Ray Serve 소개와 설치' (L11) and most headings are topic names ('핵심 개념: 디플로이먼트, 레플리카, 애플리케이션' L102, '다음 단계' L2149). L1157-1160: heading '세 종류의 액터' followed by empty lines where the diagram was, then text describing it. Architecture section only at L1153 of 2218."
+   },
+   "B": {
+    "score": 7.5,
+    "reason": "Consistent 입니다 and terms (디플로이먼트 throughout). Deductions: formulaic '...다음과 같습니다.' 17 times (e.g. L89, L234, L352, L492, L1123); decorative '> **핵심:**' boxes (L232, L1013); '이 차이가 중요합니다.' (L150), '이 구조가 중요한 이유는' (L621) emphasis frames."
+   },
+   "C": {
+    "score": 7.5,
+    "reason": "Concepts are introduced before use and the translator→summarizer example carries through to config and RayService (L883, L1376, L1633). Deductions: L1161 '제어 평면과 데이터 경로가 여기서 갈라집니다' refers to a missing figure; HTTP proxy default 'head node' (L1166) and config default 'EveryNode' (L1500) are both stated without reconciling."
+   },
+   "D": {
+    "score": 7,
+    "reason": "Good help where hard: cancellation only at await points (L621, L667), reconfigure state pitfalls (L1536), metric pipeline buffering (L2088-2094). Over-explains the trivial: beam-search arguments (L71), '$$2 \\times 0.2 = 0.4 \\ \\text{CPU}$$' plus a paragraph on packing (L183-189), '$$\\text{replicas} \\approx 10/2 = 5$$' (L1355)."
+   },
+   "E": {
+    "score": 6.5,
+    "reason": "Many useful tables (L174, L1125, L1270, L1498, L1720, L1911, L2019) and code. But zero images: no architecture diagram (dropped at L1157-1160), no dashboard screenshots; two display equations are trivial arithmetic (L185, L1355)."
+   },
+   "F": {
+    "score": 6.5,
+    "reason": "28 of 31 checked claims supported. Two wrong: L1600 'serve run serve_config.yaml에 넘겨도 되지만, 이때는 코드가 바뀌지 않은 기존 애플리케이션을 갱신하지 않습니다' (docs: rerunning serve run redeploys all deployments; serve deploy avoids redeploying unchanged ones); L1781 'apiVersion: ray.io/v1alpha1' where the current fault-tolerance page uses ray.io/v1. EKS advice (L1704-1710) rests only on a personal blog."
+   },
+   "G": {
+    "score": 9,
+    "reason": "description 126 chars, longer than title, opens with 'Ray Serve를', no numbers; use_math true with $$ blocks (L185, L1355, L1763, L2070); \\_ only inside \\text{} (L1764); single-word fence info strings; no Liquid."
+   },
+   "X1": {
+    "score": 7,
+    "reason": "Category 'Language-Models' (L6) is a poor fit for a framework-agnostic serving library (Data-Architecture fits); tags are fine: Model-Serving controlled, Model-Composition, KubeRay-RayService, Prometheus-Metrics."
+   },
+   "T1": {
+    "score": 8,
+    "reason": "Many complete runnable programs (FastAPI L393-490, cancellation L625-663, streaming L673-745, composition L763-829, chain L963-1007, monitoring L1979-2137). Break: serve_quickstart_composed.py (L885-929) replaces Translator with the comment '# Translator: 앞서 만든 Translator에서 __call__을 뺀 @serve.deployment 클래스' (L895), so the file is not runnable as written; text_ml.py (L1380-1430) is a partial diff with '...'."
+   },
+   "T2": {
+    "score": 8.5,
+    "reason": "Broad, grounded coverage in docs order: getting started, HTTP/FastAPI, composition, architecture, autoscaling, config, RayService, fault tolerance, monitoring, LLM next steps. The EKS/ALB part (L1700-1712) relies on a non-official blog; 'Serve 서빙 전 모델 준비하기' (L29-100) is padded."
+   },
+   "T3": {
+    "score": 7.5,
+    "reason": "Real internals: request lifecycle and handle path (L1174-1212), Serve vs Ray autoscaler layering (L1361-1370), failure table (L1720), metrics buffering (L2088). Deductions: architecture arrives after ~1,150 lines of usage; no comparison with alternatives and no closing 'when to choose / how it fails'; 4 of 25 sources non-official."
+   }
+  },
+  "principles": {
+   "claim headings": {
+    "verdict": "not met",
+    "evidence": "Topic headings: 'Ray Serve 소개와 설치' (L11), '요청 처리 구조와 아키텍처' (L1153), '모니터링과 관측성' (L1868), 'WebSocket' (L576)."
+   },
+   "a running example": {
+    "verdict": "met",
+    "evidence": "Translator (L37) -> deployment (L112) -> Summarizer pipeline (L883) -> text_ml config (L1376) -> RayService (L1633)."
+   },
+   "mechanism -> design choice -> code -> worked example": {
+    "verdict": "partly met",
+    "evidence": "Cancellation: mechanism (L619-621) -> code (L625-663) -> walk-through (L667); but most sections are docs order without alternatives (e.g. architecture L1157-1224 has no worked example)."
+   },
+   "facts said once": {
+    "verdict": "partly met",
+    "evidence": "Controller-failure behaviour at L1170 and L1729; install twice (L20, L26); RayServeHandle removal once (L831)."
+   },
+   "numbers with variant, scope and unit": {
+    "verdict": "met",
+    "evidence": "Env-var defaults with units (L1737-1739, L1808-1809), '기본값 `100`ms' (L2088), illustrative calculations labelled '설명용 계산이며, 실제 측정값이 아닙니다' (L183, L1353)."
+   },
+   "nothing invented": {
+    "verdict": "partly met",
+    "evidence": "HttpCaller (L1062-1080) and PREFIXES reconfigure (L1538-1551) are the writer's code without being marked as such; L1600 inverts the serve run behaviour."
+   },
+   "writer's own assessment at the end": {
+    "verdict": "not met",
+    "evidence": "Ends with '다음 단계' example links (L2149-2189); no judgement of when to choose Ray Serve or where it fails."
+   },
+   "length fitted to difficulty": {
+    "verdict": "partly met",
+    "evidence": "~43.4k prose characters; trivial parts are padded (L69-100, L183-189, L1355) while architecture gets a short section."
+   },
+   "type-specific shape (guide: problem + TL;DR first, architecture before config detail, non-official sources, ends with when to choose / failure)": {
+    "verdict": "not met",
+    "evidence": "No TL;DR; architecture at L1153 after usage; non-official sources present (4/25); ends with examples list, not selection/failure modes."
+   },
+   "Korean style": {
+    "verdict": "partly met",
+    "evidence": "Consistent register and terms, but '다음과 같습니다.' x17 and emphasis frames ('이 차이가 중요합니다.' L150, '> **핵심:**' L232)."
+   }
+  },
+  "claims": {
+   "checked": 31,
+   "numbers_checked": 20,
+   "supported": 28,
+   "unsupported": 0,
+   "wrong": 2,
+   "error_rate": 0.065,
+   "items": [
+    {
+     "claim": "num_replicas='auto' expands to max_ongoing_requests 5, target_ongoing_requests 2, min_replicas 1, max_replicas 100",
+     "line": 1258,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/autoscaling-guide.html",
+     "passage": "target_ongoing_requests: 2 ... min_replicas: 1 ... max_replicas: 100"
+    },
+    {
+     "claim": "autoscaling_config without auto: max_replicas defaults to 1",
+     "line": 1266,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/autoscaling-guide.html",
+     "passage": "the base default for max_replicas is 1, which means autoscaling won't occur unless you explicitly set a higher value"
+    },
+    {
+     "claim": "max_replicas ~20% above peak need",
+     "line": 1275,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/autoscaling-guide.html",
+     "passage": "Set this to ~20% higher than what you think you need for peak traffic"
+    },
+    {
+     "claim": "replicas roughly half the Locust users because target_ongoing_requests=2",
+     "line": 1351,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/autoscaling-guide.html",
+     "passage": "roughly half the number of Locust users over time as Serve attempts to satisfy the target_ongoing_requests=2"
+    },
+    {
+     "claim": "Uvicorn keep-alive 5s, set via http_options.keep_alive_timeout_s, cluster-global, not updatable at runtime",
+     "line": 751,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/http-guide.html",
+     "passage": "keeps HTTP connections alive for 5 seconds ... global to your Ray cluster, and you can't update it during runtime"
+    },
+    {
+     "claim": "HTTPOptions.middlewares deprecated",
+     "line": 503,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/http-guide.html",
+     "passage": "The HTTPOptions.middlewares field is deprecated."
+    },
+    {
+     "claim": "object-based FastAPI ingress needs cloudpickle; FastAPIInstrumentor blocked; factory pattern",
+     "line": 536,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/http-guide.html",
+     "passage": "requires FastAPI objects to be serializable via cloudpickle, which prevents ... FastAPIInstrumentor"
+    },
+    {
+     "claim": "proxy_location default EveryNode, others HeadOnly, Disabled",
+     "line": 1500,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/config.html",
+     "passage": "EveryNode (default) ... HeadOnly ... Disabled"
+    },
+    {
+     "claim": "gRPC default port 9000; empty servicer list means gRPC server not started",
+     "line": 1502,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/config.html",
+     "passage": "By default, the port is set to 9000 ... defaults to an empty list, which means the gRPC server isn't started"
+    },
+    {
+     "claim": "request_timeout_s: no timeout by default",
+     "line": 1501,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/config.html",
+     "passage": "By default, there is no request timeout."
+    },
+    {
+     "claim": "serve build always leaves runtime_env empty",
+     "line": 1468,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/config.html",
+     "passage": "the runtime_env field will always be empty when using serve build"
+    },
+    {
+     "claim": "watchdog env defaults 60 / 300 / 3, 0 disables",
+     "line": 1737,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/fault-tolerance.html",
+     "passage": "PROBE_INTERVAL_S 60 ... PROBE_TIMEOUT_S 300 ... PROBE_MAX_FAIL 3 ... Set to 0 to disable"
+    },
+    {
+     "claim": "max_constructor_retry_count default 20; RAY_SERVE_MAX_PER_REPLICA_RETRY_COUNT default 3; min(...) formula",
+     "line": 1761,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/fault-tolerance.html",
+     "passage": "Default is 20 ... Default is 3 ... min(num_replicas * RAY_SERVE_MAX_PER_REPLICA_RETRY_COUNT, max_constructor_retry_count)"
+    },
+    {
+     "claim": "RAY_SERVE_KV_TIMEOUT_S default none",
+     "line": 1808,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/fault-tolerance.html",
+     "passage": "Default : None (no timeout)"
+    },
+    {
+     "claim": "LISTEN_FOR_CHANGE_REQUEST_TIMEOUT_S bounds default 30/60 s",
+     "line": 1809,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/fault-tolerance.html",
+     "passage": "Defaults : 30 / 60 seconds"
+    },
+    {
+     "claim": "fault-tolerance env vars are set before starting Ray",
+     "line": 1804,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/fault-tolerance.html",
+     "passage": "Set them before starting Ray"
+    },
+    {
+     "claim": "while head recovers, apps can't be updated and other actor/worker failures aren't recovered",
+     "line": 1776,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/fault-tolerance.html",
+     "passage": "you can't update or recover from other failures like Actors or Worker nodes crashing"
+    },
+    {
+     "claim": "GCS FT RayService manifest uses apiVersion ray.io/v1alpha1",
+     "line": 1781,
+     "verdict": "wrong",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/fault-tolerance.html",
+     "passage": "current docs: apiVersion : ray.io/v1 kind : RayService (all five manifests use ray.io/v1)"
+    },
+    {
+     "claim": "RAY_SERVE_METRICS_EXPORT_INTERVAL_MS default 100 ms, 0 records eagerly",
+     "line": 2088,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/monitoring.html",
+     "passage": "Default : 100 milliseconds. Set to 0 to disable batching entirely"
+    },
+    {
+     "claim": "Ray Core metrics_report_interval_ms default 10000 ms; --system-config example",
+     "line": 2094,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/monitoring.html",
+     "passage": "metrics_report_interval_ms system config (default 10000 ms) ... ray start --head --system-config='{\"metrics_report_interval_ms\": 1000}'"
+    },
+    {
+     "claim": "default latency buckets [1..600000] ms",
+     "line": 2077,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/monitoring.html",
+     "passage": "The default buckets are: [1, 2, 5, 10, 20, 50, 100, 200, 300, 400, 500, 1000, 2000, 5000, 10000, 60000, 120000, 300000, 600000]"
+    },
+    {
+     "claim": "event-loop latency <10 ms healthy, >=100 ms suspect blocking I/O / CPU code",
+     "line": 2031,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/monitoring.html",
+     "passage": "< 10ms : Healthy ... 100-500ms : Problematic; likely blocking I/O or CPU-bound code in async handlers"
+    },
+    {
+     "claim": "ray_serve_deployment_status 0 UNKNOWN .. 6 HEALTHY",
+     "line": 2031,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/monitoring.html",
+     "passage": "0 = UNKNOWN, 1 = DEPLOY_FAILED, ... 6 = HEALTHY"
+    },
+    {
+     "claim": "vLLM engine metrics on by default as of Ray 2.51",
+     "line": 2182,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/llm/user-guides/observability.html",
+     "passage": "Engine metric logging is on by default as of Ray 2.51"
+    },
+    {
+     "claim": "serve run with a config file does not update existing apps whose code did not change",
+     "line": 1600,
+     "verdict": "wrong",
+     "source": "https://docs.ray.io/en/latest/serve/advanced-guides/dev-workflow.html",
+     "passage": "Note that rerunning serve run redeploys all deployments. To prevent redeploying the deployments whose code hasn't changed, you can use serve deploy"
+    },
+    {
+     "claim": "RayServeHandle/RayServeSyncHandle removed in Ray 2.10",
+     "line": 831,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/model_composition.html",
+     "passage": "fully removed as of Ray 2.10"
+    },
+    {
+     "claim": "100KiB+ requests via object store, zero-copy",
+     "line": 1222,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/architecture.html",
+     "passage": "Larger request objects (100KiB+) are written to the object store"
+    },
+    {
+     "claim": "max_replicas_per_node hard limit, per deployment only, soft best-effort default spread",
+     "line": 1817,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/fault-tolerance.html",
+     "passage": "hard limits the number of replicas ... only affects the spread of replicas within a deployment ... The spread is soft and best-effort"
+    },
+    {
+     "claim": "ray.kill replica no_restart=True, proxy no_restart=False",
+     "line": 1866,
+     "verdict": "supported",
+     "source": "https://docs.ray.io/en/latest/serve/production-guide/fault-tolerance.html",
+     "passage": "ray.kill(replica_handle, no_restart=True) ... ray.kill(proxy_handle, no_restart=False)"
+    },
+    {
+     "claim": "serve build -o/--output-path, -d/--app-dir default '.'; serve deploy address default http://localhost:8265 or RAY_DASHBOARD_ADDRESS",
+     "line": 1440,
+     "verdict": "supported",
+     "source": "https://github.com/ray-project/ray/blob/master/python/ray/serve/scripts.py",
+     "passage": "\"--app-dir\", \"-d\", default=\".\" ... \"--output-path\", \"-o\" ... default=os.environ.get(\"RAY_DASHBOARD_ADDRESS\", \"http://localhost:8265\")"
+    },
+    {
+     "claim": "EKS: managed node groups preferred over Fargate; avoid GPU work on head node; ALB subnet rules",
+     "line": 1704,
+     "verdict": "unverifiable",
+     "source": "https://shav.dev/blog/mlops-deploying-a-distributed-ray-python-server-kubernetes-eks-kuberay",
+     "passage": "non-official blog (cited); not in Ray docs; the head-node reasoning (GCS + proxy contention) is the writer's"
+    }
+   ]
+  },
+  "checklist": {
+   "repeated": 1,
+   "avoided": 1,
+   "na": 0,
+   "repeated_ids": [
+    "arch-diagram-relative-link"
+   ],
+   "details": [
+    {
+     "id": "arch-diagram-relative-link",
+     "verdict": "repeated",
+     "evidence": "No empty or docs-relative link, but the architecture diagram is missing: heading '### 세 종류의 액터: 컨트롤러, 프록시, 레플리카' (L1157) is followed by blank lines (L1158-1160) and text written for a figure (L1161). The check requires the diagram as an image with Korean alt text; the post has no images at all."
+    },
+    {
+     "id": "proxy-env-ray-start-unsupported",
+     "verdict": "avoided",
+     "evidence": "No proxy env-var claim. L1804 '복구 속도에 관여하는 환경 변수도 있으며, Ray를 시작하기 전에 설정합니다' concerns RAY_SERVE_KV_TIMEOUT_S and LISTEN_FOR_CHANGE_*, and the fault-tolerance page says 'Set them before starting Ray'."
+    }
+   ]
+  },
+  "extras": {
+   "architecture_first_line": 87,
+   "architecture_first_line_note": "L87 only says replicas run in separate processes; the architecture section is L1153",
+   "architecture_section_line": 1153,
+   "architecture_position_share": 0.52,
+   "sources_total": 25,
+   "non_official_sources": 4,
+   "non_official_list": [
+    "rocm.blogs.amd.com",
+    "docs.anyscale.com (vendor)",
+    "shav.dev blog",
+    "YouTube tutorial"
+   ],
+   "non_official_share": 0.16,
+   "opens_with_problem": true,
+   "opens_with_problem_evidence": "L13 tensor-in/tensor-out problem, but under '소개와 설치' and with no TL;DR",
+   "closes_with_when_to_choose_and_failure_modes": false,
+   "closes_evidence": "'다음 단계' (L2149) lists tutorials and LLM serving; failure modes are covered mid-post (L1714) but not in the close",
+   "images": 0,
+   "description_chars": 126
+  },
+  "top_issues": [
+   "Guide shape: no TL;DR, topic headings, architecture only at L1153 (52%), ends with a link list and no 'when to choose / how it fails' assessment.",
+   "Diagram lost: zero images; the architecture section has an empty slot (L1157-1160) and text that describes a missing figure.",
+   "Two wrong facts: serve run with a config 'does not update unchanged apps' (L1600, inverted) and apiVersion ray.io/v1alpha1 (L1781); composed example not runnable (L895 placeholder)."
+  ]
+ },
+ "preference": {
+  "overall": "X",
+  "per_criterion": {
+   "A": "X",
+   "B": "X",
+   "C": "Y",
+   "D": "X",
+   "E": "X",
+   "F": "X",
+   "G": "tie",
+   "X1": "X",
+   "T1": "Y",
+   "T2": "Y",
+   "T3": "X"
+  },
+  "reason": "X has the guide shape the rubric asks for (TL;DR, claim headings, architecture at 13%, a closing selection-and-failure assessment, eight correct figures) and fewer factual errors (1/28 vs 2/31). Y is broader and more runnable in places (HTTP, cancellation, fault tolerance, monitoring with exact defaults) and cites some non-official sources, but it reads like the docs in order, has no TL;DR or closing judgement, lost every image including the architecture diagram, and inverts the serve run behaviour. X's main flaw, the missing reconfigure that breaks its config example, is real but a single fix."
+ }
+}

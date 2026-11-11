@@ -1,0 +1,285 @@
+{
+  "item": "survey-rlhf",
+  "post": "/tmp/eval-evidence/survey-rlhf-v14.md",
+  "judge_run": 2,
+  "sampling": "paragraphs numbered from the first body paragraph (prose blocks, list items and table rows; headings, images, captions, display-only math and the reference list skipped; 240 total); run 2 samples paragraphs 2, 5, 8, ...; sources checked against arXiv PDF full text (pdftotext)",
+  "scores": {
+    "A": 6.5,
+    "B": 7.5,
+    "C": 6.5,
+    "D": 8.0,
+    "E": 7.0,
+    "F": 6.0
+  },
+  "type_scores": {
+    "S1": 7.0
+  },
+  "score_evidence": {
+    "A": [
+      "No body H1, no skipped levels, no da-form headings, two-level categories, use_math true, description 144 characters; no leaked process text.",
+      "L264 `\\beta_{\\text{bo$n$}}`: single $ inside a $$ block (unchanged since v11).",
+      "Bare | for conditionals and lengths: L115 `\\rho(y|x)`, L524/L530 `(y|x)`, L564/L570 `|y|`, `|y_{w}|` (L567 uses \\lvert\\rvert), L702 `|o_{i}|`; KL written `\\mid\\mid` at L351 and `||` at L405 (rubric: \\| or \\Vert).",
+      "One-paragraph H3s: L751 '### 정적 피드백의 실패에서 나온 첫 교훈', L755, L759, L775, L785; the synthesis H2s are split into thin H3s."
+    ],
+    "B": [
+      "No register break: every table cell is a noun phrase (v13's 한다체 cells are gone), so no cap at 7.",
+      "Self-reference openers x11: '이 글의 판단으로는' L289, L341, L483, L585, L682; '이 글의 관점에서' L745, L793, L840; '이 글은' L769, L850; '이 글 전체의' L15.",
+      "Figure-intro and noun frames: L391 '왼쪽 프런티어에서 확인할 것은 모든 KL 값에서 DPO의 기대 보상이 가장 높다는 사실이고' -> '왼쪽 프런티어에서는 모든 KL 값에서 DPO의 기대 보상이 가장 높고'; L680 '구현도에서 따라갈 지점은 이력 데이터셋이 자라는 방식입니다'; L696 '비교도에서 짚을 지점은 ... 것입니다'; L303 '... 보면 됩니다'; L743 '... 읽으면 됩니다'; L515 '...별도의 선호 최적화 단계가 필요 없다는 것이 ORPO의 설계입니다' -> 'ORPO는 SFT 단계에서 거절 응답에 약한 벌점을 주어 별도 선호 최적화 단계를 없앱니다'.",
+      "English labels: table L798 'fine-tune', 'vs', L812 'side-by-side', L813 'Iter3', L814 'Iterative DPO ... vanilla DPO'; prose L658 'soft value', L670 'ablation', L846 '그룹 baseline'; heading L721 '### online RFT보다 나은 이유'.",
+      "L664 '상승폭은 논문이 퍼센트로 보고한 값으로 ... 7.69, ... 2.10, ... 1.64입니다' is a clumsy unit hedge -> 'LC 승률은 1회차에 7.69%p, 2회차에 2.10%p, 3회차에 1.64%p 올랐습니다'."
+    ],
+    "C": [
+      "Wrong cross-reference: L17 '글 끝의 연표는' but the timeline is directly below (L21-44); L17 also has AI feedback branching off 'from 2023' while its own table puts Constitutional AI at 2022 (L29).",
+      "Facts retold instead of pointed back: Ziegler's 'online collection mattered for summarization, not style tasks' at L753 and again at L848; Online IPO = Nash equilibrium at L761, L769, L824, L848; RL raises Maj@K not Pass@K at L733, L745, L791, L836; RLHF Workflow best/worst pairs at L680 and L787; SPPO diminishing gains at L664 and L787; L13 states Stiennon's objective mismatch twice in one paragraph.",
+      "Running TL;DR example threads the lineages (L15, L144, L391, L575, L595, L658) and hand-offs are explicit (L255, L345, L471, L629, L737)."
+    ],
+    "D": [
+      "Worked examples are correct and placed at hard steps: BT 2.0 vs 1.0 -> 0.73, loss 0.31/1.31 (L78); K=4 -> 6 comparisons (L192); BoN d*=2, KL 4, R=1 (L273); soft label 0.7 (L309); clamp 0.95->0.60 (L317); DPO margin 0.3 -> 0.574, loss 0.555, flipped 0.855 (L379); log 99 ~ 4.6 (L409); odds ratio 2.25 vs probability ratio 2 (L547); SimPO -0.8 vs -1.0 (L575); intransitive A>B>C>A (L595); SPPO targets 0.3/0/-0.3 (L658); GRPO +-1 and +0.58/-1.73 (L719). All arithmetic checked.",
+      "Caption narration that adds no result: L64, L86, L94, L132, L150, L229, L497, L627 ('정확도 곡선도 함께 제시됩니다').",
+      "L541/L547 call the odds ratio a softer penalty, then show it widens faster than the probability ratio, without reconciling the two (the paper's point: the wider log-OR spread reaches the margin with a less extreme probability contrast, 2403.07691 L518-556)."
+    ],
+    "E": [
+      "Timeline table (L21-44) and one comparison table (L795-816); display math placed where discussed; no source figure numbering.",
+      "Comparison-table cells: L801 HH-RLHF result cell is a setup '52B 반복 온라인 vs 기본 데이터 통제 실험 (PM 비교 약 44k)' (the outcome, crowdworkers prefer the online-mixture policy, 2204.05862 L1193-1199, is missing) and its limitation cell '온라인 PM 정확도 74/70/67%' is a finding; L807 'IPO 최적 정책 π*(y1)=σ(0.5/τ)' is a closed-form toy optimum, not a measured result; L813 '총 향상 15.85%' drops the metric (AlpacaEval 2.0 LC win rate, 2405.00675 L937-939); L803 '90% 초과' is pretrained LMs on the original 221 HHH comparisons (2212.08073 L388-390), not the 438-question set of L317.",
+      "49 source figures; several only narrated (L94, L100, L136, L229, L627).",
+      "The table covers 20 of 22 papers (Llama 2 and GRPO Dynamics have no row); acceptable."
+    ],
+    "F": [
+      "L765 '정답 검증으로 보상을 주는 점만 다를 뿐, 구조는 온라인 쌍대 선호 학습과 가깝습니다': DeepSeekMath's GRPO trains against a learned reward model (2402.03300 L733-735 'We train our initial reward model based on the DeepSeekMath-Base 7B'; iterative RL updates it, L1025-1027); verifiable binary reward is Mroueh's analysis assumption (-1).",
+      "L848 '따라서 손실의 겉모양이 달라도 두 요소가 같으면 같은 해에 도달하며 ... 이 결과가 보여 줍니다' (and L761 '손실의 형태보다 샘플이 어느 정책에서 오느냐가 해의 성격을 더 크게 좌우했습니다'): the cited Online IPO paper finds online DPO's stationary point is the RLHF solution, not the Nash equilibrium ('apart from the trivial uniform-preference case, online DPO and online IPO are different objectives', 2403.08635 L304-318), so the generalisation contradicts its source (-1.5).",
+      "L17 'AI 피드백 ... 2023년부터 ... 갈라져 나옵니다': Constitutional AI is December 2022 (2212.08073; the post's own L29) (-0.5).",
+      "L803 cell gives '90% 초과 정확도' without saying it is pretrained LMs on the original 221 comparisons (-0.5).",
+      "Fixed since v13: L743 states Theorem 3's 0<p_ref<1 condition and the boundary cases (2503.06639 L362-367); L637-640 describe SPPO's update as exponential weighting; the 'offline DPO/IPO' SPPO claim is gone; L686 credits the binary-reward assumption to the follow-up analysis."
+    ],
+    "S1": [
+      "Limitations are the papers' own (L797 Qbert = 1706.03741 L428-429; L798 copy heuristic = 1909.08593 L47; L811 = ORPO Limitations L640-646; L816 = 2406.02900 L762-764; L815 = SimPO); no input-based false limitation.",
+      "Cells are noun phrases with no blank, '-' or sentence cells, but one setup cell (L801), one formula cell (L807), a finding in a limitation cell (L801 '74/70/67%'), and English label words (L798 'fine-tune', 'vs'; L812 'side-by-side'; L814 'vanilla DPO').",
+      "Synthesis sections re-explain cards: L777 restates L429/L654/L711; L781 restates L690/L705; L787 restates L680/L664; L824 restates L761/L737."
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "Noun-phrase claim headings throughout (L50 '### 보상 함수 대신 궤적 구간 비교로 학습한 보상 추정기', L469 '### 보상 모델 없이도 한 에폭 안에서 시작되는 과최적화'); no heading ends in 다."
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Reddit TL;DR pair introduced at L15 and reused (L144, L391, L575, L595, L658, L753); the GRPO lineage switches to a math 0/1 group (L719) without saying the TL;DR example does not fit."
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Full chain for Christiano (L66-78), DPO (L349-379), IPO (L401-419), ORPO (L515-549), SimPO (L555-575), SPPO (L637-658), GRPO (L690-719); KTO (L437-441) and RLHF Workflow (L680) have no numbered example."
+    },
+    "facts_said_once": {
+      "status": "not met",
+      "evidence": "L753/L848 Ziegler online collection; Online IPO equivalence at L761, L769, L824, L848; Maj@K/Pass@K at L733, L745, L791, L836; L787 retells L680 and L664."
+    },
+    "numbers_with_scope": {
+      "status": "partly met",
+      "evidence": "Most body numbers carry model and setting (L783 'Mistral-Base 7B ... AlpacaEval 2 LC ... 21.5%'); L813 '총 향상 15.85%' and L664 'Llama-3-8B가 70.29' drop the metric or iteration; L803 '90% 초과' drops the comparison subset."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Hypothetical numbers are labelled '가상의' (L78, L192, L273, L309, L317, L379, L409, L547, L575, L595, L658, L719); L765 gives GRPO an answer-verification reward; L848 generalises Online IPO's equivalence to any loss with the same two elements."
+    },
+    "own_assessment_at_end": {
+      "status": "met",
+      "evidence": "L840 and L850: compare methods by data distribution and equal-KL measurement, and measure reasoning with Pass@K, not by loss name."
+    },
+    "length_fitted": {
+      "status": "partly met",
+      "evidence": "About 142 KB and 49 figures; hard steps get worked examples, but caption narration and the retold synthesis sections (L747-850) pad it."
+    },
+    "type_specific_shape": {
+      "status": "partly met",
+      "evidence": "One comparison table (L795), but headline numbers also live only in the body (SPPO 7.69/2.10/1.64 L664, SimPO ablation L783, d-RLAIF 1-10 L339, Llama 2 β L243, HH 74/70/67 L221) and one cell is a setup (L801)."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "입니다 register in prose and table; eleven '이 글…' openers, figure-intro frames (L303, L391, L680, L696, L743) and English labels (L798, L812, L814, L721)."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 10,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "unverifiable": 0,
+    "whole_post_wrong_outside_sample": [
+      "L765 GRPO given an answer-verification reward (DeepSeekMath used a learned reward model, 2402.03300 L733-735)",
+      "L17 dates AI feedback to 2023 (CAI is 2022) and calls the timeline '글 끝의 연표' though it is at L21",
+      "L803 '90% 초과' drops that it is pretrained LMs on the original 221 comparisons (2212.08073 L388-390)"
+    ],
+    "examples": [
+      {
+        "para": 38,
+        "line": 86,
+        "claim": "MuJoCo ablation removes components one at a time; curves average several runs trained on synthetic labels",
+        "verdict": "supported",
+        "source": "1706.03741 Fig. 5 'after removing various components ... All graphs are averaged over 5 runs, using 700 synthetic labels each'"
+      },
+      {
+        "para": 50,
+        "line": 140,
+        "claim": "Shared RM/policy parameters failed: at most 60k RM samples vs 2M policy episodes; pure RL fine-tuning below the supervised baseline on ROUGE",
+        "verdict": "supported",
+        "source": "1909.08593 L636-639 'massive imbalance of data: we have at most 60k samples for the reward model, but 2M episodes for the policy'; L469-471 'pure RL fine-tuning is worse than the supervised baseline according to ROUGE in all cases'"
+      },
+      {
+        "para": 56,
+        "line": 170,
+        "claim": "6.7B TL;DR human-feedback model nearly matches T5 on CNN/DM at similar lengths without news training",
+        "verdict": "supported",
+        "source": "2009.01325 L402-404 'the 6.7B TL;DR human feedback model ... nearly matches T5 despite never being trained to summarize news articles'"
+      },
+      {
+        "para": 65,
+        "line": 217,
+        "claim": "1.3B PPO-ptx preferred to 175B GPT-3; compute 4.9 (SFT) and 60 (PPO-ptx) vs 3,640 petaflops/s-days; most comparisons labelled by one contractor",
+        "verdict": "supported",
+        "source": "2203.02155 L36 'despite having 100x fewer parameters'; L993-994 '4.9 petaflops/s-days ... 60 petaflops/s-days, compared to 3,640'; L1092 'only labeled by 1 contractor for cost reasons'"
+      },
+      {
+        "para": 74,
+        "line": 255,
+        "claim": "Gao et al. label the pair the gold RM scores higher as preferred, making comparisons deterministic, and train proxy RMs on it",
+        "verdict": "supported",
+        "source": "2210.10760 L158 'labels are created deterministically by always marking the trajectory with the higher gold RM score as preferred'"
+      },
+      {
+        "para": 77,
+        "line": 273,
+        "claim": "With policy 1.2B and 90,000 RM data fixed, BoN α and β change smoothly with RM size; RL holds α constant with clean β scaling, predicting peak gold scores",
+        "verdict": "supported",
+        "source": "2210.10760 L202-206 'We hold policy size (1.2B) and data size (90,000) constant ... αbon and βbon change smoothly ... hold αRL constant ... clean scaling curve for βRL ... predict the peak gold RM scores'"
+      },
+      {
+        "para": 80,
+        "line": 283,
+        "claim": "KL penalty acts like early stopping on gold score and does not change the KL-gold frontier; result may be hyperparameter-sensitive",
+        "verdict": "supported",
+        "source": "2210.10760 L318-320 'does not affect the KLRL-gold reward frontier, and so the effect of the penalty on the gold score is akin to early stopping ... could be particularly sensitive to hyperparameters'"
+      },
+      {
+        "para": 104,
+        "line": 379,
+        "claim": "Worked DPO example: β=0.1, log-ratios +2/−1 -> margin 0.3, σ≈0.574, loss≈0.555; flipped margin loss≈0.855",
+        "verdict": "supported",
+        "source": "arithmetic: σ(0.3)=0.5744, −ln 0.5744=0.554; σ(−0.3)=0.4256, −ln 0.4256=0.854 (labelled '가상의 쌍')"
+      },
+      {
+        "para": 122,
+        "line": 453,
+        "claim": "KTO as good or better than DPO from 1B to 30B; on Llama KTO alone matches SFT+DPO; only KTO skips SFT at 13B/30B",
+        "verdict": "supported",
+        "source": "2402.01306 Fig. 3 'KTO is as good or better than DPO at all scales ... for the Llama models, KTO alone matches the performance of SFT+DPO'; L491-497 'KTO-aligned Llama-{13B, 30B} ... competitive with its SFT+KTO counterpart ... the only alignment method ... to show this behavior'"
+      },
+      {
+        "para": 146,
+        "line": 555,
+        "claim": "After DPO training only ~50% of training-set triples have reward ranking matching average-likelihood ranking",
+        "verdict": "supported",
+        "source": "2405.14734 L159-160 'only ∼ 50% of the triples from the training set satisfy this condition when trained with DPO'"
+      },
+      {
+        "para": 176,
+        "line": 664,
+        "claim": "Mistral-7B SPPO LC gains 7.69, 2.10, 1.64 per iteration; Open LLM Leaderboard average 66.75 (Mistral-7B Iter2) and 70.29 (Llama-3-8B)",
+        "verdict": "supported",
+        "source": "2405.00675 L877-878 'gains ... are 7.69% (Mistral-7B-Instruct → Iter1), 2.10% (Iter1 → Iter2), and 1.64% (Iter2 → Iter3)'; L1016/L1021 Mistral-7B-SPPO Iter2 66.75, Llama-3-8B-SPPO Iter3 70.29",
+        "note": "the Llama value is Iter3; the post omits the iteration"
+      },
+      {
+        "para": 188,
+        "line": 719,
+        "claim": "DeepSeekMath-RL samples 64 outputs per question with KL coefficient 0.04",
+        "verdict": "supported",
+        "source": "2402.03300 L736 'The KL coefficient is 0.04. For each question, we sample 64 outputs'"
+      },
+      {
+        "para": 212,
+        "line": 801,
+        "claim": "Table row HH-RLHF: '52B 반복 온라인 vs 기본 데이터 통제 실험 (PM 비교 약 44k)'; limitation '온라인 PM 정확도 74/70/67%'",
+        "verdict": "supported",
+        "source": "2204.05862 L1193 'trained with our base dataset (about 44k PM comparisons)'; L1177 'accuracies of 74%, 70%, and 67%'",
+        "note": "numbers match, but the result cell is the experiment's setup; the outcome (online mixture preferred by crowdworkers, L1197-1199) is missing"
+      },
+      {
+        "para": 197,
+        "line": 761,
+        "claim": "Changing the sample distribution, not the loss form, decides the solution's character ('손실의 형태보다 샘플이 어느 정책에서 오느냐가 해의 성격을 더 크게 좌우했습니다')",
+        "verdict": "unsupported",
+        "source": "2403.08635 L304-318: online DPO's stationary point is the RLHF solution and 'online DPO and online IPO are different objectives'; only Online IPO reaches the Nash equilibrium (Prop. 4.1)"
+      },
+      {
+        "para": 239,
+        "line": 848,
+        "claim": "Losses that share KL regularisation and current-policy data reach the same solution regardless of form, as Online IPO's equivalence shows",
+        "verdict": "wrong",
+        "source": "2403.08635 Prop. 4.1 covers Online IPO only; L304-318 'apart from the trivial uniform-preference case, online DPO and online IPO are different objectives'; online DPO's stationary point is the RLHF solution (Theorem F.7)"
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 5,
+    "na": 1,
+    "repeated_ids": [],
+    "items": [
+      {
+        "id": "grpo-card-unverified-figure",
+        "result": "avoided",
+        "evidence": "L737-743 state 2503.06639's results in words (contrastive loss weighted by p(q), fixed point, p*>p_ref under 0<p_ref<1, boundary stability needs a condition on β) and quote no number or equation absent from the paper (Theorem 3 and its remark, 2503.06639 L362-367)."
+      },
+      {
+        "id": "copy-explains-preference",
+        "result": "avoided",
+        "evidence": "L140 '저자들은 라벨러가 단순한 휴리스틱에 기대는 습성을 모델이 악용했을 수 있다고 인정했습니다' carries no 96%/84% figure; the table row L798 lists the 96% result and the copy heuristic in separate columns without a causal link."
+      },
+      {
+        "id": "daa-no-quantification",
+        "result": "avoided",
+        "evidence": "L834 '이론적 근거를 제시했지만 해결책은 내놓지 않았고' matches 2406.02900 L763-764; no claim that the paper lacks numbers, and L477/L479/L816 cite its 25% and RMSE results."
+      },
+      {
+        "id": "grpo-row-reward",
+        "result": "n/a",
+        "evidence": "The comparison table (L795) has no reward column; the GRPO row is 'DeepSeekMath-RL 7B GSM8K 88.2% / MATH 51.7% | RL의 Maj@K 향상, Pass@K 불변'. The prose repeats the defect's substance at L765 ('정답 검증으로 보상을 주는 점만 다를 뿐')."
+      },
+      {
+        "id": "heading-da-form-offline",
+        "result": "avoided",
+        "evidence": "No heading ends in 다; the DAA heading is L469 '### 보상 모델 없이도 한 에폭 안에서 시작되는 과최적화'."
+      },
+      {
+        "id": "heading-da-form-judge",
+        "result": "avoided",
+        "evidence": "All ##/### lines checked: none is a 다-form sentence (judge heading is L789 '### 사람, GPT-4 판정, 정답 검증이라는 서로 다른 잣대')."
+      }
+    ]
+  },
+  "extras": {
+    "plan_papers_never_cited": [],
+    "thin_sections": [
+      "L751 '### 정적 피드백의 실패에서 나온 첫 교훈' (one paragraph)",
+      "L755 '### 보상 모델을 없애도 사라지지 않는 과최적화' (one paragraph)",
+      "L759 '### 오프라인 손실을 온라인화하면 도착하는 내시 균형' (one paragraph)",
+      "L775 '### 쌍, 이진, 그룹으로 갈리는 데이터 형태' (one paragraph)",
+      "L785 '### 오프라인 한 번과 온라인 여러 라운드' (one paragraph)"
+    ],
+    "venue_issues": [
+      "L866 IPO venue spelled out as 'International Conference on Artificial Intelligence and Statistics' while others are abbreviated (NeurIPS, ICML, EMNLP, ICLR, TMLR); not wrong",
+      "L868 KTO listed as arXiv (it follows the plan; the paper appeared at ICML 2024); not garbled"
+    ],
+    "table_cells_prose_empty_or_dash": [],
+    "table_cells_results_not_setups": "mostly: 18 of 20 result cells are results in the post's terms (e.g. L797 '1400개 진짜 보상 RL 상회', L800 '85±3%', L805 '61% vs 57%', L814 '31.3 (vanilla DPO 22.5)'); L801 HH-RLHF is a setup ('52B 반복 온라인 vs 기본 데이터 통제 실험 (PM 비교 약 44k)') and L807 IPO is a closed-form toy optimum (π*(y1)=σ(0.5/τ)). No blank, '-' or sentence cells; all cells are noun phrases in the 입니다-post register (no 한다체). English label words remain (L798, L812, L814).",
+    "leaked_process_text": [],
+    "leaked_process_text_note": "None found: no '반영하지 못한 요청' block, no [[E..]] markers, no evidence-scope phrases ('근거에는', '인용한 범위'). Closest trace: L664 '논문이 퍼센트로 보고한 값으로', a unit hedge that reads awkwardly but is not an edit note."
+  },
+  "top_issues": [
+    "Wrong method claims in the whole-post read: L765 gives DeepSeekMath's GRPO an answer-verification reward (it used a learned reward model, 2402.03300 L733-735); L848/L761 generalise Online IPO's Nash equivalence to 'any loss with the same two elements', which the cited paper contradicts for online DPO (2403.08635 L304-318); L17 dates AI feedback to 2023 and points to a timeline 'at the end' that sits at L21.",
+    "Comparison table: one setup cell (L801 HH-RLHF '통제 실험 (PM 비교 약 44k)') with a finding in its limitation cell, a closed-form toy formula as IPO's result (L807), scope-less numbers (L813 '15.85%' without metric, L803 '90% 초과' without the 221-comparison subset), English labels (L798, L812, L814); headline numbers still also live only in the body.",
+    "Repetition and markup: Online IPO equivalence (L761/L769/L824/L848), Maj@K/Pass@K (L733/L745/L791/L836) and Ziegler's online-collection point (L753/L848) are retold; five one-paragraph H3s in the synthesis; `\\text{bo$n$}` at L264, bare | for conditionals/lengths (L115, L524, L564, L702) and `\\mid\\mid` for KL (L351)."
+  ]
+}

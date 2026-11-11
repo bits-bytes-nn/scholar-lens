@@ -1,0 +1,241 @@
+{
+  "item": "summary-lora",
+  "post": "/tmp/eval-paper/summary-lora-v7.md",
+  "judge_run": 3,
+  "source": "https://arxiv.org/html/2106.09685 (v2) incl. Figure 2 image used by the post",
+  "sampling": "24 body blocks (prose, tables, image lines, callouts; headings, display math, rule and references excluded) numbered from L16; started at block 3, every third (L22, L34, L40, L56, L64, L70, L81, L89), then wrapped to blocks 1,4,7,... (L16, L36, L44, L58, L72, L85); 8 of 15 claims are numbers; whole post read for wrong claims outside the sample",
+  "scores": {
+    "A": 8,
+    "B": 7.5,
+    "C": 8,
+    "D": 8,
+    "E": 8,
+    "F": 8.5
+  },
+  "type_scores": {
+    "U1": 7.5,
+    "U2": 7.5
+  },
+  "deductions": {
+    "A": [
+      "Headings are topic names (fixed summary sections): L18 '## 연구 배경', L24 '## 제안 방법', L42 '## 구현 방식', L62 '## 실험 결과', L83 '## 의의와 한계'",
+      "Tags 'Rank-Decomposition-Matrices', 'Frozen-Pretrained-Weights', 'Adapter-Inference-Latency' restate the abstract rather than short reusable tags; 'Subspace-Similarity-Analysis' now has body support (L85)",
+      "Front matter otherwise complete (subtitle, paper_author 'Microsoft Corporation', paper_doi, two-level categories, use_math); description 135 chars opening with 'LoRA는'; $$ blocks have blank lines; tables have one header row and equal cells"
+    ],
+    "B": [
+      "Terminology: 'MultiNLI' (L46, L89) vs 'MNLI' elsewhere (L20, L38, L58, L66-81)",
+      "'예를 들어 가상으로' lead-in at L20 and L34; L20 marks as hypothetical a GPT-3 WikiSQL/MNLI fine-tuning the paper actually ran; rewrite L20: 'GPT-3 175B를 WikiSQL과 MNLI에 각각 미세조정하면 ...'",
+      "L26 formulaic doubling: '출발점은 가설 하나입니다. 사전학습 모델을 ... 낮다는 가설입니다'; rewrite: '출발점은 적응 중 가중치 갱신량의 내재 랭크가 낮다는 가설입니다'",
+      "L22 '... 방법이 그래서 필요했습니다' and L89 '이 글은 다음과 같이 판단합니다.' formulaic; rewrite L89 by stating the judgement directly",
+      "Register holds; '그래서' down to three (L16, L22, L36)"
+    ],
+    "C": [
+      "Flow problem -> method -> implementation -> results -> significance is clean; L38 and L58 point back to the WikiSQL/MNLI case correctly",
+      "L64 opens the results by restating TL;DR L16 (10,000x, 3x, three datasets) instead of adding the numbers behind it",
+      "L66 and L70 say the same thing twice (prefix curves 'bend' / 'did not rise monotonically')"
+    ],
+    "D": [
+      "L34 parameter-count example and L36 init/scale reasoning help where needed; L81 explains 33.3% random chance",
+      "Main GPT-3 comparison (Table 4) gets no help because it is absent; L40 generalisation callout is dense but fine"
+    ],
+    "E": [
+      "Two tables copied verbatim (L46-54 = Table 5; L74-79 = Table 16); Figure 2 image L68 matches its description (LoRA flat high, prefix curves peak and fall; checked the image)",
+      "No distilled main-results table (Table 4: LoRA 4.7M 73.4/91.7/53.8 vs FT 73.8/89.5/52.0 R1) although the headline claim is that comparison; one results table is the secondary low-data table"
+    ],
+    "F": [
+      "L87 puts 'small r does not work for every task, e.g. a task in a different language' among 'the conclusion's future work'; it is footnote 6 of Sec 7.2, framed as a thought experiment ('could certainly outperform'), and the post states it as an established case ('그런 경우입니다')",
+      "L56 'W_q와 W_v를 함께 적응하면 전반적으로 가장 좋은 결과' is the paper's caption wording but conflicts with the post's own table L53-54 (all four types tie 73.7 and beat 91.3 with 91.7)",
+      "L8 description drops 'Adam으로 전체 미세조정한' scope that L16/L64 keep",
+      "All other numbers match: 350GB copy, 18M/35MB/96 layers, Tables 5 and 16 cell for cell, r=1 result, GPT-2 rank 4-16, 0.2 similarity, 256/32 tokens; v6's 'more special tokens raise performance' claim is gone"
+    ]
+  },
+  "type_deductions": {
+    "U1": [
+      "Motivation, solution, implementation, significance covered; results now include the rank study (L58), GPT-2 rank (L60), Figure 2 (L66-70), low data (L72-81) and the subspace analysis (L85), but still no GPT-3 Table 4 numbers (WikiSQL/MNLI-m/SAMSum vs FT and adapters) and nothing on RoBERTa/DeBERTa/GPT-2 (Tables 2-3), so the 'on par or better' claim rests on the paper's sentence plus the MNLI-full row"
+    ],
+    "U2": [
+      "About 4.9k body characters, five-minute read; TL;DR L16 is plain prose without math (four sentences); grounded limitations L87; the distilled results table is the low-data table, not the main comparison"
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "not met",
+      "evidence": "L18, L24, L42, L62, L83 are topic names (fixed summary frame, docs/redesign.md §5.2)"
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "GPT-3 WikiSQL/MNLI task copies set at L20, reused at L38 (one 175B copy + per-task A,B) and L58"
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Problem L20-22 -> hypothesis L26 -> formula L31 -> shapes and numeric example L34 -> init/scale with reason L36 -> merge/swap L38"
+    },
+    "facts_once": {
+      "status": "partly met",
+      "evidence": "10,000x/3x/on par or better at L8, L16, L64; no added latency L8, L16, L38; task swap L16, L38; prefix non-monotonic L66, L70"
+    },
+    "numbers_with_scope": {
+      "status": "met",
+      "evidence": "L16/L64 'Adam으로 ... 미세조정한 경우와 비교'; L44 '18M ... 96개 층', '검증 정확도(%)'; L72 r_q=r_v=8; L81 ±0.3; description drops Adam"
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "L34 example marked hypothetical and arithmetic correct; L87 thought experiment presented as an established case and misplaced into the conclusion"
+    },
+    "writer_assessment_end": {
+      "status": "met",
+      "evidence": "L89 '... 출발점으로 삼는 편이 맞고 정답으로 받아들이기에는 근거가 좁습니다'"
+    },
+    "length_fit": {
+      "status": "met",
+      "evidence": "about 4.9k characters for a short method paper"
+    },
+    "type_shape": {
+      "status": "partly met",
+      "evidence": "TL;DR plain prose; five fixed sections; no main results table"
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "MNLI/MultiNLI mixing, '예를 들어 가상으로' x2, L26 doubled '가설', L89 formulaic opener"
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 8,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 22,
+        "type": "comparison",
+        "claim": "Adapters add latency; prefix tuning reduces usable sequence length",
+        "verdict": "supported",
+        "source": "Sec 1, Sec 3"
+      },
+      {
+        "line": 34,
+        "type": "number",
+        "claim": "d=k=4096, r=4 example: ~1,678만 vs 32,768 parameters",
+        "verdict": "supported",
+        "source": "Arithmetic correct; marked hypothetical"
+      },
+      {
+        "line": 40,
+        "type": "method",
+        "claim": "LoRA generalises full fine-tuning when r reaches the weight rank",
+        "verdict": "supported",
+        "source": "Sec 4.1"
+      },
+      {
+        "line": 56,
+        "type": "comparison",
+        "claim": "Rank 4 captures enough of Delta W that spreading over more matrices beats one matrix at higher rank",
+        "verdict": "supported",
+        "source": "Sec 7.1"
+      },
+      {
+        "line": 64,
+        "type": "number",
+        "claim": "10,000x / 3x; matches or exceeds FT on all three datasets",
+        "verdict": "supported",
+        "source": "Abstract; Sec 5.5"
+      },
+      {
+        "line": 70,
+        "type": "number",
+        "claim": "Prefix-embedding drops past 256 tokens, prefix-layer past 32",
+        "verdict": "supported",
+        "source": "Sec 5.5"
+      },
+      {
+        "line": 70,
+        "type": "attribution",
+        "claim": "Cause suspected as input distribution shift; thorough study out of scope",
+        "verdict": "supported",
+        "source": "Sec 5.5"
+      },
+      {
+        "line": 81,
+        "type": "number",
+        "claim": "PrefixEmbed 37.6% vs 33.3% random chance",
+        "verdict": "supported",
+        "source": "Sec F.3"
+      },
+      {
+        "line": 89,
+        "type": "attribution",
+        "claim": "Matrix-choice results come from GPT-3 175B on WikiSQL and MultiNLI",
+        "verdict": "supported",
+        "source": "Sec 7.1, Table 5"
+      },
+      {
+        "line": 16,
+        "type": "comparison",
+        "claim": "Merged weights add no inference latency; task switch swaps only the low-rank part",
+        "verdict": "supported",
+        "source": "Sec 4.1"
+      },
+      {
+        "line": 36,
+        "type": "method",
+        "claim": "With Adam, tuning alpha is roughly tuning the learning rate given appropriate init scaling",
+        "verdict": "supported",
+        "source": "Sec 4.1"
+      },
+      {
+        "line": 44,
+        "type": "number",
+        "claim": "18M (~35MB FP16), 96 layers, r=8 / r=4",
+        "verdict": "supported",
+        "source": "Sec 7.1"
+      },
+      {
+        "line": 58,
+        "type": "number",
+        "claim": "r=1 suffices for W_q,W_v",
+        "verdict": "supported",
+        "source": "Table 6 caption"
+      },
+      {
+        "line": 72,
+        "type": "number",
+        "claim": "MNLI-n with 100/1k/10k examples; r_q=r_v=8",
+        "verdict": "supported",
+        "source": "Sec F.3; Table 17"
+      },
+      {
+        "line": 85,
+        "type": "number",
+        "claim": "Similarity between top-4 Delta W and top-10% W barely exceeds 0.2",
+        "verdict": "supported",
+        "source": "Sec H.3"
+      }
+    ],
+    "outside_sample": "Whole-post read: no wrong numbers. Unsupported outside the sample: L87 small-r caveat placed in the conclusion and stated as fact; L56 'best overall' conflicts with the post's own table"
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 0,
+    "na": 0,
+    "repeated_ids": [],
+    "note": "human_fixes.yaml has fixes: [] for summary-lora. The notes' generic defects do not occur: no HTML entity leak ('&amp;'), title is the paper title."
+  },
+  "extras": {
+    "description_chars": 135,
+    "main_results_covered": false,
+    "main_results_note": "No GPT-3 Table 4 cells and no RoBERTa/DeBERTa/GPT-2 results; only the paper's 'matches or exceeds on all three datasets' sentence (L16, L64) and the MNLI-full row in the low-data table",
+    "unsupported_causes_scope": "L87 small-r caveat moved into 'conclusion future work' and stated as fact; L56 'best overall' vs the post's own table. Causes attributed correctly: L70 prefix drop marked as the authors' suspicion and out of scope; L85 task-specific directions marked as the authors' interpretation",
+    "repetition_counts": "10,000x: 3 (L8, L16, L64); 3x memory: 3 (L8, L16, L64); on par or better: 3 (L8, L16, L64); no added latency: 3 (L8, L16, L38); task swap: 2 (L16, L38); prefix non-monotonic: 2 (L66, L70)",
+    "reintroduced_definitions_examples": "L64 restates the TL;DR as the results opener; no re-defined terms",
+    "edit_residue": "'예를 들어 가상으로' on a real experiment at L20; no doubled markers, dangling paragraphs or trailing spaces; no empty cells",
+    "figures_checked": "L68 image is Figure 2 (WikiSQL / MultiNLI-matched scatter); L66 description matches",
+    "taxonomy_X1": "Category Finetuning fits; 'Parameter-Efficient-Fine-Tuning' and 'Low-Rank-Adaptation' fit; three tags restate the abstract"
+  },
+  "top_issues": [
+    "Main results still missing: no GPT-3 Table 4 numbers (LoRA 73.4/91.7/53.8 vs FT 73.8/89.5/52.0) and no RoBERTa/DeBERTa/GPT-2 results; 'on par or better' carries no comparison numbers except the MNLI-full row",
+    "L87 moves the Sec 7.2 footnote (different-language thought experiment) into 'the conclusion's future work' and states it as fact; L56 'W_q+W_v best overall' conflicts with the post's own table",
+    "Facts restated (10,000x/3x/on par x3, no latency x3, prefix non-monotonic x2), L64 results opener repeats the TL;DR, topic headings, MNLI/MultiNLI mix"
+  ]
+}

@@ -1,0 +1,29 @@
+# Frozen evaluation set (docs/redesign.md, section 7). Inputs only; the
+# human-fix checklist per item is human_fixes.yaml. Survey items run from
+# fixed plan files so paper selection does not vary between runs.
+items:
+  review-dpo: {kind: review, source: "2305.18290"}
+  review-kimi: {kind: review, source: "2507.20534"}
+  review-zep: {kind: review, source: "2501.13956"}
+  summary-toolorchestra: {kind: summarize, source: "2511.21689"}
+  summary-lora: {kind: summarize, source: "2106.09685"}
+  guide-strands:
+    kind: guide
+    urls:
+      - https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/
+      - https://strandsagents.com/docs/user-guide/sdk/agents/hooks/
+  guide-rayserve:
+    kind: guide
+    urls: [https://docs.ray.io/en/latest/serve/getting_started.html]
+  guide-vllm:
+    kind: guide
+    urls: [https://docs.vllm.ai/en/latest/getting_started/quickstart.html]
+    reference_urls:
+      - https://arxiv.org/abs/2309.06180
+      - https://blog.vllm.ai/2023/06/20/vllm.html
+  survey-security:
+    kind: survey_write
+    plan: eval/sets/plans/survey-security.json
+  survey-rlhf:
+    kind: survey_write
+    plan: eval/sets/plans/survey-rlhf.json

@@ -1,0 +1,103 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-rlhf.json",
+  "title": "From RLHF to DPO and GRPO: How Preference Optimization Aligns LLMs",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-llm-rlhf-dpo-da36ac9a/2026-11-04-from-rlhf-to-dpo-and-grpo-how-preference-optimization-aligns-llms.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-from-rlhf-to-dpo-and-grpo-how-preference-optimization-aligns-llms.md",
+  "pr_url": null,
+  "warnings": [
+    "Section 'Atari 선호 비교에서 InstructGPT까지 이어진 보상 모델과 KL 페널티 PPO 파이프라인, 그리고 그 대가인 과최적화' still has: papers ['2204.05862', '2307.09288'] belong to this section but no sentence cites their evidence: cover each",
+    "Section '브래들리-테리 보상 모델을 넘어선 쌍별 선호 게임과 반복 온라인 샘플링': check 4 sentence(s) the evidence may not support: $$\\eta=2$$로 가정하면 목표 로그비는 $$2\\times(0.8-0.5)=0.6$$이어서, 다음 정책은 이 요약의 로그확률을 현재보다 0.6만큼 높이도록 학습됩니다. (numbers not in its evidence) | 승률이 0.3인 요약은 목표가 $$-0.4$$로 내려가고, 0.5인 요약은 그대로 남습니다. (numbers not in its evidence) | 같은 8B 규모에서 효과는 분명합니다. (numbers not in its evidence) | AlpacaEval-2에서 8.8%p, Chat-Arena-Hard에서 6.7점의 절대 차이입니다. (numbers not in its evidence)",
+    "Section '브래들리-테리 보상 모델을 넘어선 쌍별 선호 게임과 반복 온라인 샘플링' still has: numbers ['0.8', '0.5', '0.6', '0.6만'] without evidence: $$\\eta=2$$로 가정하면 목표 로그비는 $$2\\times(0.8-0.5)=0.6$$이어서, 다음 정책은 이 요약의 로그확률을 현재보다 0.6만큼 높이도록 학습됩니다. | ['0.5', '0.6'] already stated in '보상 모델 없이 선호 쌍을 분류하는 DPO와 KL 예산을 따라 되돌아온 과최적화': refer back without repeating: $$\\eta=2$$로 가정하면 목표 로그비는 $$2\\times(0.8-0.5)=0.6$$이어서, 다음 정책은 이 요약의 로그확률을 현재보다 0.6만큼 높이도록 학습됩니다. | numbers ['0.3', '0.4', '0.5'] without evidence: 승률이 0.3인 요약은 목표가 $$-0.4$$로 내려가고, 0.5인 요약은 그대로 남습니다. | ['0.5'] already stated in '보상 모델 없이 선호 쌍을 분류하는 DPO와 KL 예산을 따라 되돌아온 과최적화': refer back without repeating: 승률이 0.3인 요약은 목표가 $$-0.4$$로 내려가고, 0.5인 요약은 그대로 남습니다. | numbers ['8B'] without evidence: 같은 8B 규모에서 효과는 분명합니다.",
+    "Section '계보를 가리지 않고 되풀이되는 보상 해킹 증상, 장황함과 상투 문구' still has: a standard section needs at least 1 visuals (its figures, an equation, or a small table from its number evidence)",
+    "verification hedge (fix the claim from an official source or drop it): al 1.0/2.0) | 7B 초과 규모·다양한 비교 미검증 |"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2872.3,
+  "input_tokens": 1606814,
+  "output_tokens": 331825,
+  "estimated_cost_usd": 12.8112,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 78,
+      "failed_calls": 0,
+      "input_tokens": 14495,
+      "output_tokens": 331825,
+      "cache_read_tokens": 401069,
+      "cache_write_tokens": 1191250,
+      "cost_usd": 12.811147
+    },
+    "by_stage": {
+      "outline": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 10,
+        "output_tokens": 31239,
+        "cache_read_tokens": 59294,
+        "cache_write_tokens": 128489,
+        "cost_usd": 1.290983
+      },
+      "verify": {
+        "calls": 34,
+        "failed_calls": 0,
+        "input_tokens": 136,
+        "output_tokens": 58418,
+        "cache_read_tokens": 277666,
+        "cache_write_tokens": 504146,
+        "cost_usd": 3.800703
+      },
+      "draft": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 86122,
+        "cache_read_tokens": 31236,
+        "cache_write_tokens": 230480,
+        "cost_usd": 2.887524
+      },
+      "review": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 31785,
+        "cache_read_tokens": 14751,
+        "cache_write_tokens": 56305,
+        "cost_usd": 0.923297
+      },
+      "fix": {
+        "calls": 17,
+        "failed_calls": 0,
+        "input_tokens": 68,
+        "output_tokens": 123332,
+        "cache_read_tokens": 18122,
+        "cache_write_tokens": 271830,
+        "cost_usd": 3.833304
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 14189,
+        "output_tokens": 929,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.075336
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 78,
+        "failed_calls": 0,
+        "input_tokens": 14495,
+        "output_tokens": 331825,
+        "cache_read_tokens": 401069,
+        "cache_write_tokens": 1191250,
+        "cost_usd": 12.811147
+      }
+    }
+  }
+}

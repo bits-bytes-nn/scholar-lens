@@ -1,0 +1,75 @@
+{
+  "item": "survey-rlhf",
+  "post": "/tmp/eval-evidence/survey-rlhf-v10.md",
+  "judge_run": 2,
+  "scores": {"A": 8.0, "B": 8.0, "C": 7.0, "D": 8.5, "E": 7.0, "F": 8.0},
+  "deductions": {
+    "A": ["L218 '\\beta_{\\text{bo$n$}}' puts a single $ inside a $$ block (rubric: no single $)", "L403 KTO formula ends with a stray '\\\\'", "L774 RLHF Workflow limitation cell is '-'"],
+    "B": ["L504 '이 결론은 거부 응답 로짓을 과도하게 누르지 않는다는 판단입니다' noun frame -> '저자들은 거부 응답 로짓을 과하게 누르지 않는다고 봅니다'", "L759 table cell mixes English 'vs zero-shot', 'mock 감성' into Korean cells", "L534 '확인할 수 있습니다' formulaic; otherwise natural 입니다 register, no da-form headings"],
+    "C": ["L670 '질문마다 앞서 소개한 수만큼 출력을 샘플링했습니다' - the 64 samples per question are never stated anywhere in the post", "L696 '샘플링 온도는 앞서 소개한 값과 같습니다' - temperature 0.7 never introduced", "L706 '앞서 본 넉넉한 질문당 샘플 수' - same dangling reference", "DAA overoptimization restated at L438, L548, L742, L805, L814; online-RFT result at L730, L746, L812; Pass@K at L696, L702, L783"],
+    "D": ["worked numeric examples at L600-602 (SPPO), L672 (GRPO), L506 (ORPO), L376 (IPO) land at the hard steps; L169 symbol disambiguation slightly padded"],
+    "E": ["L770 GRPO cell repeats 'MATH 51.7%' twice", "L773 SPPO cell gives the same model 28.52% and 28.53% in one cell", "table has no setting/benchmark column, so cells mix AlpacaEval, MT-Bench, synthetic reward (L764 'Alpaca RRHF_SP 보상 -0.96' has no unit/scale)", "35 figures; several Christiano figures (L83-103) are described only as 'the reader can look here' without a stated takeaway number"],
+    "F": ["L702 '참조 모델의 성공 확률이 0이든, 0과 1 사이든, 1이든 GRPO는 성공을 새로 만들지 못하며' - the paper's 'In all cases GRPO does not create successes' refers to GRPO variants, and for p_ref in (0,1) the paper proves amplification p* > p_ref", "L795 '사람들도 셋 중 하나꼴로 의견이 갈립니다' generalizes the 65% H-H agreement of the DPO-vs-PPO comparison; the PPO-1 comparison has 87% (DPO Table 2)", "L773 cell carries two values for one result (28.52/28.53) and pits SPPO against Snorkel's DPO model (26.39) without saying so"]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "noun-phrase claim headings, e.g. L690 '### Maj@K는 오르고 Pass@K는 그대로인 RL', L436 '### 보상 모델이 없어도 남는 과최적화'; no da-form headings"},
+    "running_example": {"status": "met", "evidence": "Reddit TL;DR policy declared L26 and reused L330, L506, L558, L602, L750"},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "DPO L292-326, IPO L356-376, SPPO L586-602, GRPO L653-672 follow problem -> choice -> formula -> numeric example"},
+    "facts_said_once": {"status": "not met", "evidence": "DAA overoptimization L438/L548/L742/L805/L814; online RFT L730/L746/L812; Pass@K L696/L702/L783"},
+    "numbers_with_scope": {"status": "partly met", "evidence": "body numbers mostly scoped (L617 Llama-3-8B, %p absolute); table L769 '데이터 72% 감소' lacks Mistral-7B/OpenAssistant scope; L764 reward -0.96 has no scale"},
+    "nothing_invented": {"status": "partly met", "evidence": "hypothetical examples labeled '가상의'; L702 overextends Mroueh's 'in all cases'"},
+    "own_assessment_at_end": {"status": "met", "evidence": "L816 three research questions; L752 when to choose which lineage"},
+    "length_fitted": {"status": "partly met", "evidence": "845 lines; Christiano gets 4 figures (L83-103) while Online IPO (L580-582) and RLHF Workflow (L627-629) get one short paragraph each"},
+    "type_specific_shape": {"status": "partly met", "evidence": "one comparison table (L756-775) but body still repeats table-type numbers (L514 ORPO, L542 SimPO, L617 SPPO); synthesis sections compare lineages rather than recap cards"},
+    "korean_style": {"status": "met", "evidence": "consistent 입니다 register; few 즉/결국 restatements; minor noun frame L504"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 1,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 426, "claim": "KTO matches/beats DPO with desirable:undesirable 0.1:1, up to 90% desirable data discarded (Llama-7B)", "verdict": "supported", "source": "2402.01306: 'For Llama-7B, we find that up to 90% of the desirable data can in fact be discarded while still outperforming DPO'"},
+      {"line": 440, "claim": "wide-KL configs peak after 25% of the data; IPO least prone to overoptimization", "verdict": "supported", "source": "2406.02900: 'achieve their best performance after training on only 25% of the data'; 'IPO indeed seems to be less prone to over-optimization'"},
+      {"line": 514, "claim": "ORPO up to 12.20% AlpacaEval 2.0, 66.19% IFEval loose, 7.32 MT-Bench; Mistral-ORPO-alpha/beta 7.23/7.32", "verdict": "supported", "source": "2403.07691 abstract and §6.2 'scored 7.23 and 7.32 in MT-Bench'"},
+      {"line": 518, "claim": "only ~50% of training triples satisfy likelihood ranking after DPO", "verdict": "supported", "source": "2405.14734 §2: 'only ~50% of the triples from the training set satisfy this condition when trained with DPO'"},
+      {"line": 542, "claim": "SimPO beats best baseline by 3.6-4.8 points AlpacaEval 2 LC; Gemma-2-9B-it 72.4% LC, 59.1% Arena-Hard", "verdict": "supported", "source": "2405.14734: 'outperforms the best baseline by 3.6 to 4.8 points'; abstract 72.4% / 59.1%"},
+      {"line": 617, "claim": "Llama-3-8B SPPO LC gains 8.81, 3.42, 3.62 = 15.85", "verdict": "supported", "source": "2405.00675 §5.2: 'The performance gains are more significant: 8.81% ..., 3.42% ..., and 3.62% ..., summing up to a total gain of 15.85%'"},
+      {"line": 617, "claim": "Mistral-7B-SPPO Iter3 MT-Bench 7.59 after drops in first two iterations; Open LLM avg 70.29 (Llama-3-8B), 66.75 (Mistral-7B), declining over Mistral iterations", "verdict": "supported", "source": "2405.00675 Fig. 2 caption and Table 3 caption"},
+      {"line": 670, "claim": "GRPO policy lr 1e-6, KL coefficient 0.04", "verdict": "supported", "source": "2402.03300 §4.2: 'learning rate of the policy model as 1e-6. The KL coefficient is 0.04. For each question, we sample 64 outputs' (the 64 is omitted in the post yet referred back to)"},
+      {"line": 702, "claim": "whether p_ref is 0, in (0,1) or 1, GRPO cannot create new successes", "verdict": "unsupported", "source": "2503.06639 §6: 'In all cases GRPO does not create successes and 0 is an absorbing fixed point if p_ref(q)=0' - 'all cases' are GRPO variants; Thm 3 gives p* > p_ref for p_ref in (0,1)"},
+      {"line": 793, "claim": "human-GPT-4 agreement similar to human-human agreement (65%)", "verdict": "supported", "source": "2305.18290 Table 2: H-H agree 65 (DPO vs PPO), 87 (PPO-1); L795 extrapolation '셋 중 하나꼴로 의견이 갈립니다' ignores the 87%"},
+      {"line": 769, "claim": "table: KTO beats DPO despite 72% less data", "verdict": "supported", "source": "2402.01306 Table 3: 'reducing the amount of training data by 72%' (Mistral-7B, OpenAssistant, one-y-per-x; scope missing in cell)"},
+      {"line": 770, "claim": "table: DeepSeekMath-RL 7B GSM8K 88.2%, MATH 51.7%; self-consistency 64 samples 60.9%", "verdict": "supported", "source": "2402.03300 abstract and §1 'GSM8K: 82.9% -> 88.2%, MATH: 46.8% -> 51.7%'; 'Self-consistency over 64 samples ... achieves 60.9% on MATH' (cell repeats MATH 51.7%)"},
+      {"line": 773, "claim": "table: Mistral-7B-SPPO Iter3 LC 28.52%; SPPO 28.53% vs DPO 26.39% vs IPO 25.45%", "verdict": "supported", "source": "2405.00675 §5.2 gives both 28.52% and 28.53%; 'outperforming the DPO's best rate of 26.39% (by Snorkel) and IPO's rate of 25.45%'"},
+      {"line": 774, "claim": "table: 8B iterative DPO AlpacaEval-2 LC 31.3 vs vanilla DPO 22.5", "verdict": "supported", "source": "2405.07863 Table 2: 'Ours (DPO baseline) 8B Vanilla DPO 22.5'; 'Ours (Iterative RLHF) 8B Iterative DPO 31.3'"},
+      {"line": 775, "claim": "table: SimPO up to +6.4 AlpacaEval 2, +7.5 Arena-Hard vs DPO; ~20% less run time, ~10% less memory; gamma manual tuning, safety not considered", "verdict": "supported", "source": "2405.14734 abstract; §5: 'cuts run time by roughly 20% and reduces GPU memory usage by about 10%'; Appendix A limitations"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 5,
+    "na": 1,
+    "repeated_ids": [],
+    "details": [
+      {"id": "grpo-card-unverified-figure", "result": "avoided", "evidence": "2503.06639 card (L700-702) uses only the advantage weights sqrt((1-p)/p), -sqrt(p/(1-p)) and fixed-point results, all in the paper (§2 eq. for A, Thm 3)"},
+      {"id": "copy-explains-preference", "result": "avoided", "evidence": "L131 says only that the policy may have exploited labelers' simple heuristics; no 96%/84% preference claim"},
+      {"id": "daa-no-quantification", "result": "avoided", "evidence": "L446 says the paper offers no solution, not that it gives no quantitative figures"},
+      {"id": "grpo-row-reward", "result": "n/a", "evidence": "comparison table (L756) has no reward column; GRPO row L770 has no reward cell"},
+      {"id": "heading-da-form-offline", "result": "avoided", "evidence": "L436 '### 보상 모델이 없어도 남는 과최적화' (noun phrase)"},
+      {"id": "heading-da-form-judge", "result": "avoided", "evidence": "L791 '### 대리 평가자 위에 선 승률' (noun phrase); no heading ends in 다"}
+    ]
+  },
+  "extras": {
+    "plan_papers_not_cited": [],
+    "thin_sections": ["L580-582 '### 데이터 분포만 바꾼 온라인 IPO' (one paragraph)", "L627-631 '### 누적 데이터로 도는 반복 워크플로' (one paragraph on the paper plus a synthesis paragraph)", "Llama 2 (2307.09288) has no section of its own, one paragraph inside L181"],
+    "venue_issues": ["L832 'International Conference on Artificial Intelligence and Statistics' long form where the rest use abbreviations (AISTATS); otherwise venues correct"],
+    "table_cells_prose_empty_dash": ["L774 RLHF Workflow limitation '-'", "L763 'RL-CAI 무해성 Elo RLHF·SL-CAI보다 유의하게 높음' prose, no number", "L762 '합성 설정의 한계' vague", "L770 duplicated 'MATH 51.7%'", "L773 two values for one result"]
+  },
+  "top_issues": [
+    "Dangling back-references to numbers the post never states: L670 '앞서 소개한 수만큼' (64 samples), L696 '앞서 소개한 값' (temperature 0.7), L706",
+    "Comparison table hygiene: GRPO cell repeats MATH 51.7%, SPPO cell gives 28.52% and 28.53% for one result, RLHF Workflow limitation '-', no setting column",
+    "L702 overextends Mroueh: 'no new successes whether p_ref is 0, in (0,1) or 1' misreads 'in all cases' (variants); facts restated across sections (DAA overoptimization x5)"
+  ]
+}

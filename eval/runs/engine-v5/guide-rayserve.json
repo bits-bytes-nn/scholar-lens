@@ -1,0 +1,626 @@
+{
+ "item": "guide-rayserve",
+ "kind": "guide",
+ "source": "https://docs.ray.io/en/latest/serve/getting_started.html",
+ "criteria_note": "Scored A-F, G, X1 (taxonomy; written for paper posts, applied to category/tags) and guide-specific T1-T3, 0-10 per eval/ARTIFACT_RUBRIC.md anchors. Claims verified against docs.ray.io/en/latest pages fetched 2026-11-10 (architecture, configure-serve-deployment, production-guide/config, production-guide/index, production-guide/kubernetes, cluster/kubernetes rayservice user guide and index, model_composition, multi-app, model-registries, llm/architecture/overview, serve index, serve api index). Code was read, not executed. Note: the docs themselves disagree on the proxy default (architecture page: head node; config page: EveryNode).",
+ "X": {
+  "prose_length_chars": 30187,
+  "scores": {
+   "A": {
+    "score": 7.5,
+    "reason": "Coherent problem->units->internals->first deploy->composition->config->ops->KubeRay->choice arc; renders cleanly (even fences, $$ only with use_math). Deductions: one-sentence subsection L1076-1078 '### 헤드 노드 장애에 대비한 GCS 장애 허용' / '앞서 본 GCS 장애 허용을 켜 두는 것, 즉 head 노드 장애 허용 구성이 프로덕션 권장 사례입니다.'; duplicated code block L381-392 repeats L368-376 verbatim; orphaned example L719 '예를 들어 코드에는 num_cpus: 0.2와 num_gpus: 0을 두고, config의 ray_actor_options에는 num_gpus: 0.0만 적었다고 해 보겠습니다.' is never resolved."
+   },
+   "B": {
+    "score": 8,
+    "reason": "Natural Korean with terms translated and English on first use (레플리카(replica), 파워 오브 투 초이스(power of two choices)). Nits: L543 '합성 버전의 @serve.deployment에 옵션이 없는 이유는 이 파라미터들이 모두 선택 사항이라서입니다' -> '합성 버전은 이 선택 옵션을 생략했을 뿐입니다'; L156 '서로 다른 손잡이로 조절하는 셈입니다' slightly cute; L1088 single-sentence filler paragraph."
+   },
+   "C": {
+    "score": 6.5,
+    "reason": "Broken cross-references: L1070 '앞서 Translator에 추가한 reconfigure 경로로' — no reconfigure is ever added; L256 'GCS 장애 허용 설정은 뒤의 KubeRay 섹션에서 다룹니다' but L1078 only names it. Stitched feel: install given twice (L92 with transformers torch, L262 'pip install \"ray[serve]\"' as if first), Translator re-listed four times (L97, L270, L404, L838). L156 says proxy is head-only by default while the config L737 it presents shows EveryNode without comment."
+   },
+   "D": {
+    "score": 8.5,
+    "reason": "Hard parts get worked numbers: power-of-two walk-through L182 (A=3,B=1,C=5,D=2), 2:1 target_ongoing_requests arithmetic L233 (480 -> 10x48, 20x24), backpressure capacity L678 (2x100=200 vs 2x5=10), per-parameter merge table L713. Minor padding: L336 repeats L61-63 on per-replica model loading."
+   },
+   "E": {
+    "score": 7.5,
+    "reason": "Good use of tables (parameters L657, fault table L245, update table L1032, alternatives L1090), official architecture/autoscaling/LLM RPC images placed where discussed with Korean alt text, ASCII request path L168. Deductions: redundant duplicate code L381-392; four near-identical Translator listings; fault table cell L250 '보존되는 것: KubeRay가 클러스터를 다시 세움' is not a 'preserved' item."
+   },
+   "F": {
+    "score": 7,
+    "reason": "One wrong claim (L1070 reconfigure path that the post never defines) and one docs-comparison cell the source does not make (L1094 '이 도구들의 레지스트리를 모델 저장소로 쓰고'). The post's own config L754 attaches user_config to a Translator without reconfigure, which Serve rejects; presented as working. Proxy default stated as head-only (L156) without noting the config page's EveryNode default. 23/25 checked claims supported."
+   },
+   "G": {
+    "score": 9,
+    "reason": "use_math: true with $$ at L539; description 125 chars, opens with 'Ray Serve', numbers none; one-word fence info strings (python, bash, yaml, text, http); no Liquid. Not run through the blog lint."
+   },
+   "T1": {
+    "score": 7,
+    "reason": "Mostly runnable doc code with real flags and commands (serve run/build/deploy/status, REST PUT, kubectl). But the running example breaks at its production step: L730 renames serve_quickstart_composed.py to text_ml.py (no reconfigure) and L754 sets user_config: language: french, so serve deploy fails; L1039-1070 German switch relies on the same missing method. L262 install omits transformers/torch."
+   },
+   "T2": {
+    "score": 8.5,
+    "reason": "Covers everything in getting_started plus key concepts, architecture, composition, config, multi-app, KubeRay in a sensible order; LLM ratio/patterns sections (L224-233, L1098-1100) are sourced from the LLM architecture page and tied back to the example."
+   },
+   "T3": {
+    "score": 8.5,
+    "reason": "Strong internals: three actor types, request lifecycle, handle data path, power-of-two with max_ongoing_requests, same-node router preference, autoscaler signals and why both are needed (L218), controller-failure gap with operational advice (L239), what survives which failure (L245), KubeRay upgrade strategies and non-propagated fields. Deduction: GCS FT promised (L256) but never explained; failure modes in the close are thin (L1102-1106)."
+   },
+   "X1": {
+    "score": 8.5,
+    "reason": "Category 'Tech Guides'/'Data-Architecture'; tags short and reusable (Ray-Serve, KubeRay, Autoscaling, Model-Serving, MLOps) plus specific Deployment-Handle, Power-of-Two-Choices. Seven tags is on the high side."
+   }
+  },
+  "principles": {
+   "claim_headings": {
+    "status": "met",
+    "evidence": "e.g. L235 '죽은 컨트롤러가 멈추는 것은 트래픽이 아니라 스케일링', L617 '코드보다 config 파일이 이기는 deployment 파라미터 우선순위'; a few are topic labels (L653 '파라미터와 기본값', L1108 '선택 기준')."
+   },
+   "running_example": {
+    "status": "partly",
+    "evidence": "Text ML Summarizer->Translator is threaded through (L57, L166, L218, L252, L1039) but breaks at config deployment (no reconfigure for user_config, L754/L1070)."
+   },
+   "mechanism_reason_code_example": {
+    "status": "met",
+    "evidence": "autoscaler L212 mechanism -> L218 reason for two signals -> worked Translator example; precedence rule L711 -> merge table L713."
+   },
+   "facts_once": {
+    "status": "partly",
+    "evidence": "install twice (L92, L262), Translator listed four times, MLflow __call__ printed twice (L368, L383), max_ongoing_requests constraint restated L15, L144, L164, L180."
+   },
+   "numbers_with_scope": {
+    "status": "met",
+    "evidence": "L678 '기본값은 Ray 2.32.0에서 100에서 5로'; L188 '높은 동시성에서도 TTFT에 몇 ms'; L233 example flagged as '예시 숫자'."
+   },
+   "nothing_invented": {
+    "status": "partly",
+    "evidence": "L1070 invented reconfigure path; L1094 'how to combine' column extrapolated."
+   },
+   "writer_assessment": {
+    "status": "met",
+    "evidence": "L1110 '이 글의 판단은 이렇습니다.' with concrete choice rules (TorchServe for single-model latency, MLflow for lifecycle, Serve for 3+ heterogeneous stages)."
+   },
+   "length_fit": {
+    "status": "partly",
+    "evidence": "~30k chars of prose is heavy for a getting-started source; duplication (repeated listings) inflates it."
+   },
+   "type_shape": {
+    "status": "met",
+    "evidence": "TL;DR with architecture (L15), opens with the problem (L17-33), ends with when to choose and failure points (L1080-1110)."
+   },
+   "korean_style": {
+    "status": "met",
+    "evidence": "natural 입니다 register, translated terms; minor awkward sentence L543."
+   }
+  },
+  "claims": {
+   "checked": 25,
+   "numbers_checked": 13,
+   "supported": 23,
+   "unsupported": 1,
+   "wrong": 1,
+   "unverifiable": 0,
+   "error_rate": 0.08,
+   "items": [
+    {
+     "line": 662,
+     "claim": "max_ongoing_requests default 5, lowered from 100 in Ray 2.32.0",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/configure-serve-deployment.html: 'Defaults to 5 (note the default changed from 100 to 5 in Ray 2.32.0)'"
+    },
+    {
+     "line": 663,
+     "claim": "max_queued_requests default -1 (no limit), per caller (proxy or handle)",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/configure-serve-deployment.html: 'queued at each caller (proxy or DeploymentHandle)... Defaults to -1 (no limit)'"
+    },
+    {
+     "line": 664,
+     "claim": "health_check_period_s default 10s",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/configure-serve-deployment.html: 'Defaults to 10s'"
+    },
+    {
+     "line": 665,
+     "claim": "health_check_timeout_s default 30s",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/configure-serve-deployment.html: 'Defaults to 30s'"
+    },
+    {
+     "line": 666,
+     "claim": "graceful_shutdown_wait_loop_s default 2s",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/configure-serve-deployment.html: 'Defaults to 2s'"
+    },
+    {
+     "line": 667,
+     "claim": "graceful_shutdown_timeout_s default 20s",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/configure-serve-deployment.html: 'Defaults to 20s'"
+    },
+    {
+     "line": 660,
+     "claim": "num_replicas default 1, positive int or auto; cannot be a number when autoscaling_config is set",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/configure-serve-deployment.html: 'Defaults to 1' / 'If this is set, you can't set num_replicas to a number'"
+    },
+    {
+     "line": 204,
+     "claim": "request objects of 100KiB+ go to the object store and are read zero-copy",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/architecture.html: 'Larger request objects (100KiB+) are written to the object store and the replica can read them via zero-copy read'"
+    },
+    {
+     "line": 909,
+     "claim": "Serve REST API on dashboard port, default 8265, changeable with --dashboard-port",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/api/index.html: 'The dashboard port is 8265 by default... --dashboard-port argument when running ray start'"
+    },
+    {
+     "line": 320,
+     "claim": "serve run app reachable at http://127.0.0.1:8000/",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/getting_started.html: 'http://127.0.0.1:8000/'"
+    },
+    {
+     "line": 615,
+     "claim": "RayServeHandle and RayServeSyncHandle fully removed as of Ray 2.10",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/model_composition.html: 'fully removed as of Ray 2.10'"
+    },
+    {
+     "line": 188,
+     "claim": "default request router prefers same-node replicas; cross-node RPC costs only a few ms of TTFT at high concurrency",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/llm/architecture/overview.html: 'only a few milliseconds impact on TTFT at high concurrency'"
+    },
+    {
+     "line": 226,
+     "claim": "keep ingress:LLMServer at least 2:1, set target_ongoing_requests proportionally (48 / 24)",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/llm/architecture/overview.html: 'We recommend keeping at least a 2:1 ratio' / 'for example, 48' / 'for example, 24'"
+    },
+    {
+     "line": 237,
+     "claim": "when the controller dies requests continue, autoscaling pauses, and prior metrics are lost on recovery",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/architecture.html Note: 'requests can still be sent... autoscaling is paused... all previous metrics collected are lost'"
+    },
+    {
+     "line": 243,
+     "claim": "controller data (routing policies, deployment configs) checkpointed to GCS on the head node; router/replica transient data lost",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/architecture.html: 'All data in the Controller ... is checkpointed to the Ray Global Control Store (GCS) on the head node'"
+    },
+    {
+     "line": 156,
+     "claim": "HTTP proxy runs only on the head node by default",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/architecture.html: 'By default there is one HTTP proxy actor on the head node' (note: docs.ray.io/en/latest/serve/production-guide/config.html says proxy_location default is EveryNode; X shows EveryNode at 737 without reconciling)"
+    },
+    {
+     "line": 1034,
+     "claim": "serveConfigV2 change = in-place update on the existing cluster; rayClusterConfig change = zero-downtime upgrade needing room for two clusters",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/cluster/kubernetes/user-guides/rayservice.html Step 7/8; docs.ray.io/en/latest/serve/production-guide/kubernetes.html: 'requires the Kubernetes cluster to be large enough to schedule both Ray clusters'"
+    },
+    {
+     "line": 1074,
+     "claim": "replicas/minReplicas/maxReplicas/scaleStrategy.workersToDelete not propagated; replicas 1->2 shows 2 in RayService CR, 1 in RayCluster",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/cluster/kubernetes/user-guides/rayservice.html Step 8.1-8.3"
+    },
+    {
+     "line": 1072,
+     "claim": "rayVersion determines the Autoscaler sidecar image and triggers a zero-downtime upgrade; NewClusterWithIncrementalUpgrade uses fewer resources",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/cluster/kubernetes/user-guides/rayservice.html: 'This field determines the Autoscaler sidecar image, and triggers a zero downtime upgrade' / 'uses fewer resources during upgrades'"
+    },
+    {
+     "line": 1026,
+     "claim": "enableInTreeAutoscaling must be True; GKE Autopilot, EKS Cluster Autoscaler recommended",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/production-guide/kubernetes.html Autoscaling section"
+    },
+    {
+     "line": 1022,
+     "claim": "controller/deployment logs under /tmp/ray/session_latest/logs/serve/ on head and worker pods",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/production-guide/kubernetes.html Monitoring note"
+    },
+    {
+     "line": 1070,
+     "claim": "the German switch works through 'the reconfigure path added to Translator earlier'",
+     "status": "wrong",
+     "source": "No reconfigure method appears anywhere in X (grep: only lines 669, 688, 1070). X's text_ml.py (renamed serve_quickstart_composed.py, line 730) has no reconfigure, yet X's serve_config (754) sets user_config; docs' text_ml.py (docs.ray.io/en/latest/serve/production-guide/index.html) defines reconfigure"
+    },
+    {
+     "line": 1094,
+     "claim": "BentoML/Comet.ml/MLflow: 'use these tools' registries as the model store, Serve does composition'",
+     "status": "unsupported",
+     "source": "docs.ray.io/en/latest/serve/index.html only says 'Ray Serve works with any model packaging and registry format'; the 'how to combine' column is the writer's extrapolation presented as a docs comparison"
+    },
+    {
+     "line": 1104,
+     "claim": "Anyscale deploys Ray clusters on existing EKS, GKE, AKS or self-hosted Kubernetes",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/cluster/kubernetes/index.html: 'including EKS, GKE, AKS, or self-hosted Kubernetes'"
+    },
+    {
+     "line": 1096,
+     "claim": "MLflow's built-in REST server is not optimized for high-concurrency GPU workloads; use HF Hub or W&B for LLM/diffusion",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/model-registries.html best-practices list"
+    }
+   ]
+  },
+  "checklist": {
+   "repeated": 0,
+   "avoided": 1,
+   "na": 1,
+   "items": {
+    "arch-diagram-relative-link": {
+     "status": "avoided",
+     "evidence": "L152 '![Serve 애플리케이션을 이루는 컨트롤러, 프록시, 레플리카 액터의 관계도](https://docs.ray.io/en/latest/_images/architecture-2.0.svg)'; no empty or ../_images links."
+    },
+    "proxy-env-ray-start-unsupported": {
+     "status": "n/a",
+     "evidence": "X does not mention the proxy env vars."
+    },
+    "generic_guide_checks(guide-vllm notes)": {
+     "status": "repeated (cross-references)",
+     "evidence": "L1070 refers to a reconfigure 'added earlier' that does not exist; L256 promises GCS FT setup in the KubeRay section, which only names it (L1078). No tag remnants, entity leaks or unclosed fences."
+    }
+   }
+  },
+  "extras": {
+   "architecture_first_line": 15,
+   "architecture_section_line": 142,
+   "non_official_source_share": "0/17 (all docs.ray.io; one is the 3.0.0.dev0 master page)",
+   "opens_with_problem": true,
+   "closes_with_choice_and_failure_modes": "partly: choice criteria L1108-1110 are good; failure modes L1102-1106 are two short paragraphs pointing back to KubeRay"
+  },
+  "structure_defects": [
+   "L1076-1078: subsection with one sentence ('### 헤드 노드 장애에 대비한 GCS 장애 허용').",
+   "L719: orphaned lead-in — example set up ('...적었다고 해 보겠습니다.') with no outcome stated.",
+   "L1070: broken cross-reference to a reconfigure method never shown.",
+   "L256 -> L1078: forward promise ('GCS 장애 허용 설정은 뒤의 KubeRay 섹션에서 다룹니다') not delivered.",
+   "L381-392: duplicated code block (excerpt repeats the lines just printed at L368-376).",
+   "L262: second install command presented as the first step after L92 already installed with more packages (broken transition)."
+  ],
+  "top_issues": [
+   "Running example fails at the production step: user_config on a Translator without reconfigure (L730, L754) and the German in-place update credited to a reconfigure 'added earlier' that never appears (L1070).",
+   "Stitched duplication and dangling promises: Translator printed four times, MLflow code printed twice (L381), two install commands, GCS FT promised (L256) but given one sentence (L1078)."
+  ],
+  "mean_score": 7.86
+ },
+ "Y": {
+  "prose_length_chars": 29055,
+  "scores": {
+   "A": {
+    "score": 8.5,
+    "reason": "Clear arc: problem -> units -> internals -> minimal run -> composition -> parameters -> config file -> multi-app -> KubeRay -> choice and failure modes. Renders cleanly (even fences, no math, no use_math). Deductions: sentence-shaped heading L473 '### 핸들 호출은 결과가 아니라 DeploymentResponse를 돌려줌'; very long H2s (L704, L1253)."
+   },
+   "B": {
+    "score": 7.5,
+    "reason": "Generally natural 입니다 register. Deductions: core terms left in English throughout instead of translated with English on first use ('replica', 'actor', L49 'deployment이고, 이것이 Ray actor 프로세스인 replica들로 복제됩니다'); inconsistent casing 'Ray Actor' (L61, L109) vs 'Ray actor' (L51); meta sentences L656 '운영 흐름에 속하는 내용이라 여기서는 다루지 않습니다', L1209 '이 글에서는 이 전략을 이름으로만 소개하고 내부 동작은 다루지 않습니다'."
+   },
+   "C": {
+    "score": 8,
+    "reason": "Concepts introduced before use; forward references resolve (deployment parameters, config file, KubeRay). Deductions: contradiction L138 'HTTP 프록시: 기본값에서는 헤드 노드(head node)에 하나 있습니다' vs L771 '`EveryNode`(기본값)'; L702 'Summarizer도 같은 방식으로 reconfigure에서 min_length와 max_length를 받아' with no code shown."
+   },
+   "D": {
+    "score": 8.5,
+    "reason": "Good help at hard points: Ray paper actor definition explains why replicas are stateful model holders (L53-55); power-of-two example (L169); handle return-type table (L591); precedence table (L660); explicit warning that PUT removes omitted apps (L852). Minor: L41/L37 re-list features already in the TL;DR."
+   },
+   "E": {
+    "score": 7.5,
+    "reason": "Useful tables (units L106, fault table L195, top-level fields L769, update table L1194, alternatives L1261) and ASCII request path L144; dashboard images placed where discussed. Deductions: no official architecture diagram despite a dedicated architecture section; near-identical Translator listings L65 and L232 (plus L305, L412); three dashboard screenshots add little."
+   },
+   "F": {
+    "score": 8,
+    "reason": "One wrong item: L1221-1232 relabels the Text ML kubectl describe output so text_ml_app sits under 'Active Service Status' (docs show it under Pending Service Status). Internal contradiction on the proxy default (L138 vs L771). L878 '200 OK' unverified. 27/29 checked claims supported, including many precise defaults (9000, 10.0, root_path 2.60, BackPressureError/503)."
+   },
+   "G": {
+    "score": 9,
+    "reason": "No $$ and no use_math; description 123 chars opening with 'Ray Serve'; one-word fence info strings; no Liquid. Not run through the blog lint."
+   },
+   "T1": {
+    "score": 7.5,
+    "reason": "Concrete commands end to end (serve run/build/deploy/status, REST PUT, kubectl with a demo namespace and curl pod, port-forward). Deductions: L216 install 'pip install \"ray[serve]\"' omits transformers/torch the code needs (docs: 'pip install \"ray[serve]\" transformers requests torch'); the reconfigure excerpt L612 drops the __init__ prefix default, so translate works only when user_config is set."
+   },
+   "T2": {
+    "score": 8.5,
+    "reason": "Covers getting_started and the linked concept, config, multi-app and KubeRay pages in learning order; adds proxy env var, root_path and runtime_env URI rules from the config page without padding."
+   },
+   "T3": {
+    "score": 8.5,
+    "reason": "Explains actor model rationale, request lifecycle, two queues, power-of-two, pluggable router mixins, autoscaler location, fault recovery table and data lost, KubeRay update semantics and conditions, and closes with an explicit failure-mode list (L1276-1279). Less depth than X on autoscaling signals and LLM-scale ratios."
+   },
+   "X1": {
+    "score": 8.5,
+    "reason": "Category 'Tech Guides'/'Data-Architecture'; six short reusable tags (Ray-Serve, KubeRay, Model-Composition, DeploymentHandle, Serve-Config, Model-Serving)."
+   }
+  },
+  "principles": {
+   "claim_headings": {
+    "status": "met",
+    "evidence": "e.g. L165 'power of two choices와 max_ongoing_requests 상한', L1190 '바뀐 필드에 따라 갈리는 제자리 업데이트와 무중단 업그레이드'; one heading is a sentence (L473)."
+   },
+   "running_example": {
+    "status": "met",
+    "evidence": "Text ML threaded from L24 through reconfigure (L612-689), serve build/deploy (L713-848), KubeRay (L1149, L1200), choice (L1255); multi-app detour is labelled as a separate example (L890)."
+   },
+   "mechanism_reason_code_example": {
+    "status": "met",
+    "evidence": "user_config mechanism L687 -> reconfigure code L638 -> YAML change L691 -> deploy L846."
+   },
+   "facts_once": {
+    "status": "partly",
+    "evidence": "Translator listed four times (L65, L232, L305, L412); KubeRay-recovers-cluster stated L14, L200, L1137."
+   },
+   "numbers_with_scope": {
+    "status": "met",
+    "evidence": "L674 'Ray 2.32.0에서 100에서 5로 변경'; L779 'Ray 2.60부터'; L1207 'Ray 개발 버전 기준으로'."
+   },
+   "nothing_invented": {
+    "status": "partly",
+    "evidence": "L1221-1232 restructured kubectl output; L702 Summarizer reconfigure claimed without code (it is in the docs' text_ml.py)."
+   },
+   "writer_assessment": {
+    "status": "met",
+    "evidence": "L1283 '이 글의 판단은 이렇습니다.' plus concrete advice (finite max_queued_requests, KubeRay + head FT from the start)."
+   },
+   "length_fit": {
+    "status": "partly",
+    "evidence": "~29k chars of prose for a getting-started source; repeated Translator listings."
+   },
+   "type_shape": {
+    "status": "met",
+    "evidence": "TL;DR covers architecture (L12), opens with the problem (L16-31), closes with choice criteria and failure modes (L1253-1283)."
+   },
+   "korean_style": {
+    "status": "partly",
+    "evidence": "natural register, but core terms left untranslated (replica, actor) and inconsistent casing."
+   }
+  },
+  "claims": {
+   "checked": 29,
+   "numbers_checked": 14,
+   "supported": 27,
+   "unsupported": 0,
+   "wrong": 1,
+   "unverifiable": 1,
+   "error_rate": 0.034,
+   "items": [
+    {
+     "line": 674,
+     "claim": "max_ongoing_requests default 5, changed from 100 in Ray 2.32.0",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/configure-serve-deployment.html"
+    },
+    {
+     "line": 675,
+     "claim": "max_queued_requests default -1 (no limit) per caller",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/configure-serve-deployment.html"
+    },
+    {
+     "line": 683,
+     "claim": "at the max_queued_requests limit handles raise BackPressureError and HTTP returns 503 by default, configurable via backpressure_config",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/configure-serve-deployment.html: 'raise a BackPressureError (for handles) or return an HTTP 503 status code by default (configurable via backpressure_config)'"
+    },
+    {
+     "line": 677,
+     "claim": "health_check_period_s 10s and health_check_timeout_s 30s",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/configure-serve-deployment.html"
+    },
+    {
+     "line": 679,
+     "claim": "graceful_shutdown_wait_loop_s 2s and graceful_shutdown_timeout_s 20s",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/configure-serve-deployment.html"
+    },
+    {
+     "line": 672,
+     "claim": "num_replicas default 1 or auto",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/configure-serve-deployment.html"
+    },
+    {
+     "line": 175,
+     "claim": "100KiB+ objects written to the object store, zero-copy read",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/architecture.html"
+    },
+    {
+     "line": 773,
+     "claim": "grpc_options port default 9000; empty grpc_servicer_functions means the gRPC server is not started",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/production-guide/config.html: 'By default, the port is set to 9000' / 'defaults to an empty list, which means the gRPC server isn't started'"
+    },
+    {
+     "line": 772,
+     "claim": "http_options host default 0.0.0.0, port 8000; host must be 0.0.0.0 on Kubernetes",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/production-guide/config.html HTTP config"
+    },
+    {
+     "line": 771,
+     "claim": "proxy_location values EveryNode (default), HeadOnly, Disabled",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/production-guide/config.html Proxy config (but contradicts Y line 138 'by default one HTTP proxy on the head node', from docs.ray.io/en/latest/serve/architecture.html; Y does not reconcile)"
+    },
+    {
+     "line": 781,
+     "claim": "RAY_SERVE_PROXY_HEALTH_CHECK_PERIOD_S default 10.0 s",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/production-guide/config.html: 'Default is 10.0'"
+    },
+    {
+     "line": 779,
+     "claim": "from Ray 2.60 root_path follows ASGI; prefixed requests return 404; strip at ingress or leave unset; no trailing slash",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/production-guide/config.html Warning box"
+    },
+    {
+     "line": 763,
+     "claim": "Serve config runtime_env working_dir and py_modules accept only remote URIs",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/production-guide/config.html: 'can only use remote URIs in its working_dir and py_modules'"
+    },
+    {
+     "line": 749,
+     "claim": "runtime_env is always empty in serve build output",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/production-guide/config.html: 'the runtime_env field will always be empty when using serve build'"
+    },
+    {
+     "line": 852,
+     "claim": "REST API on port 8265; PUT removes applications not in the new config, starts Serve if not running",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/api/index.html Serve REST API section"
+    },
+    {
+     "line": 878,
+     "claim": "the PUT request returns HTTP/1.1 200 OK",
+     "status": "unverifiable",
+     "source": "Not present in the fetched API index page; may be on a subpage"
+    },
+    {
+     "line": 469,
+     "claim": "RayServeHandle/RayServeSyncHandle fully removed as of Ray 2.10",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/model_composition.html"
+    },
+    {
+     "line": 687,
+     "claim": "user_config: reconfigure called right after __init__, applied to running and future replicas without restart",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/production-guide/config.html user_config section"
+    },
+    {
+     "line": 1200,
+     "claim": "sample v1.7.0: MangoStand price 3->4 changes ['MANGO', 2] response from 6 to 8, status UPDATING then HEALTHY",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/cluster/kubernetes/user-guides/rayservice.html Step 7"
+    },
+    {
+     "line": 1237,
+     "claim": "UpgradeInProgress condition reason NoPendingCluster when no pending cluster",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/cluster/kubernetes/user-guides/rayservice.html Step 5.1 output"
+    },
+    {
+     "line": 1198,
+     "claim": "replicas/minReplicas/maxReplicas/workersToDelete changes are not propagated",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/cluster/kubernetes/user-guides/rayservice.html Step 8"
+    },
+    {
+     "line": 1221,
+     "claim": "Text ML kubectl describe output: text_ml_app statuses shown under 'Active Service Status', Pending Service Status empty",
+     "status": "wrong",
+     "source": "docs.ray.io/en/latest/serve/production-guide/kubernetes.html shows the text_ml_app Application Statuses under 'Pending Service Status' and Active Service Status holding only Ray Cluster Status; Y relabels the output block"
+    },
+    {
+     "line": 53,
+     "claim": "Ray paper: application layer has driver, stateless worker, stateful actor; methods depend on previous state",
+     "status": "supported",
+     "source": "arxiv.org/abs/1712.05889 §4.1 (Driver/Worker/Actor definitions)"
+    },
+    {
+     "line": 171,
+     "claim": "RequestRouter with FIFO, locality and multiplex mixins; RequestRouterConfig; ControllerOptions",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/api/index.html: serve.request_router.FIFOMixin/LocalityMixin/MultiplexMixin, serve.config.RequestRouterConfig, serve.config.ControllerOptions"
+    },
+    {
+     "line": 163,
+     "claim": "serve.get_replica_context returns deployment and replica tags",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/api/index.html: 'Returns the deployment and replica tag from within a replica at runtime.'"
+    },
+    {
+     "line": 287,
+     "claim": "client prints 'Bonjour monde!'",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/getting_started.html"
+    },
+    {
+     "line": 1032,
+     "claim": "multi-app outputs 'brown bear, bruin, Ursus arctos', 'Hallo, das Wetter ist heute ziemlich gut!', 'Braunbär, Bruin, Ursus arctos'",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/multi-app.html"
+    },
+    {
+     "line": 599,
+     "claim": "SpanishResponder 3 replicas, FrenchResponder 1",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/model_composition.html: 'scale your SpanishResponder to have 3 replicas and your FrenchResponder to have 1 replica'"
+    },
+    {
+     "line": 1268,
+     "claim": "to match Serve with other tools you would glue TensorFlow Serving and SageMaker or build micro-batching",
+     "status": "supported",
+     "source": "docs.ray.io/en/latest/serve/index.html"
+    }
+   ]
+  },
+  "checklist": {
+   "repeated": 0,
+   "avoided": 2,
+   "na": 0,
+   "items": {
+    "arch-diagram-relative-link": {
+     "status": "avoided",
+     "evidence": "No empty-text or docs-relative links; all images absolute with Korean alt (e.g. L187, L1249). The architecture-2.0.svg diagram itself is not used."
+    },
+    "proxy-env-ray-start-unsupported": {
+     "status": "avoided",
+     "evidence": "L781 gives RAY_SERVE_PROXY_HEALTH_CHECK_PERIOD_S name, meaning and default 10.0 only; no claim about exporting before ray start or which process."
+    },
+    "generic_guide_checks(guide-vllm notes)": {
+     "status": "avoided",
+     "evidence": "Cross-references resolve; no tag remnants, entity leaks or unclosed fences; not install-centric."
+    }
+   }
+  },
+  "extras": {
+   "architecture_first_line": 12,
+   "architecture_section_line": 129,
+   "non_official_source_share": "1/17 (Ray paper arXiv 1712.05889); one other is the 3.0.0.dev0 master page",
+   "opens_with_problem": true,
+   "closes_with_choice_and_failure_modes": "yes: alternatives table L1261, failure-mode list L1276-1279, choice criteria L1283"
+  },
+  "structure_defects": [
+   "L473: sentence-shaped heading ('핸들 호출은 결과가 아니라 DeploymentResponse를 돌려줌').",
+   "L138 vs L771: contradictory statements of the proxy default within the post.",
+   "L702: claims Summarizer reconfigure with no code (orphaned reference)."
+  ],
+  "top_issues": [
+   "Runnability gaps in the first steps: L216 install omits transformers/torch; the reconfigure excerpt (L612) relies on user_config always being set.",
+   "Fact handling: kubectl describe output relabelled under 'Active Service Status' (L1221) and the proxy default stated both ways (L138 head-only vs L771 EveryNode)."
+  ],
+  "mean_score": 8.18
+ },
+ "preference": {
+  "overall": "Y",
+  "per_criterion": {
+   "A": "Y",
+   "B": "X",
+   "C": "Y",
+   "D": "tie",
+   "E": "tie",
+   "F": "Y",
+   "G": "tie",
+   "T1": "Y",
+   "T2": "tie",
+   "T3": "X",
+   "X1": "tie"
+  },
+  "reason": "Both are long, well-sourced guides with similar coverage and depth. Y keeps its running example coherent through the config and KubeRay steps (it defines reconfigure before using user_config), cross-references resolve, and it closes with explicit failure modes; its errors are a relabelled kubectl output and a proxy-default contradiction. X has slightly richer internals (autoscaling signals, LLM 2:1 ratio arithmetic, preserved/lost fault table) and better Korean terminology, but its example breaks at deployment (user_config without reconfigure, a dangling 'reconfigure added earlier'), plus an orphaned example, a one-sentence subsection, an undelivered GCS FT promise and duplicated code. The margin is modest."
+ }
+}

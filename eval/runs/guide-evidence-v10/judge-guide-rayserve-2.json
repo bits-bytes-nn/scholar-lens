@@ -1,0 +1,106 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v10.md",
+  "judge_run": 2,
+  "scores": {
+    "A": 8.5,
+    "B": 7.5,
+    "C": 8.0,
+    "D": 8.5,
+    "E": 8.5,
+    "F": 7.5,
+    "T1": 8.5,
+    "T2": 7.5,
+    "T3": 8.0
+  },
+  "score_evidence": {
+    "A": "Front matter valid (no author, two-level categories, use_math with $$ present, description 131 chars opening with 'Ray Serve'); no H1, no skipped levels. Deduction: headings are long noun stacks, e.g. L984 '독립 확장이 필요한 Python 파이프라인에 맞고 모델별 최적화 서버로는 부족한 선택지', L575 'serve build·serve deploy·serve status로 다루는 단일 진실 공급원 Serve 설정 파일'.",
+    "B": "Mostly natural 입니다 register. Deductions: restatement crutches 'L21 결국 모델마다 자원과 레플리카 수를 따로 정해야 하는데' / 'L93 그래서 장애 복구는 결국 ...로 정리됩니다' / 'L138 결국 C++ CoreWorker가'; meta framing 'L157 아래는 그 액터들이 기대는 Ray 원 논문의 설계입니다' (rewrite: 'Serve 액터는 Ray 원 논문이 설계한 실행 기반 위에서 돕니다.'); calque '단일 진실 공급원' used three times (L577, L824); awkward heading L984 (rewrite: 'Ray Serve가 맞는 경우와 맞지 않는 경우').",
+    "C": "Coherent arc problem -> units -> internals -> Ray base -> quickstart -> composition -> HTTP -> config -> KubeRay -> scaling -> observability -> choice. Deductions: L997 '(앞서 다룬 스케일링 기본 요소)' points to request batching, which the post never covers; L763 forward-anchors serveConfigV2 to 'KubeRay 이슈 #2557' instead of the docs; L990 says '표에서도 열을 나눴습니다' but the table at L992-995 splits rows, not columns, by source.",
+    "D": "Good worked examples at hard points: power-of-two-choices table L124-132, backpressure arithmetic L841, cancellation propagation L567. Deduction: trivial arithmetic padded (L871 '$$1 / 0.25 = 4$$ ... $$4 \\times 0.25 = 1$$장'); 30-line Ray-paper scheduler worked example L183 is long for its payoff.",
+    "E": "7 tables, ASCII diagrams, 30 code blocks placed where discussed. Deductions: no Serve architecture figure (official architecture-2.0.svg exists) - only ASCII L103-114; L990 table header claim mismatched with layout.",
+    "F": "Claim sample 14/15 supported, 1 wrong: L659-682 presents a fabricated 'serve build가 막 출력한 파일' (app name 'default', 'num_replicas: 1' for both deployments). Running serve build on the post's own text_ml.py with Ray 2.60.0 yields 'name: app1', no num_replicas, plus logging_config and grpc 'enable_reflection: true'; the docs only show the hand-edited version. Outside the sample: L97 and L794 call the official Ray docs page architecture.md (docs.ray.io/en/latest/serve/architecture.html source) a '서드파티 문서'; Sources list omits cited discuss.ray.io answer (L800), Bhairav blog (L986, L995) and Serve LLM observability docs (L982), and lists an irrelevant 'take_batch' Ray Data page (L1026). L573 keep-alive '5초' matches docs prose but the 2.60 API default is 90 s (docs inconsistency, not penalized).",
+    "T1": "Running example executes as pasted (ports substituted only): quickstart, composed app, FastAPI variant, text_ml.py via serve deploy, streaming handle and StreamingResponse all worked. Deductions: the shown serve build output does not match what readers will get (L661-682); sklearn example depends on an unshown training script (L282 acknowledges).",
+    "T2": "Covers composition, handles, HTTP/FastAPI, config, KubeRay, backpressure, observability. Gaps: autoscaling_config (min/max replicas, target_ongoing_requests) never taught although the scaling section L818-881 is about load; @serve.batch request batching absent though the index page lists it as a core primitive; model multiplexing only named L1011. Padding: Ray 2018 paper section L155-185 (GCS chain replication, bottom-up scheduler) is weakly tied to Serve operation.",
+    "T3": "Strong internals: controller/proxy/replica actors, p2c routing, autoscaler in controller with metric push, failure ownership table L148-153, cancellation semantics, KubeRay vs Serve recovery scope, PodMonitor rationale. Deductions: L183 applies the 2018 paper's local/global scheduler to placing a current Translator replica as if it were today's mechanism (modern Ray schedules actors via GCS), not named as that version's; official architecture doc mislabeled third-party (L97, L794)."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L91 '컨트롤러·프록시·레플리카 액터를 거치는 요청 수명주기와 장애 복구', L830 '레플리카당 한도와 호출자별 큐로 나뉘는 백프레셔'; some overlong (L984)."},
+    "running_example": {"status": "met", "evidence": "translator_app / Summarizer->Translator introduced L23-28 and carried through config (L583), KubeRay (L768), backpressure (L841), GPU (L861), choice (L1011)."},
+    "mechanism_design_code_example": {"status": "met", "evidence": "p2c: mechanism L122 -> numeric table L126-130; backpressure: table L834 -> arithmetic L841 -> YAML L845."},
+    "facts_said_once": {"status": "partly met", "evidence": "rolling_update_percentage (0.0, 1.0] and http_options host/port immutability stated at L710 and again L796; route_prefix rules L529 and L802; programmable API vs YAML L15 and L30; framework-agnostic L13, L19, L986."},
+    "numbers_with_scope": {"status": "met", "evidence": "L1001 cold-start numbers carry hardware, workloads and the author's 'not a benchmark' caveat; L881 3~4배 scoped to embedding models on A10G."},
+    "nothing_invented": {"status": "partly met", "evidence": "Raw serve build output L661-682 invented; illustrative code/diagrams are labelled (L101 '이해를 돕기 위한 예시', L427 '설명용 코드')."},
+    "own_assessment_at_end": {"status": "met", "evidence": "L1011 '이 글의 판단으로는, ... t5-small 하나만 CPU에서 서빙한다면 순수 FastAPI가 더 단순'."},
+    "length_fitted": {"status": "partly met", "evidence": "~35k prose chars; Ray-paper section L155-185 and Serve LLM paragraph L982 add length while autoscaling and batching are missing."},
+    "type_specific_shape": {"status": "met", "evidence": "Opens with TL;DR L11 and problem L21; architecture/internals L91-185 before config L575; closes with when-to-choose and failure modes L984-1011."},
+    "korean_style": {"status": "partly met", "evidence": "'결국' restatements L21, L93, L138; meta sentence L157; noun-stack headings."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 1,
+    "unverifiable": 0,
+    "sampling": "Prose paragraphs (excluding headings, code, tables) numbered from TL;DR; started at paragraph 2 and took every third (2,5,8,...,137); 15 claims chosen from those paragraphs, 9 numeric.",
+    "examples": [
+      {"line": 34, "claim": "LLM features: response streaming, dynamic request batching, multi-node/multi-GPU serving", "verdict": "supported", "source": "serve/index: 'features ... for serving Large Language Models such as response streaming, dynamic request batching, multi-node/multi-GPU serving'"},
+      {"line": 122, "claim": "DeploymentHandle picks replicas with power of two choices", "verdict": "supported", "source": "serve/architecture: 'Queries are sent to replicas using a power of two choices scheduling strategy'"},
+      {"line": 136, "claim": "Autoscaler runs in the controller; handles and replicas push metrics", "verdict": "supported", "source": "serve/architecture: 'The Serve Autoscaler runs in the Serve Controller actor. Each DeploymentHandle and each replica periodically pushes its metrics'"},
+      {"line": 243, "claim": "num_replicas=2, num_cpus 0.2, num_gpus 0; HPU/TPU via resources dict", "number": true, "verdict": "supported", "source": "getting_started: decorator line and 'resources: ... non-GPU accelerators like HPUs or TPUs'"},
+      {"line": 257, "claim": "Default HTTP address http://127.0.0.1:8000/ for serve run", "number": true, "verdict": "supported", "source": "develop-and-deploy: 'Reach it at the following default URL: http://127.0.0.1:8000/'"},
+      {"line": 278, "claim": "Table cells: TF reshape (1, 28, 28) and {prediction, file}; PyTorch resnet18(pretrained=True).eval(), batch size 1; sklearn {result}", "number": true, "verdict": "supported", "source": "serve-ml-models: 'input_array.reshape((1, 28, 28))', 'return {\"prediction\": ..., \"file\": self.model_path}', '# Our current batch size is one'"},
+      {"line": 436, "claim": "Passing DeploymentResponse inside nested objects is fully deprecated and unsupported; use _to_object_ref()", "verdict": "supported", "source": "model_composition: 'fully deprecated and no longer supported. Please manually use DeploymentResponse._to_object_ref()'"},
+      {"line": 581, "claim": "Summarizer user_config min_length/max_length defaults 5 and 15; Translator language default french", "number": true, "verdict": "supported", "source": "doc_code/production_guide/text_ml.py: 'self.min_length = 5', 'self.max_length = 15', 'config.get(\"language\", \"french\")'"},
+      {"line": 659, "claim": "Freshly generated serve build file: app 'default', Translator/Summarizer 'num_replicas: 1', grpc_options port 9000, runtime_env {}", "number": true, "verdict": "wrong", "source": "Ran 'serve build text_ml:app' (Ray 2.60.0) on the post's file: 'name: app1', deployments without num_replicas, extra logging_config and enable_reflection: true; CLI logs 'application names default to app1'. Docs show only the edited file."},
+      {"line": 753, "claim": "PUT /api/serve/applications/ removes apps not in the new config, starts Serve if not running", "verdict": "supported", "source": "serve/api REST: 'If Serve is already running ... removes all applications not listed in the new config. If Serve is not running ... starts Serve.'"},
+      {"line": 794, "claim": "KubeRay recovers crashed nodes/cluster; GCS FT avoids cluster crashes; without KubeRay Serve cannot recover cluster failure", "verdict": "supported", "source": "serve/architecture: 'KubeRay recovers crashed nodes or a crashed cluster. You can avoid cluster crashes by using the GCS FT feature.' Note: post labels this official page a '서드파티 아키텍처 문서'."},
+      {"line": 837, "claim": "max_queued_requests per caller, default -1 unlimited; BackPressureError for handles, HTTP 503 by default", "number": true, "verdict": "supported", "source": "serve.deployment docstring: 'queued at each *caller* (proxy or DeploymentHandle) ... BackPressureError ... HTTP 503 ... Defaults to -1 (no limit)'"},
+      {"line": 899, "claim": "overrides.yaml enables allow_embedding: true and anonymous Viewer; RAY_GRAFANA_IFRAME_HOST must change if Grafana exposed on another port; port-forward not for production", "verdict": "supported", "source": "prometheus-grafana: overrides block, 'You need to update RAY_GRAFANA_IFRAME_HOST if you expose Grafana to a different port', 'kubectl port-forward is not recommended for production use'"},
+      {"line": 952, "claim": "Default alert fires when GCS metric absent for 5m; group interval 30s", "number": true, "verdict": "supported", "source": "prometheus-grafana: 'interval: 30s', 'for: 5m', absent(ray_gcs_update_resource_usage_time_bucket)"},
+      {"line": 1001, "claim": "Python Data Bench cold start: Ray Serve ~6s (cluster init), BentoML ~2.5s, Triton ~3.5s, FastAPI ~1s; g5.xlarge/m6i.large, XGBoost + 350M transformer, three workloads, not a benchmark", "number": true, "verdict": "supported", "source": "pythondatabench table row 'Cold start (warm container) ~2.5s | ~6s (cluster init) | ~1s | ~3.5s' and 'averaged across three workloads ... not hard benchmarks'. Minor: row label 'warm container' not carried."}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 1,
+    "na": 1,
+    "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "verdict": "avoided", "evidence": "No empty-text or ../_images links; the only image L173 has Korean alt text and a local /assets/ URL. The Serve architecture is shown as ASCII (L103-114), not the official SVG."},
+      {"id": "proxy-env-ray-start-unsupported", "verdict": "n/a", "evidence": "Post does not discuss proxy env vars or 'ray start' (grep finds neither)."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 91,
+    "running_example_first_line": 23,
+    "sources_listed": 17,
+    "non_official_sources": 4,
+    "non_official_share": 0.24,
+    "non_official_list": ["paper.lingyunyang.com OSDI'18 Ray notes", "themutex.substack.com Danshyn", "pythondatabench.com", "kuberay GitHub issue #2557"],
+    "cited_but_unlisted": ["discuss.ray.io answer (L800)", "Suhas Bhairav Triton vs Ray Serve blog (L986, L995)", "Ray Serve LLM observability docs (L982)"],
+    "irrelevant_listed": ["take_batch Ray Data API page (L1026)"],
+    "opens_with_problem": true,
+    "closes_with_choice_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "runs as pasted (only the HTTP port changed for isolation)",
+    "environment": "Ray 2.60.0, private local cluster in temp dir on non-default ports, Python 3.12, torch+transformers, t5-small from Hugging Face",
+    "results": [
+      "L58-74 MyFirstDeployment: assert passed",
+      "L205-241 serve_quickstart.py via 'serve run' + L259 client: 'Bonjour monde!' (post says 'Bonjour Monde!', same as docs prose)",
+      "L333-388 serve_quickstart_composed.py + L404 client: 'C'était le meilleur des temps, c'était le pire des temps,'",
+      "L488-523 FastAPI Translator + params client: 200 'Bonjour monde!'",
+      "L583-651 text_ml.py + L686 config (runtime_env pip removed, port changed) via serve deploy: RUNNING, correct French output; serve status layout matches L727-745 plus status_trigger/target_capacity fields",
+      "L442-469 Streamer/Caller via handle options(stream=True): [0,1,2,3,4]",
+      "L539-565 StreamingResponder: streamed chunks, 'Cancelled! Exiting.' logged on disconnect",
+      "L655 serve build: output differs from post L661-682 (app1, no num_replicas, extra logging_config)"
+    ],
+    "not_run": "sklearn BoostingModel (needs unshown training script); Hello/World ingress and chaining snippets are prose/fragments."
+  },
+  "top_issues": [
+    "Fabricated 'just-generated' serve build output (L659-682): real 2.60 output names the app app1, has no num_replicas, and includes logging_config.",
+    "Scaling section never teaches autoscaling_config or @serve.batch, both core Serve primitives; L997 even cross-references batching as 'already covered'.",
+    "Source handling: official architecture doc called third-party (L97, L794); cited forum/Bhairav/Serve LLM sources missing from Sources while an irrelevant take_batch page is listed; repeated facts (L710/L796, L529/L802)."
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "item": "review-dpo",
+  "run": 2,
+  "post": "eval/baselines/2026-11-03/out/review-dpo.md",
+  "source": "arXiv 2305.18290v3 HTML (full text incl. appendices); arXiv abs 2110.11487 for one cited-work claim",
+  "sampling": "150 prose paragraphs (headings, display math, images, rules excluded); paragraphs 2,5,8,...,149; claims drawn from P2, P8, P26, P50, P116, P119, P122, P131, P134, P140, P41, P149 (and the TL;DR/body numbers they point to)",
+  "scores": {"A": 8, "B": 8, "C": 8, "D": 8, "E": 8, "F": 8},
+  "type_scores": {"R1": 9, "R2": 9, "R3": 8, "X1": 7, "G": "pass (description 136 chars, starts with DPO, numbers 61%/57% from TL;DR; use_math true; https links)"},
+  "score_notes": {
+    "A": "Clean Jekyll markup: no body H1, no skipped levels, $$ only, fenced code, real tables, subtitle/paper_author/paper_doi, two-level categories. Deductions: L581 '### 정리: 정책과 보상 사이의 대응' (paper-conclusion recap) is nested inside the OOD/GPT-4 section rather than the closing; L35-59 reads as an intro/contributions recap after the TL;DR ('L55 저자들이 주장하는 기여는 다음과 같습니다').",
+    "B": "Natural 입니다 register held throughout, terms consistent (브래들리-테리, 분배 함수, 암묵적 보상). Deductions: repeated frames 'L180 이 상쇄가 미묘한 이유는' / 'L399 이 해석이 미묘한 이유는', 'L192 이유가 여기에 있습니다' / 'L401 근거가 여기에 있습니다'; formulaic 'L142 이 유도에서 놓치기 쉬운 점이 있습니다.'; calque 'L53 암묵적 보상에 대한 최적 정책' (-> '암묵적 보상의 최적 정책'); frequent '즉' restatements (L51, L134, L377, L395, L417, L488).",
+    "C": "Concepts precede use; '앞서' back-references are accurate; the 0.5/0.3/0.2 toy carries through L146, L160, L369. Deductions: L441 and L443 say the same thing in adjacent paragraphs; L583 conclusion recap interrupts the evaluator section.",
+    "D": "Hard steps get strong help at the right moment (L146 closed-form toy, L160 reward recovery, L194 loss magnitude, L246-254 weight table, L369 projection check, L429 baseline-variance example). Deductions for padding the easy: L97 KL definition, L322 equivalence-relation axioms with a mod-3 example, L504 sampling-temperature definition, L565 inter-annotator agreement definition.",
+    "E": "Code verbatim from the paper (L283-308), tables verbatim (L554-557, L567-575 incl. 272/122/199 and '-'), figures referred to descriptively. Deduction: L528-534 two Best-of-N figures introduced with near-identical one-liners ('다음은 ... 그래프입니다', '같은 비교를 ... 그래프입니다') and never read.",
+    "F": "All 15 sampled claims supported; no wrong number, sign, or formula found (gradient weight sigma(r(y_l)-r(y_w)) consistent at L25, L241, L244, L262; |V|^L at L150). Deductions: L563 '자원봉사자 25명입니다' omits that one late volunteer was excluded from the analysis (App. D.3); L587 '데이터가 SFT 분포와 다른 정책에서 생성되었을 때 결과가 얼마나 유지되는지는 검증되지 않았습니다' overstates — TL;DR preferences came from a different SFT model and HH responses from an unknown LM (Sec. 6), so the paper partly exercises that setting."
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Claim headings L35, L403, L475, L490, L506; but sentence-form '~다' headings forbidden by 5.1: L39 '...강화학습을 돌린다', L316 '...사실 보상 모델이다', L330/L338 '...구분하지 못한다', L346 '...표현된다', L371 '...하나뿐이다', L506 '...넘어서다'; topic headings L279 '구현', L312 '기본 하이퍼파라미터', L536 '수렴 속도'."},
+    "running_example": {"status": "partly met", "evidence": "Three-response toy (0.5/0.3/0.2, r=0/1/2) reused L146, L160, L369; no running input through the experiments."},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "L148 problem (Z(x) intractable) -> L154 design (invert) -> L157/L187 formula -> L160/L194 numeric example; gradient L236-254 same order."},
+    "facts_said_once": {"status": "partly met", "evidence": "Z(x) cancellation restated L21, L166, L180, L196, L208, L397, L441, L443; Best-of-128 proxy L526 and L587; beta not tuned L512 and L589; S/C prompts L463 and L579."},
+    "numbers_with_scope_unit": {"status": "met", "evidence": "Win rates carry task/temperature (L30, L512, L514, L554), sweep values per method (L483-486), 6B(60억) L55/L589."},
+    "nothing_invented": {"status": "mostly met", "evidence": "Every toy is flagged as hypothetical (L146, L194, L246, L328, L369, L429). Beyond-source content: L111 RWR/AWR/distribution-matching detail and L218 BTL-MLE paper description (consistent with 2110.11487 abstract); L587 overstated 'not verified'."},
+    "writer_assessment_at_end": {"status": "partly met", "evidence": "Own judgement at L587 and L591 (when to choose DPO vs PPO), but L589 re-lists the paper's future work and L583 recaps its conclusion."},
+    "length_fitted_to_difficulty": {"status": "partly met", "evidence": "596 lines; theory sections earn length, but background padding (L97, L322, L504, L565) and repeated Z(x) explanations inflate it."},
+    "type_specific_shape": {"status": "met", "evidence": "Four-question TL;DR L15-31, method, theory, experiments, limitations L585-591."},
+    "korean_style": {"status": "partly met", "evidence": "입니다 register and Korean headings kept; repeated frames (L180/L399, L192/L401, L528/L532) and '~다' headings."}
+  },
+  "claims": {
+    "checked": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numbers": 10,
+    "examples": [
+      {"para": "P2", "line": 41, "claim": "Most successful class is RLHF (incl. RLAIF/Constitutional AI); instruction tuning on instructions + human-written completions", "verdict": "supported", "source": "Sec 1/2: 'the most successful class of methods is reinforcement learning from human (or AI) feedback (RLHF/RLAIF; [12, 2])'; 'fine-tuning on datasets of instructions and human-written completions'"},
+      {"para": "P8", "line": 59, "claim": "von Neumann winner: expected win rate >= 50% against any policy", "verdict": "supported", "source": "Sec 2: 'a policy whose expected win rate against any other policy is at least 50%'"},
+      {"para": "P8", "line": 59, "claim": "CDB labels are online, human preference learning uses a fixed offline batch", "verdict": "supported", "source": "Sec 2: 'in the CDB setting, preference labels are given online, while in learning from human preferences, we typically learn from a fixed batch of offline preference-annotated action pairs'"},
+      {"para": "P26", "line": 150, "claim": "Number of responses |V|^L; estimating Z(x) expensive even with MLE r_phi", "verdict": "supported", "source": "Sec 4: 'it is still expensive to estimate the partition function Z(x)'; |V|^L is the correct count"},
+      {"para": "P41", "line": 218, "claim": "DPO enjoys consistency under suitable assumptions, citing BTL MLE results that allow near-degenerate win probabilities and arbitrary comparison graphs", "verdict": "supported", "source": "Sec 4: 'consistencies under suitable assumption of the preference data distribution [4]'; arXiv 2110.11487 abstract: 'near-degenerate winning probabilities and arbitrary comparison designs ... existence of the MLE'"},
+      {"para": "P50", "line": 254, "claim": "Misordered pair gets ~20x (0.953/0.047) the update (labelled hypothetical, beta=0.1, +/-3)", "verdict": "supported", "source": "Arithmetic: sigma(3)=0.9526, sigma(-3)=0.0474, ratio 20.1; flagged as writer's example at L246"},
+      {"para": "P116", "line": 457, "claim": "Anthropic HH has 170k dialogues from an unknown LM", "verdict": "supported", "source": "Sec 6: 'containing 170k dialogues ... generated by a large (although unknown) language model'"},
+      {"para": "P116", "line": 457, "claim": "No SFT model; off-the-shelf Pythia-2.8B fine-tuned on preferred completions as reference", "verdict": "supported", "source": "Sec 6: 'we therefore fine-tune an off-the-shelf language model on only the preferred completions to form the SFT model'"},
+      {"para": "P119", "line": 467, "claim": "Zero-shot GPT-J for summarization, 2-shot Pythia-2.8B for dialogue; Preferred-FT from SFT (sentiment, summarization) or generic LM (dialogue)", "verdict": "supported", "source": "Sec 6: 'zero-shot prompting with GPT-J ... 2-shot prompting with Pythia-2.8B'; 'from either the SFT model (in controlled sentiment and summarization) or a generic LM (in single-turn dialogue)'"},
+      {"para": "P122", "line": 483, "claim": "Sweep PPO target KL {3,6,9,12}, DPO beta {0.05,0.1,1,5}, unlikelihood alpha {0.05,0.1,0.5,1}, seeds for Preferred-FT; 22 runs; eval every 100 steps", "verdict": "supported", "source": "Sec 6.1: 'target KL ∈ {3,6,9,12} for PPO, β ∈ {0.05,0.1,1,5}, α ∈ {0.05,0.1,0.5,1} ... This sweep includes 22 runs in total. After each 100 training steps'"},
+      {"para": "P131", "line": 514, "claim": "Humans preferred DPO (temp 0.25) over PPO (temp 0) 58% of the time; PPO can fall to base GPT-J at high temperature", "verdict": "supported", "source": "Sec 6.2: 'DPO samples at temperature 0.25 were preferred 58% times over PPO samples at temperature 0'; 'PPO's performance ... to that of the base GPT-J model at high temperatures'"},
+      {"para": "P134", "line": 526, "claim": "Public HH PPO model never beat base Pythia-2.8B; Best of 128 used as rough PPO proxy", "verdict": "supported", "source": "Sec 6.2: 'fail to find a prompt or sampling temperature that gives performance better than the base Pythia-2.8B model ... we consider Best of 128 a rough proxy for PPO-level performance'"},
+      {"para": "P140", "line": 554, "claim": "CNN/DM win rate vs ground truth: DPO 0.36/0.31, PPO 0.26/0.23 at temp 0/0.25", "verdict": "supported", "source": "Table 1: 'DPO 0.36 0.31; PPO 0.26 0.23'"},
+      {"para": "P149", "line": 589, "claim": "Models evaluated up to 6B; scaling orders of magnitude larger left to future work", "verdict": "supported", "source": "Sec 7: 'while we evaluate models up to 6B parameters, exploration of scaling DPO to state-of-the-art models orders of magnitude larger is an exciting direction'"},
+      {"para": "P149", "line": 589, "claim": "Open questions: self-labeling to use unlabeled prompts, reward over-optimization (slight decrease late in dialogue training), eliciting judgments from automated systems, other modalities", "verdict": "supported", "source": "Sec 7: 'can training with self-labeling from the DPO policy similarly make effective use of unlabeled prompts?'; 'is the slight decrease in performance in Figure 3-right an instance of it?'; Figure 3 right = dialogue training progress"}
+    ]
+  },
+  "checklist": {
+    "repeated": 1,
+    "avoided": 15,
+    "na": 1,
+    "repeated_ids": ["excluded-participant"],
+    "items": {
+      "implementation-fragment": {"status": "avoided", "evidence": "L266-275: two-step pipeline; pi_ref = pi^SFT if available, else MLE on y_w; no broken fragment"},
+      "beta-tldr": {"status": "avoided", "evidence": "L26/L314 'TL;DR 요약에서만 β=0.5'"},
+      "future-work-ranking-invented": {"status": "avoided", "evidence": "L589 lists automated evaluators and other modalities; no conditional preferences"},
+      "plackett-luce-not-future": {"status": "avoided", "evidence": "L198-214 derives the Plackett-Luce DPO loss as done"},
+      "ppo-clip-objective": {"status": "n/a", "evidence": "L103 describes clipping in prose only; no PPO formula"},
+      "partition-function-size": {"status": "avoided", "evidence": "L150 '그 수는 |V|^L로 늘어나고'"},
+      "cnn-dm-prompt-variant": {"status": "avoided", "evidence": "L552 'TL;DR에서 쓴 C 프롬프트에서 \"forum post\"를 \"news article\"로만 바꿨습니다'"},
+      "human-study-columns": {"status": "avoided", "evidence": "L563 '모두 가장 좋은 온도인 0의 PPO를 상대로'; L567 columns DPO | SFT | PPO-1 as in paper Table 2; no PPO-N"},
+      "human-study-respondents": {"status": "avoided", "evidence": "L569 '응답 수 | 272 | 122 | 199'"},
+      "multi-judgment-comparisons": {"status": "avoided", "evidence": "L563 'DPO와 PPO-1 비교에는 평가자를 두 명씩, SFT 비교에는 한 명씩'"},
+      "overoptimization-figure-ref": {"status": "avoided", "evidence": "L589 '대화 학습 곡선 후반의 약간의 성능 하락' ties it to the dialogue training-progress plot (L538-540)"},
+      "gradient-u-definition": {"status": "avoided", "evidence": "L238 defines u = r(y_l) - r(y_w) with loss -log sigma(-u); opposite sign convention to the check's wording but every step is consistent and yields the correct L241 gradient, so the sign defect is not repeated"},
+      "gradient-sigma-argument": {"status": "avoided", "evidence": "L25, L241, L244, L262 all use sigma(r(y_l) - r(y_w)); L250-252 table near 1 when misordered"},
+      "best-of-n-invented": {"status": "avoided", "evidence": "L528 only 'Best of N의 성능이 대략 64~128개 샘플 이후로 포화'"},
+      "excluded-participant": {"status": "repeated", "evidence": "L563 '... 자원봉사자 25명입니다.' with no mention that one late volunteer was excluded"},
+      "missing-description": {"status": "avoided", "evidence": "L9 description starts 'DPO는', 136 chars, numbers 61%/57% appear in TL;DR L30"},
+      "arxiv-https": {"status": "avoided", "evidence": "L596 https://arxiv.org/pdf/2305.18290v3; all arxiv links https"}
+    }
+  },
+  "extras": {
+    "taxonomy": "categories ['Paper Reviews','Finetuning'] fine; tags 'RL-Free-Preference-Learning' and 'Reward-KL-Frontier' are long, title-like and not reusable"
+  },
+  "top_issues": [
+    "Human-study participants: L563 says 25 volunteers without noting one was excluded from analysis (human-fix repeat).",
+    "Sentence-form '~다' headings (L39, L316, L330, L338, L346, L371, L506) and repeated Z(x)-cancellation explanations (L166/L180/L196/L397/L441/L443) inflate a 596-line post.",
+    "Closing leans on the paper: L583 conclusion recap misplaced in the OOD section and L589 re-lists the paper's future work; L587 overstates that non-SFT-sampled data is untested."
+  ]
+}

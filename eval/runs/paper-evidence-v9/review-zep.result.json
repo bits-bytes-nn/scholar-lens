@@ -1,0 +1,129 @@
+{
+  "kind": "review",
+  "status": "succeeded",
+  "input": "2501.13956",
+  "title": "Zep: A Temporal Knowledge Graph Architecture for Agent Memory",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2501_13956/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Agentic-AI' (or its acronym) does not appear in the paper; check it fits.",
+    "Evidence that misstates its quote was left out: E4 (Claim adds that the bidirectional index was not verified in experiments and is future work; the quote says nothing like )",
+    "Section '시간에 따라 바뀌는 사실을 따라가야 하는 에이전트 메모리': the writer could not fix: 첫 문단을 지워서 섹션이 가상 예시로 시작합니다. 남은 근거만으로 도입 문장을 새로 쓸 수 없었습니다.",
+    "Section '정적 RAG와 전체 컨텍스트 주입이 놓치는 시간에 따라 변하는 기억': check 5 sentence(s) the evidence may not support: 에이전트 메모리를 어렵게 만드는 것은 사실의 양보다 사실이 바뀐다는 데 있습니다. (unsupported: No evidence; framing claim about the problem not given in the sources.) | 대화 이력을 통째로 프롬프트에 넣으면 대화가 길어질수록 컨텍스트가 커지고, 오래된 진술과 새 진술이 같은 무게로 섞여 들어갑니다. (unsupported: No evidence.) | 정적인 문서 말뭉치를 전제로 한 RAG는 관련 조각을 찾아올 수는 있습니다. (unsupported: No evidence.) | 하지만 그 조각이 지금도 유효한지, 다른 조각이 그것을 뒤집었는지는 판단하지 못합니다. (unsupported: No evidence.) | 여기에 각 사실이 언제부터 언제까지 유효했는지를 기록하는 시간 축을 더한 것이 Zep의 출발점입니다. (unsupported: Validity intervals are not described in the given sections. (not supported: 각 사실이 언제부터 언제까지 유효했는지를 기록하는 시간 축))",
+    "Section '에피소드, 의미 엔티티, 커뮤니티로 이루어진 세 계층 그래프': check 2 sentence(s) the evidence may not support: 여기서 $$\\phi^{*}$$는 논문이 따로 정의하지 않지만, 노드 쌍 집합을 받아 그 쌍들을 잇는 엣지 집합을 돌려주는 $$\\phi$$의 역상으로 읽을 수 있습니다. (unsupported: The paper never defines φ*, and nothing in the cited sources backs reading it as an inverse image. (not supported: φ*를 φ의 역상으로 읽는 해석)) | 이 엣지가 Zep이 말하는 '사실'에 해당합니다. (unsupported: This section never says that entity edges are what Zep calls 'facts'. (not supported: 의미 엣지가 Zep의 '사실'에 해당))",
+    "Section '이중 시간 모델과 엣지 무효화로 이루어진 사실의 수명 관리': the writer could not fix: 모순 탐지 정확도가 무엇에 달려 있는지에 대한 필자 판단은 이 섹션에서 지웠습니다. 마지막 섹션은 이번 수정 범위 밖이라 그쪽으로 옮기지는 못했습니다.",
+    "Section '문맥 창, 반성 기법, 범위를 좁힌 중복 제거로 엔티티와 사실 추출' still has: a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '검색, 재순위, 구성의 세 단계로 이루어진 메모리 검색 함수': the writer could not fix: 재순위 수치 예시는 '$$\\varphi$$는 검색 함수입니다' 문단이 아니라 재순위 절에 넣었습니다. 그 단계가 실제로 설명되는 곳이 거기라서입니다. RRF 계산은 가상의 예라고 표시했고 상수 k=60은 논문에 나오지 않습니다.",
+    "Section 'LongMemEval에서 컨텍스트를 115k 토큰에서 1.6k 토큰으로 줄이고도 높아진 정확도': the writer could not fix: The 2024–2025 experiment dates are not in the evidence, so I removed that sentence instead of citing it.",
+    "Section '선호도 질문에 집중된 질문 유형별 개선': check 2 sentence(s) the evidence may not support: 이직 예시에 비춰 보면, 이 유형은 구성 단계가 A사와 B사 두 사실에 각각 유효기간을 붙여 넘겼을 때 모델이 날짜 범위를 읽고 B사를 현재 사실로 골라야 맞힐 수 있는 질문입니다. (unsupported: The paper never says that knowledge-update questions are answered by reading the date ranges on facts. (not supported: 모델이 날짜 범위를 읽고 B사를 현재 사실로 골라야 맞힐 수 있는 질문)) | 그런데 이 유형은 어시스턴트가 했던 말 자체를 회상해야 하는 질문입니다. (unsupported: The paper does not define this question type in the material provided. (not supported: 어시스턴트가 했던 말 자체를 회상해야 하는 질문))",
+    "Section '이중 시간 모델과 엣지 무효화로 이루어진 사실의 수명 관리': 1 edit(s) not applied: find occurs 0 times: '예를 들어 가상의 사용자가 3월에 A사로, 6월에 B사로 옮겼다고 해 보겠습니다. 이 가상의 예시에서 3월 '",
+    "Section 'DMR에서 전체 대화 기준선과 MemGPT를 근소하게 넘는 정확도': whole-post review problems left as they were: 상위 10개 검색, LLM 심판 채점, gpt-4o-mini에서 재현하지 못한 이유, 저자들의 벤치마크 비판 문단 같은 논문 주장에 근거 표시가 없습니다. Fix: 각 주장에 해당하는 근거 표시를 붙이거나, 뒷받침할 수 없는 내용은 삭제합니다.",
+    "Section 'TL;DR': the writer could not fix: 근거에 MemGPT의 DMR 수치(93.4%)가 없어서, 차이는 근거에 있는 전체 대화 기준선(94.4%)과 비교해 %p로 적었습니다. single-session-assistant의 하락은 근거에 하락 전후 정확도가 없고 17.7%와 9.06%의 하락폭만 있습니다. 이 수치가 상대값(%)인지 절대값(%p)인지도 알 수 없어서 %p로 바꾸지 않았습니다."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 805.7,
+  "input_tokens": 838513,
+  "output_tokens": 78282,
+  "estimated_cost_usd": 4.2684,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 87,
+      "failed_calls": 0,
+      "input_tokens": 234766,
+      "output_tokens": 78282,
+      "cache_read_tokens": 256813,
+      "cache_write_tokens": 346934,
+      "cost_usd": 4.268421
+    },
+    "by_stage": {
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 235,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001889
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 4050,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 5201,
+        "cost_usd": 0.107021
+      },
+      "verify": {
+        "calls": 32,
+        "failed_calls": 0,
+        "input_tokens": 139545,
+        "output_tokens": 21902,
+        "cache_read_tokens": 109510,
+        "cache_write_tokens": 61531,
+        "cost_usd": 1.347681
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 21626,
+        "cache_read_tokens": 34570,
+        "cache_write_tokens": 176291,
+        "cost_usd": 1.327981
+      },
+      "review": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 9528,
+        "cache_read_tokens": 16860,
+        "cache_write_tokens": 43363,
+        "cost_usd": 0.414307
+      },
+      "fix": {
+        "calls": 29,
+        "failed_calls": 0,
+        "input_tokens": 77405,
+        "output_tokens": 20714,
+        "cache_read_tokens": 95234,
+        "cache_write_tokens": 58678,
+        "cost_usd": 1.05538
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 227,
+        "cache_read_tokens": 639,
+        "cache_write_tokens": 1870,
+        "cost_usd": 0.014162
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 235,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001889
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 86,
+        "failed_calls": 0,
+        "input_tokens": 217050,
+        "output_tokens": 78047,
+        "cache_read_tokens": 256813,
+        "cache_write_tokens": 346934,
+        "cost_usd": 4.266532
+      }
+    }
+  }
+}

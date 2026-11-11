@@ -1,0 +1,130 @@
+{
+  "kind": "review",
+  "status": "succeeded",
+  "input": "2501.13956",
+  "title": "Zep: A Temporal Knowledge Graph Architecture for Agent Memory",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2501_13956/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-06-07-zep-a-temporal-knowledge-graph-architecture-for-agent-memory.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Hybrid-Graph-Search' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Agentic-AI' (or its acronym) does not appear in the paper; check it fits.",
+    "Evidence that misstates its quote was left out: E4 (Claim adds an unstated limitation (not validated in experiments, future work) not in the quote.)",
+    "Section '원문, 엔티티, 커뮤니티로 나뉜 세 계층 그래프': the writer could not fix: 양방향 인덱스 문장(의미 엣지↔출처 에피소드)은 추가하지 않았습니다. 제공된 근거와 이 절의 원문 어디에도 양방향 인덱스나 출처 추적 이야기가 없어서, 넣으면 근거 없는 주장이 됩니다. 같은 이유로 출처 추적 문장도 지웠습니다. φ*의 정의는 논문에 없습니다. 그래서 역상으로 '읽을 수 있다'는 해석으로 표시해 두었습니다.",
+    "Section '두 개의 타임라인과 엣지 무효화로 유지하는 사실의 시간성': check 2 sentence(s) the evidence may not support: 정적 그래프 RAG의 사실 엣지에는 보통 시간 개념이 없습니다. (unsupported: Paper does not state this about static graph RAG.) | 이렇게 나누면 \"현재 사용자는 어디 사는가\"와 \"2월 시점에 사용자는 어디 살았는가\" 같은 질문에 서로 다른 엣지 구간으로 답할 수 있습니다. (unsupported: Query capability example not stated in paper.)",
+    "Section '문맥 창, 반성, 범위 제한 중복 제거로 짜인 그래프 구축 파이프라인': check 2 sentence(s) the evidence may not support: 여기서 $$\\mathcal{N}$$은 노드 집합, $$\\mathcal{E}$$는 엣지 집합, $$\\phi$$는 각 엣지를 그 양 끝 노드에 대응시키는 함수입니다. (unsupported: Definition of phi not given in evidence.) | 하나의 사실이 관련된 모든 엔티티 쌍에 똑같이 붙으므로, 결과적으로 그 사실 하나가 여러 엔티티를 한꺼번에 잇는 셈입니다. (unsupported: Interpretation not stated in paper.)",
+    "Section '점진적 확장을 위한 레이블 전파 커뮤니티 탐지': the writer could not fix: 시각 자료 요건은 필자 해석이라고 표시한 배정 규칙 식으로 채웠습니다. 근거 자료에 이 섹션용 식이나 수치가 없어서입니다. 이 식을 받아들일 수 없으면 해당 요건은 해결되지 않은 상태로 남습니다.",
+    "Section '검색, 재순위, 구성의 세 단계로 이루어진 메모리 검색 함수': the writer could not fix: RRF 식과 MMR 원리 설명은 근거에 없어 추가하지 않았습니다. 표에서는 원리 설명을 빼고 기존 기법이라고만 적었습니다. 근거 없는 해석 문장(RRF 적합성, 응답 모델에 시점 판단을 맡기는 설계)은 지웠습니다. 마무리 섹션이 이 섹션 밖에 있어서 그쪽으로 옮기지 못했습니다.",
+    "Section 'DMR에서 전체 대화 기준선과 대등한 Zep의 정확도': the writer could not fix: '500개 대화, 세션당 최대 12개 메시지'는 원문에는 있지만 이를 뒷받침하는 evidence 항목이 없어서 숫자를 빼고 문장을 일반적인 서술로 좁혔습니다. 차이값(0.4·1.4·0.2·16.2%p)은 evidence의 원 수치로 바꾸거나 지웠습니다. MemGPT와의 차이와 gpt-4o-mini 기준선의 98.0%는 evidence에 없어 본문에서 계산하지 않았습니다. '세부 사실 보존'이라는 원인 해석은 이 절에서 지웠습니다. 마무리 절로 옮기지는 않았는데, 마무리 절이 이번 수정 범위 밖이기 때문입니다. 표에 남은 35.3%·",
+    "Section 'LongMemEval에서 확인된 더 높은 정확도와 10분의 1 수준의 지연': the writer could not fix: 빠진 근거 세 가지가 있습니다. - 실험 기간(2024년 12월~2025년 1월): 주어진 근거 중 이를 뒷받침하는 것이 없어 문장을 지웠습니다. - 상대 향상 15.2%: 원문 S19에는 있지만 이를 담은 근거 ID가 없어 인용 표시 없이 남겼습니다. - single-session-assistant 하락 수치(gpt-4o 17.7%, gpt-4o-mini 9.06%): 원문 Table 3과 S19 문장에서 가져왔지만 이것도 해당 근거 ID가 없어 인용 표시 없이 넣었습니다. 이 셋에 맞는 근거를 추가해 인용하는 것이 좋겠습니다.",
+    "Section '한계와 시사점': check 1 sentence(s) the evidence may not support: 실무에서는 지연 감소가 정확도 향상보다 더 결정적입니다. (unsupported: 논문은 지연 감소가 정확도 향상보다 더 결정적이라고 말하지 않습니다. 이는 출처에 없는 비교 주장입니다.)",
+    "Section '문맥 창, 반성, 범위 제한 중복 제거로 짜인 그래프 구축 파이프라인': whole-post review problems left as they were: 그래프 정의 G=(N,E,φ)와 세 계층 설명을 다시 늘어놓고 있습니다. 이 내용은 이미 앞 섹션에서 다뤘습니다. Fix: 수식과 계층 설명은 지우고 '원문, 엔티티, 커뮤니티로 나뉜 세 계층 그래프' 섹션을 가리키는 한 문장으로 바꾸세요.",
+    "Section '점진적 확장을 위한 레이블 전파 커뮤니티 탐지': the writer could not fix: 문제를 고치지 못했습니다. 중복 설명은 '한계와 시사점' 섹션에 있고, 고칠 문장도 그 섹션에 있습니다. 저는 이 섹션('점진적 확장을 위한 레이블 전파 커뮤니티 탐지')만 받았으므로 그 섹션은 수정할 수 없었습니다. 이 섹션은 그대로 두었습니다. 주기적 전체 갱신을 처음이자 자세하게 다루는 곳이 여기('점점 어긋나는 커뮤니티와 주기적 전체 갱신' 소절)이기 때문입니다. '한계와 시사점'에서 해당 설명을 이 소절을 짧게 가리키는 문장 하나로 줄여야 합니다.",
+    "Section '점진적 확장을 위한 label propagation 커뮤니티 탐지': whole-post review problems left as they were: 커뮤니티를 주기적으로 전체 갱신해야 한다는 한계를 '한계와 시사점' 섹션에서 다시 자세히 설명합니다. Fix: '한계와 시사점'에서는 이 섹션을 짧게 가리키는 문장만 남기세요."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 1089.6,
+  "input_tokens": 706496,
+  "output_tokens": 111386,
+  "estimated_cost_usd": 4.3719,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 83,
+      "failed_calls": 0,
+      "input_tokens": 215774,
+      "output_tokens": 111386,
+      "cache_read_tokens": 238860,
+      "cache_write_tokens": 251862,
+      "cost_usd": 4.371935
+    },
+    "by_stage": {
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 238,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001891
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 3986,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 5024,
+        "cost_usd": 0.104856
+      },
+      "verify": {
+        "calls": 31,
+        "failed_calls": 0,
+        "input_tokens": 131308,
+        "output_tokens": 20128,
+        "cache_read_tokens": 105527,
+        "cache_write_tokens": 55018,
+        "cost_usd": 1.245096
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 21903,
+        "cache_read_tokens": 32220,
+        "cache_write_tokens": 90054,
+        "cost_usd": 0.901396
+      },
+      "review": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 9044,
+        "cache_read_tokens": 15960,
+        "cache_write_tokens": 45189,
+        "cost_usd": 0.413397
+      },
+      "fix": {
+        "calls": 25,
+        "failed_calls": 0,
+        "input_tokens": 66646,
+        "output_tokens": 55448,
+        "cache_read_tokens": 84514,
+        "cache_write_tokens": 52399,
+        "cost_usd": 1.671341
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 639,
+        "cache_read_tokens": 639,
+        "cache_write_tokens": 4178,
+        "cost_usd": 0.033958
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 17716,
+        "output_tokens": 238,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001891
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 82,
+        "failed_calls": 0,
+        "input_tokens": 198058,
+        "output_tokens": 111148,
+        "cache_read_tokens": 238860,
+        "cache_write_tokens": 251862,
+        "cost_usd": 4.370044
+      }
+    }
+  }
+}

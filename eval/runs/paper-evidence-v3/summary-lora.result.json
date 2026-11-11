@@ -1,0 +1,158 @@
+{
+  "kind": "summarize",
+  "status": "succeeded",
+  "input": "2106.09685",
+  "title": "LoRA: Low-Rank Adaptation of Large Language Models",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2106_09685/2026-11-06-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-06-lora-low-rank-adaptation-of-large-language-models-summary.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Frozen-Pretrained-Weights' (or its acronym) does not appear in the paper; check it fits.",
+    "Section '연구 배경': check 1 sentence(s) the evidence may not support: 그래서 기본 모델 계산이 끝난 뒤에 어댑터 층을 따로 계산해야 하고, 그만큼 추론 지연(inference latency)이 늘어납니다 [[E10]]. (unsupported: The paper says adapters are computed 'in addition to' the base model. It does not say they are computed after the base model finishes; the adapters are inserted sequentially inside the layers.)",
+    "Section '연구 배경' still has: images not given to this section: ['https://arxiv.org/html/2106.09685v2/latency.png']",
+    "Section '제안 방법': check 1 sentence(s) the evidence may not support: 초기화 스케일을 적절히 잡으면 $$\\frac{\\alpha}{r}$$ 배율은 $$\\Delta Wx$$의 크기, 곧 매 단계 갱신 폭을 그대로 키우거나 줄입니다. (unsupported: The paper only says tuning α is roughly like tuning the learning rate with Adam. It never explains this as α/r directly scaling ΔWx or the per-step update size; that mechanism is added.)",
+    "Section '제안 방법' still has: ['30'] already stated in '연구 배경': refer back without repeating: GPT-2 medium을 NVIDIA Quadro RTX8000에서 단일 forward로 측정하면, 배치가 작고 시퀀스가 짧은 온라인 환경에서 지연이 상대적으로 30% 넘게 늘 수 있습니다 .",
+    "Section '구현 방식': check 1 sentence(s) the evidence may not support: 저자들은 GPT-3 175B의 셀프 어텐션 가중치에 학습 가능 파라미터 예산을 같게 고정했습니다. (numbers not in its evidence)",
+    "Section '구현 방식' still has: numbers ['175B'] without evidence: 저자들은 GPT-3 175B의 셀프 어텐션 가중치에 학습 가능 파라미터 예산을 같게 고정했습니다. | 888 characters of prose for a target of 500: cut background, repetition and minor detail",
+    "Section '실험 결과': check 3 sentence(s) the evidence may not support: 대상은 세 데이터셋으로, WikiSQL과 MNLI-matched는 정확도로, SAMSum은 ROUGE로 평가했습니다. (unsupported: Passages do not name the three datasets or say SAMSum was scored with ROUGE.) | 앞서 든 예처럼 GPT-3를 WikiSQL에 맞춘다면, $$W_{q}$$와 $$W_{v}$$에 붙인 작은 $$A$$·$$B$$만 학습해도 이 정도 성능이 나온다는 뜻입니다. (unsupported: Passages do not say the GPT-3 175B Table 4 results adapt only Wq and Wv.) | 저자들은 실험 규모를 1,750억(175B) 파라미터의 GPT-3까지 키운 이 실험을 마지막 스트레스 테스트로 두었습니다. (numbers not in its evidence)",
+    "Section '실험 결과' still has: numbers ['1,750억', '175B'] without evidence: 저자들은 실험 규모를 1,750억(175B) 파라미터의 GPT-3까지 키운 이 실험을 마지막 스트레스 테스트로 두었습니다.",
+    "Section '의의와 한계': check 1 sentence(s) the evidence may not support: 이 행렬은 모델이 원래 가진 표현 가운데 SQL 생성에 필요한 방향을 증폭할 뿐입니다. (unsupported: The paper's analysis covers W_q only and does not show that the update only amplifies directions needed for SQL generation. This is an overreach.)",
+    "Section '의의와 한계' still has: 854 characters of prose for a target of 500: cut background, repetition and minor detail",
+    "Section '제안 방법': whole-post review problems left as they were: 어댑터 지연 설명을 다시 합니다. 어댑터가 층을 순차로 끼워 넣는다는 점, GPT-2 medium과 Quadro RTX8000에서 단일 순전파로 측정했다는 점, 온라인 환경에서 지연이 30% 넘게 늘어난다는 점, LoRA는 병렬 구조라는 점이 모두 연구 배경에 이미 나와 있습니다. Fi | α와 학습률의 관계를 설명하는 대목에서 'α를 조정하는 일은 학습률 조정과 거의 같다'는 말을 바로 다음 문장들('그래서 α가 학습률과 같은 역할을 합니다')이 그대로 되풀이합니다. '그래서'로 시작하는 문장도 두 번 연달아 나옵니다. Fix: 되풀이하는 중간 문장을 지우고 한 번만 설",
+    "Section '구현 방식': whole-post review problems left as they were: B∈R^{d×r}, A∈R^{r×k}와 r의 정의를 다시 설명합니다. 제안 방법에서 이미 정의한 내용입니다. Fix: 차원 정의는 제안 방법에 두고, 여기서는 'BA는 W0와 같은 크기이므로'처럼 앞의 정의를 가리키기만 하세요.",
+    "Section '실험 결과': whole-post review problems left as they were: '연구 배경에서 소개한 MNLI 저데이터 과제'라고 쓰지만, 연구 배경에는 MNLI도 저데이터 설정도 나오지 않습니다. Fix: 앞을 가리키는 표현을 지우고, 이 자리에서 저데이터 MNLI 설정(MNLI-100/1k/10k 부분집합)을 처음 소개하세요. | '앞서 든 예처럼 GPT-3를 WikiSQL에 맞춘다면'이라고 쓰지만, 앞 섹션 어디에도 그런 예시가 없습니다. 구현 방식에는 행렬 선택 표가 있을 뿐입니다. Fix: '구현 방식의 표에서 본 W_q, W_v 구성처럼'으로 고치거나, 이 문장을 지우세요.",
+    "Section '의의와 한계': whole-post review problems left as they were: 'GPT-3를 WikiSQL에 맞출 때 W_q·W_v에 붙인 랭크 1~4의 작은 행렬'이라는 예를 앞에서 든 것처럼 씁니다. 앞에는 이런 예시가 없고, 'SQL 생성에 필요한 방향을 증폭할 뿐'이라는 해석도 논문이 이 과제에 대해 보인 결과가 아닙니다. Fix: 이 문장은 지우거나, 논"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 839.5,
+  "input_tokens": 694394,
+  "output_tokens": 108368,
+  "estimated_cost_usd": 3.1792,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 80,
+      "failed_calls": 0,
+      "input_tokens": 153010,
+      "output_tokens": 108368,
+      "cache_read_tokens": 343985,
+      "cache_write_tokens": 197399,
+      "cost_usd": 3.179186
+    },
+    "by_stage": {
+      "figures": {
+        "calls": 8,
+        "failed_calls": 0,
+        "input_tokens": 16800,
+        "output_tokens": 7178,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005269
+      },
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 53827,
+        "output_tokens": 259,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005512
+      },
+      "read": {
+        "calls": 20,
+        "failed_calls": 0,
+        "input_tokens": 46,
+        "output_tokens": 15216,
+        "cache_read_tokens": 187877,
+        "cache_write_tokens": 45806,
+        "cost_usd": 0.304343
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 2699,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 4345,
+        "cost_usd": 0.075721
+      },
+      "verify": {
+        "calls": 18,
+        "failed_calls": 0,
+        "input_tokens": 47880,
+        "output_tokens": 24409,
+        "cache_read_tokens": 70049,
+        "cache_write_tokens": 33584,
+        "cost_usd": 0.875639
+      },
+      "draft": {
+        "calls": 6,
+        "failed_calls": 0,
+        "input_tokens": 24,
+        "output_tokens": 10689,
+        "cache_read_tokens": 15295,
+        "cache_write_tokens": 48125,
+        "cost_usd": 0.460621
+      },
+      "review": {
+        "calls": 7,
+        "failed_calls": 0,
+        "input_tokens": 28,
+        "output_tokens": 9934,
+        "cache_read_tokens": 7460,
+        "cache_write_tokens": 16881,
+        "cost_usd": 0.286182
+      },
+      "fix": {
+        "calls": 18,
+        "failed_calls": 0,
+        "input_tokens": 34397,
+        "output_tokens": 37055,
+        "cache_read_tokens": 62665,
+        "cache_write_tokens": 47685,
+        "cost_usd": 1.142182
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 929,
+        "cache_read_tokens": 639,
+        "cache_write_tokens": 973,
+        "cost_usd": 0.023717
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 9,
+        "failed_calls": 0,
+        "input_tokens": 70627,
+        "output_tokens": 7437,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.010781
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 20,
+        "failed_calls": 0,
+        "input_tokens": 46,
+        "output_tokens": 15216,
+        "cache_read_tokens": 187877,
+        "cache_write_tokens": 45806,
+        "cost_usd": 0.304343
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 51,
+        "failed_calls": 0,
+        "input_tokens": 82337,
+        "output_tokens": 85715,
+        "cache_read_tokens": 156108,
+        "cache_write_tokens": 151593,
+        "cost_usd": 2.864062
+      }
+    }
+  }
+}

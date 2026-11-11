@@ -1,0 +1,147 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/, https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+  "title": "Strands Agents: The Agent Loop and Its Production Control Layer",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-strands-agents-the-agent-loop-and-its-production-control-layer/2026-11-07-strands-agents-the-agent-loop-and-its-production-control-layer.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-strands-agents-the-agent-loop-and-its-production-control-layer.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '모델 호출과 도구 실행을 반복하는 에이전트 루프의 사이클': check 1 sentence(s) the evidence may not support: 앞서 본 도구 검증, 도구 실행, 모델 재호출 하나하나가 이런 개입 지점이 되며, 승인, 한도, 재시도 같은 제어 기능은 모두 이 사이클의 특정 지점에 연결됩니다. (unsupported: Evidence says hooks can intercept any step; it does not say approvals, limits and retries are all attached to specific points in the cycle (approvals are never mentioned).)",
+    "Section '모델 호출과 도구 실행을 반복하는 에이전트 루프의 사이클' still has: a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '호출 단위 한도·취소·중단 사유로 묶는 요청 경계' still has: a table cell is blank ('—'): give the value the evidence or the passages state, or drop the row or column it belongs to: | 도구 실행 전 | 도구 호출을 건너뛰고, 대화 상태를 유효하게 유지하도록 오류 결과를 추가합니다 | - |",
+    "Section 'TL;DR' still has: 1,864 characters of prose for a target of 1,000: cut background, repetition and minor detail"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3417.6,
+  "input_tokens": 3053412,
+  "output_tokens": 415794,
+  "estimated_cost_usd": 16.0121,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 175,
+      "failed_calls": 0,
+      "input_tokens": 571432,
+      "output_tokens": 415794,
+      "cache_read_tokens": 1337390,
+      "cache_write_tokens": 1144590,
+      "cost_usd": 16.012143
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2616,
+        "output_tokens": 211,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000367
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2785,
+        "output_tokens": 661,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000609
+      },
+      "read": {
+        "calls": 51,
+        "failed_calls": 0,
+        "input_tokens": 124,
+        "output_tokens": 38190,
+        "cache_read_tokens": 284765,
+        "cache_write_tokens": 85969,
+        "cost_usd": 0.654024
+      },
+      "outline": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 12201,
+        "cache_read_tokens": 1879,
+        "cache_write_tokens": 45775,
+        "cost_usd": 0.473679
+      },
+      "verify": {
+        "calls": 56,
+        "failed_calls": 0,
+        "input_tokens": 407207,
+        "output_tokens": 118015,
+        "cache_read_tokens": 771200,
+        "cache_write_tokens": 364303,
+        "cost_usd": 6.119129
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 66930,
+        "cache_read_tokens": 50778,
+        "cache_write_tokens": 291380,
+        "cost_usd": 2.81603
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 35303,
+        "cache_read_tokens": 31703,
+        "cache_write_tokens": 111266,
+        "cost_usd": 1.275316
+      },
+      "fix": {
+        "calls": 33,
+        "failed_calls": 0,
+        "input_tokens": 128728,
+        "output_tokens": 142289,
+        "cache_read_tokens": 197065,
+        "cache_write_tokens": 245897,
+        "cost_usd": 4.669007
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 29848,
+        "output_tokens": 1994,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003982
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 35249,
+        "output_tokens": 2866,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004958
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 51,
+        "failed_calls": 0,
+        "input_tokens": 124,
+        "output_tokens": 38190,
+        "cache_read_tokens": 284765,
+        "cache_write_tokens": 85969,
+        "cost_usd": 0.654024
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 120,
+        "failed_calls": 0,
+        "input_tokens": 536059,
+        "output_tokens": 374738,
+        "cache_read_tokens": 1052625,
+        "cache_write_tokens": 1058621,
+        "cost_usd": 15.353161
+      }
+    }
+  }
+}

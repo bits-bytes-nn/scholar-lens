@@ -1,0 +1,162 @@
+{
+  "item": "guide-strands",
+  "group": "g1",
+  "sources_checked": [
+    "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/",
+    "https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+    "lifecycle-controls, retry-strategies, interventions, approve-before-acting, structured-output(-behavior), state, session-management, quickstart/python, harness/quickstart, model-providers, changelog, API refs (strands.agent.agent, strands.hooks.events, strands.hooks.registry, strands.event_loop.event_loop, strands.types.tools), harness-sdk README, AWS ML eval blog, AWS Builder Center OTel post"
+  ],
+  "t1_method": "strands-agents 1.64.0 (+anthropic, ollama, cedar extras, strands-harness 0.3.4) in a /tmp venv; Python blocks exec'd in reading order in one namespace; BedrockModel patched with a scripted fake model (calls each tool once, then the structured-output tool with schema-synthesized args, then end_turn); input() answers 'y'; run with AWS credentials removed.",
+  "X": {
+    "scores": {
+      "A": {"score": 8.5, "reason": "Clean claim headings and arc; TL;DR (L12-14) is two dense paragraphs restating nearly every body fact; minor trailing space L49."},
+      "B": {"score": 8.5, "reason": "Natural 입니다 register; a few awkward sentences, e.g. L71 '다음 문장의 인터럽트 모듈(strands.interrupt)과는 별개의 모듈입니다' refers forward clumsily."},
+      "C": {"score": 8.5, "reason": "Running support agent ties sections; back-references accurate; install/limits section (L242) arrives after hooks/interventions, acceptable under architecture-first."},
+      "D": {"score": 8.5, "reason": "Good help at hard spots: iteration table L90-94, precedence worked example L236, 124 s backoff sum L567; little padding."},
+      "E": {"score": 8.5, "reason": "Tables for stop reasons, actions, method/action matrix, cancel checkpoints, limits; text diagrams; no hook-event/mutable-property table."},
+      "F": {"score": 9.5, "reason": "0/25 sampled claims wrong; notes the 128 vs 240 s max_delay doc conflict (L571-577). L240/L904 advise escalating after_model_call Guide to Deny, which the docs' prose says but the docs' own table says Deny has no effect on after events."},
+      "T1": {"score": 9.5, "reason": "21/21 Python blocks ran in reading order with the fake model and no credentials; blocks build on each other (lookup_order, TicketTriage, make_support_agent)."},
+      "T2": {"score": 9.0, "reason": "Covers both source pages (loop, stop reasons, limits, cancellation, concurrency, hooks order/events/retry/resume) plus linked controls in sensible order."},
+      "T3": {"score": 8.5, "reason": "Explains why (model-driven vs graph, soft limits, typed actions vs last-write-wins, classifier as judgment, per-request agents); thinner on internals (no event_loop_cycle, tool/ToolSpec layer, hook event table)."}
+    },
+    "principles": {
+      "claim_headings": "met",
+      "running_example": "met (customer-support agent, L24)",
+      "mechanism_design_code_example": "met (e.g. interventions L184-236)",
+      "facts_said_once": "partly met (TL;DR L12-14 duplicates body; retry/limits facts restated in L901-909)",
+      "numbers_with_scope_unit": "met",
+      "nothing_invented": "met (illustrative tables labelled 가상, L88, L236)",
+      "own_assessment_at_end": "met (L923-929)",
+      "length_fitted": "met",
+      "guide_shape_tldr_architecture_first": "met (architecture L41-71 before install L242; closes with when-to-choose and limits)",
+      "korean_style": "met"
+    },
+    "claims": {
+      "checked": 25,
+      "numbers_checked": 12,
+      "unsupported": 0,
+      "wrong": 0,
+      "unverifiable": 1,
+      "error_rate": "0/25 = 0%",
+      "examples": [
+        {"line": 150, "claim": "SDK_FIRST -100, DEFAULT 0, SDK_LAST 100, MODEL_ROUTING 50", "verdict": "supported", "source": "hooks page; Agent.add_hook API"},
+        {"line": 260, "claim": "unknown limits keys rejected since Python v1.57.0 / TS v1.19.0", "verdict": "supported", "source": "changelog 'reject unrecognized limits keys'"},
+        {"line": 523, "claim": "v1.57.1 rejects non-boolean classifier decisions", "verdict": "supported", "source": "changelog"},
+        {"line": 567, "claim": "5 retries, 6 attempts, 4-64 s, 124 s total", "verdict": "supported", "source": "retry-strategies default behavior"},
+        {"line": 573, "claim": "max_delay 128 (guide) vs 240s (Agent API)", "verdict": "supported", "source": "retry-strategies table; strands.agent.agent retry_strategy"},
+        {"line": 577, "claim": "TS ExponentialBackoff({baseMs: 4000, maxMs: 240000})", "verdict": "supported", "source": "retry-strategies"},
+        {"line": 291, "claim": "cap priority turns > total > output > structured output attempts", "verdict": "supported", "source": "lifecycle-controls"},
+        {"line": 289, "claim": "cache reads/writes count in full on Bedrock, Anthropic, OpenAI, Gemini", "verdict": "supported", "source": "agent-loop Invocation Limits"},
+        {"line": 234, "claim": "deny > confirm > guide > transform > proceed", "verdict": "supported", "source": "interventions"},
+        {"line": 540, "claim": "classifier model failure falls back to asking a person", "verdict": "supported", "source": "approve-before-acting"},
+        {"line": 559, "claim": "aux_model rejects ModelRouter", "verdict": "supported", "source": "strands.agent.agent aux_model"},
+        {"line": 835, "claim": "agent_id default 'default'; path separators raise ValueError", "verdict": "supported", "source": "session-management; Agent API Raises"},
+        {"line": 49, "claim": "runs in-process with no hosted control plane", "verdict": "supported", "source": "harness-sdk README"},
+        {"line": 913, "claim": "AWS blog: three build-time layers that block deployment", "verdict": "supported", "source": "AWS ML blog 'Evaluating AI Agents'"},
+        {"line": 43, "claim": "Medium post classifies Strands as model-first", "verdict": "unverifiable (not fetched)"}
+      ]
+    },
+    "checklist": {
+      "repeated": 1, "avoided": 2, "na": 2,
+      "repeated_ids": ["result-fields-incomplete"],
+      "detail": {
+        "loop-diagram-remote": "avoided (text diagram L63-69, no remote image)",
+        "shared-agent-throw-scope": "n/a (no shared-agent-in-async-handler warning; L738 states THROW generically)",
+        "shared-agent-history-leak": "avoided (L126 '한 에이전트 인스턴스를 여러 고객이 함께 쓰면 서로의 대화가 섞입니다', per-request agents L757); invoke_async not recommended",
+        "result-fields-incomplete": "repeated (stop_reason shown, metrics.get_summary() never shown)",
+        "multi-agent-subject": "n/a"
+      }
+    },
+    "extras": {
+      "architecture_first_line": 41,
+      "non_official_sources": "3/20 (2 AWS ML blogs, 1 Medium)",
+      "opens_with_problem": true,
+      "closes_with_when_to_choose_and_failure_modes": true
+    },
+    "top_issues": [
+      "L240 and L904: recommends escalating after_model_call Guide retries to Deny; per the interventions table Deny on after events has no effect (warns), so the advised guard would not stop the loop.",
+      "L12-14: TL;DR is two long paragraphs that restate most body facts (limits, structured output, interventions, HITL, retry, cancel, sessions, evals), violating facts-said-once.",
+      "L1-953: AgentResult example never shows result.metrics.get_summary(); hook coverage lacks an event/mutable-property table (AfterModelCallEvent fields, projected_input_tokens), so hooks page coverage is thinner than the loop page."
+    ]
+  },
+  "Y": {
+    "scores": {
+      "A": {"score": 7.5, "reason": "L49-51: subsection '루프의 경계마다 놓인 제어 지점' is a heading plus one sentence pointing at a list that is not there; stray leading space L244; TicketTriage class duplicated L177-186 and L270-279."},
+      "B": {"score": 8.5, "reason": "Natural register overall; some meta framing ('표는 snake_case 이름을 기준으로 정리했습니다' L80) and imperatives ('주목하세요' L59)."},
+      "C": {"score": 7.5, "reason": "Empty section breaks the problem->loop transition (L49-53); first-run/install section arrives at L612 after 600 lines of advanced controls, then re-explains tools already covered (L668)."},
+      "D": {"score": 9.0, "reason": "Well-placed worked numbers: 6-message history L65-76, soft-limit overshoot 18,500+4,000 L714, validation retry table L239-242, Guide-cap reasoning L382."},
+      "E": {"score": 8.5, "reason": "Rich, apt tables (failure paths, stop reasons, 7-tuple, hook events, on_error, state scopes, failure modes); duplicated class code; L100-109 python fence is a non-parsing signature stub."},
+      "F": {"score": 8.5, "reason": "1/26 wrong: retry param table L875-879 gives int types (docs: float) and default max_delay 240 without noting the guide's 128. L33 relays a third-party claim of two built-in conversation managers that conflicts with the official summarizing option (attributed). Correctly flags after-event Deny has no effect (L331, L380)."},
+      "T1": {"score": 8.5, "reason": "22/24 ran; Cedar block (L468) needs strands-agents[cedar], not mentioned; harness block (L1035) needs an Anthropic key (expected); L100 signature stub does not parse."},
+      "T2": {"score": 8.5, "reason": "Covers both source pages thoroughly (full hook event table L524-531, ordering, retry, resume); adds harness, AgentCore Evaluations and OTel sections that go beyond the two sources (supported by other docs) and lengthen the post to 1,091 lines."},
+      "T3": {"score": 9.5, "reason": "Strong internals: event_loop_cycle steps and recursion (L98-123), 7-tuple stop event, ToolUse/ToolResult/AgentTool/@tool layer, annotations as untrusted hints, session lock/symlink risks, Agent vs harness trade-off."}
+    },
+    "principles": {
+      "claim_headings": "met",
+      "running_example": "met (ticket-triage agent, L20)",
+      "mechanism_design_code_example": "met (structured output L149-261, interventions L301-376)",
+      "facts_said_once": "partly met (TicketTriage defined twice; soft-limit and Guide-cap facts restated L1063)",
+      "numbers_with_scope_unit": "partly met (retry table types/default L879)",
+      "nothing_invented": "met (illustrative examples labelled, L63, L237, L714)",
+      "own_assessment_at_end": "met (L1065)",
+      "length_fitted": "partly met (long; harness/evaluation sections extend scope)",
+      "guide_shape_tldr_architecture_first": "met (internals L53-147 before install L612; closes with choice and failure modes)",
+      "korean_style": "met"
+    },
+    "claims": {
+      "checked": 26,
+      "numbers_checked": 13,
+      "unsupported": 0,
+      "wrong": 1,
+      "unverifiable": 1,
+      "error_rate": "1/26 = 3.8%",
+      "examples": [
+        {"line": 518, "claim": "-100/0/100 on hooks page; MODEL_ROUTING 50 only in add_hook API", "verdict": "supported", "source": "hooks page; Agent.add_hook API"},
+        {"line": 626, "claim": "default Bedrock, Claude Sonnet 4.6, us-west-2", "verdict": "supported", "source": "Python quickstart"},
+        {"line": 618, "claim": "Python 3.10+", "verdict": "supported", "source": "Python quickstart"},
+        {"line": 858, "claim": "6 attempts, 4-64 s doubling", "verdict": "supported", "source": "retry-strategies"},
+        {"line": 879, "claim": "initial_delay/max_delay typed int, max_delay default 240", "verdict": "wrong", "source": "retry-strategies table: float, 4; float, 128 (Agent API says 240s)"},
+        {"line": 900, "claim": "max_attempts=3, initial_delay=2 -> waits 2+4 = 6 s", "verdict": "supported (derived)"},
+        {"line": 127, "claim": "EventLoopStopEvent stop is a 7-tuple incl. Checkpoint", "verdict": "supported", "source": "strands.event_loop.event_loop"},
+        {"line": 121, "claim": "limits arg deprecated in favour of invocation_context", "verdict": "supported", "source": "strands.event_loop.event_loop"},
+        {"line": 716, "claim": "Agent Loop lists 3-cap priority; lifecycle page adds SO attempts", "verdict": "supported", "source": "agent-loop; lifecycle-controls"},
+        {"line": 953, "claim": "v1.47.0: latencyMs not implemented for some providers", "verdict": "supported", "source": "AWS Builder Center OTel post"},
+        {"line": 1027, "claim": "harness default Claude Opus 5; sessions under ./.agent/sessions", "verdict": "supported", "source": "harness quickstart"},
+        {"line": 1007, "claim": "Python falls back to LocalFileStorage('./.strands/')", "verdict": "supported", "source": "session-management"},
+        {"line": 331, "claim": "after-event Deny has no effect and warns", "verdict": "supported", "source": "interventions action table"},
+        {"line": 386, "claim": "Confirm evaluate default accepts True/'y'/'yes' case-insensitive", "verdict": "supported", "source": "interventions"},
+        {"line": 512, "claim": "add_callback ValueError: uninferable type, async AgentInitializedEvent, empty list", "verdict": "supported", "source": "strands.hooks.registry"},
+        {"line": 757, "claim": "waiting duplicate does not observe cancel_signal", "verdict": "supported", "source": "Agent.__call__ API"},
+        {"line": 1017, "claim": "SDK follows symlinks such as message_0.json", "verdict": "supported", "source": "session-management security note"},
+        {"line": 33, "claim": "BIG DATA guy: two built-in conversation managers", "verdict": "unverifiable (attributed; conflicts with official summarizing manager)"}
+      ]
+    },
+    "checklist": {
+      "repeated": 1, "avoided": 2, "na": 2,
+      "repeated_ids": ["result-fields-incomplete"],
+      "detail": {
+        "loop-diagram-remote": "avoided (text history diagram L65-74, no remote image)",
+        "shared-agent-throw-scope": "n/a (no async-handler shared-agent warning; L755 states THROW generically)",
+        "shared-agent-history-leak": "avoided, weakly (L190 comment 'A fresh agent per message keeps tickets from sharing conversation history', per-request agents L777); invoke_async not recommended",
+        "result-fields-incomplete": "repeated (stop_reason shown; metrics only in prose L680, L953, no get_summary())",
+        "multi-agent-subject": "n/a"
+      }
+    },
+    "extras": {
+      "architecture_first_line": 53,
+      "non_official_sources": "2/22 (Substack, AWS Builder Center)",
+      "opens_with_problem": true,
+      "closes_with_when_to_choose_and_failure_modes": true
+    },
+    "top_issues": [
+      "L49-51: empty subsection; heading plus '티켓 에이전트의 요구사항도 하나씩 이 지점에 대응합니다.' with no mapping list or table after it.",
+      "L873-879: ModelRetryStrategy table lists int types and max_delay default 240 without noting the retry guide's float/128; 240 is only the Agent API value.",
+      "L468-502 and L612: the Cedar example needs pip install 'strands-agents[cedar]' (ImportError otherwise, not mentioned), and the first-run/install section is placed after 600 lines of advanced controls, with TicketTriage redefined at L270."
+    ]
+  },
+  "preference": {
+    "winner": "X",
+    "per_criterion": {"A": "X", "B": "tie", "C": "X", "D": "Y", "E": "tie", "F": "X", "T1": "X", "T2": "X", "T3": "Y"},
+    "reason": "X is tighter, fully runnable (21/21) and had no wrong sampled claims, so it clears the F >= 9 gate; Y is deeper on internals (event loop cycle, tool layer, hook event table, session risks) and catches the after-event Deny pitfall X repeats, but it has an empty section, a wrong retry-parameter table, an unmentioned cedar extra and a late, partly redundant first-run section. The margin is modest."
+  }
+}

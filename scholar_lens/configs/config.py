@@ -1,5 +1,7 @@
+import logging
+import os
 from pathlib import Path
-from typing import Literal
+from typing import Any, ClassVar, Literal
 
 import yaml
 from dotenv import load_dotenv
@@ -8,13 +10,19 @@ from pydantic import (
     ConfigDict,
     EmailStr,
     Field,
+    ValidationError,
+    field_validator,
     model_validator,
 )
 
-from scholar_lens.src.constants import EmbeddingModelId, LanguageModelId
-from scholar_lens.src.logger import is_running_in_aws
+from scholar_lens.adapters.aws.environment import is_running_in_aws
+from scholar_lens.domain.constants import EmbeddingModelId, LanguageModelId
+from scholar_lens.domain.jobs import validation_summary
+
+logger = logging.getLogger(__name__)
 
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
+CONFIG_PATH_ENV = "SCHOLAR_LENS_CONFIG"
 
 # Effort level for adaptive-thinking models (e.g. Opus 4.8, Opus 5.5). Lower
 # effort means shorter reasoning traces — faster and cheaper. Ignored by legacy
@@ -26,6 +34,26 @@ class _Section(BaseModel):
     # Reject unknown keys so a YAML typo (e.g. ``max_total_token``) fails loudly
     # instead of silently falling back to the default.
     model_config = ConfigDict(extra="forbid")
+    # Keys a section no longer has but an older config.yaml may still set:
+    # each is dropped with a warning naming why, instead of failing the load.
+    retired_keys: ClassVar[dict[str, str]] = {}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_retired_keys(cls, data: Any) -> Any:
+        if not (isinstance(data, dict) and cls.retired_keys):
+            return data
+        kept = dict(data)
+        for key, reason in cls.retired_keys.items():
+            if key in kept:
+                del kept[key]
+                logger.warning(
+                    "Config key '%s' of %s is ignored and can be deleted: %s",
+                    key,
+                    cls.__name__,
+                    reason,
+                )
+        return kept
 
 
 class Github(_Section):
@@ -44,11 +72,22 @@ class Github(_Section):
     summary_category: str = Field(default="Paper Summaries")
     tech_guide_category: str = Field(default="Tech Guides")
     survey_category: str = Field(default="Paper Surveys")
-    # Whether figures uploaded to S3 are world-readable. Default False (private):
-    # blog images are served from the GitHub Pages repo, so public S3 ACLs are
-    # an unnecessary exposure (and are rejected by buckets with Block Public
-    # Access). Set True only if you intentionally serve assets straight from S3.
-    public_assets: bool = Field(default=False)
+    retired_keys: ClassVar[dict[str, str]] = {
+        "public_assets": (
+            "uploads to S3 are always private; posts load their images from "
+            "the blog repository."
+        ),
+    }
+
+    @model_validator(mode="after")
+    def _check_repo(self) -> "Github":
+        # Fail at load, not after a run's paid stages reach the PR step.
+        owner, _, name = (self.repo_name or "").partition("/")
+        if self.enabled and not (owner and name and "/" not in name):
+            raise ValueError("github.enabled needs repo_name as 'owner/name'.")
+        if not self.branch_prefix.strip("/"):
+            raise ValueError("github.branch_prefix must not be empty.")
+        return self
 
 
 class Resources(_Section):
@@ -58,7 +97,10 @@ class Resources(_Section):
     default_region_name: str = Field(default="ap-northeast-2")
     bedrock_region_name: str = Field(default="us-west-2")
     s3_bucket_name: str | None = Field(default=None)
-    s3_prefix: str = Field(default="scholar-lens")
+    # Keys are built as "<prefix>/…"; the job role's IAM scope is the same.
+    s3_prefix: str = Field(
+        default="scholar-lens", pattern=r"^[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*$"
+    )
     vpc_id: str | None = Field(default=None)
     subnet_ids: list[str] | None = Field(default=None)
     email_address: EmailStr | None = Field(default=None)
@@ -127,41 +169,110 @@ class Explanation(_Section):
     paper_evaluation_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
-    # Writes the subtitle, TL;DR and closing assessment from the edited review.
+    # Sections engine: writes the subtitle, TL;DR and closing assessment from
+    # the edited review.
     paper_finalization_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
+    # The writing engine: "sections" (plan, sections scored and revised,
+    # edit, finalize) or "evidence" (reading agents record checked evidence
+    # that the outline gives to sections; docs/redesign.md). The evidence
+    # engine reads with reader_model_id, plans with the planning model,
+    # writes with the synthesis model and checks with the evaluation model.
+    engine: Literal["sections", "evidence"] = Field(default="sections")
+    reader_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_SONNET)
+    # Evidence engine: the review's prose characters (Korean).
+    min_total_chars: int = Field(default=25_000, ge=5_000, le=200_000)
+    max_total_chars: int = Field(default=55_000, ge=5_000, le=200_000)
+
+    @model_validator(mode="after")
+    def _review_length_range(self) -> "Explanation":
+        if self.min_total_chars > self.max_total_chars:
+            raise ValueError("explanation.min_total_chars exceeds max_total_chars")
+        return self
+
+    # Sections engine: thinking for the section judge and writer.
     evaluator_enable_thinking: bool = Field(default=False)
     synthesizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
     # Planning and whole-article editing decide coverage and consistency, so
     # they think harder than the per-section calls.
     planning_effort: ThinkingEffort = Field(default="high")
-    # A section scoring below min_quality_score, or missing a must-cover item,
-    # is revised; max_synthesis_attempts counts drafts per section.
+    # Sections engine: a section scoring below min_quality_score, or missing a
+    # must-cover item, is revised; max_synthesis_attempts counts drafts per
+    # section.
     min_quality_score: int = Field(default=70, ge=0, le=100)
     max_synthesis_attempts: int = Field(default=3, ge=1, le=6)
-    # Upper bound on planned sections; overflow is merged into the last one.
+    # Upper bound on planned sections (both engines); overflow is merged into
+    # the last one.
     max_sections: int = Field(default=20, ge=1, le=60)
-    # Whole-article edit passes; a second pass runs only for reported coverage
-    # gaps. 0 disables editing.
+    # Sections engine: whole-article edit passes; a second pass runs only for
+    # reported coverage gaps. 0 disables editing.
     max_edit_rounds: int = Field(default=2, ge=0, le=3)
-    # Hard total-token ceiling for one review run (None = no limit). The default
+    # Sections engine: hard total-token ceiling for one review run (None = no
+    # limit; max_cost_usd applies too). The default
     # leaves ~6x headroom over a LoRA-length paper (~1.4M tokens, ~$6 on Opus
     # 5.5) and stops a runaway run near $40.
     max_total_tokens: int | None = Field(default=8_000_000, gt=0)
+    # Both engines: hard ceiling on one run's estimated cost (list prices,
+    # USD; None = no limit). A review costs about $5-13.
+    max_cost_usd: float | None = Field(default=40.0, gt=0)
+    # Evidence engine: paper characters one reading agent covers (a longer
+    # paper gets more readers, each on its own part).
+    chars_per_reader: int = Field(default=15_000, ge=2_000, le=200_000)
 
 
 class Summary(_Section):
     summary_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
+    # "sections" (one summary call) or "evidence" (docs/redesign.md).
+    engine: Literal["sections", "evidence"] = Field(default="sections")
+    reader_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_SONNET)
+    # Evidence engine: the summary's prose characters (Korean; five minutes).
+    min_total_chars: int = Field(default=2_500, ge=1_000, le=20_000)
+    max_total_chars: int = Field(default=4_500, ge=1_000, le=20_000)
+
+    @model_validator(mode="after")
+    def _summary_length_range(self) -> "Summary":
+        if self.min_total_chars > self.max_total_chars:
+            raise ValueError("summary.min_total_chars exceeds max_total_chars")
+        return self
+
+    # Sections engine.
     summarizer_enable_thinking: bool = Field(default=False)
     thinking_effort: ThinkingEffort = Field(default="medium")
-    # Hard total-token ceiling for one summary run (None = no limit); a typical
-    # summary uses ~0.13M tokens.
+    # Sections engine: hard total-token ceiling for one summary run (None = no
+    # limit; max_cost_usd applies too); a typical summary uses ~0.13M tokens.
     max_total_tokens: int | None = Field(default=1_000_000, gt=0)
+    # Both engines: hard ceiling on one run's estimated cost (list prices,
+    # USD; None = no limit). A summary costs about $1-3.
+    max_cost_usd: float | None = Field(default=12.0, gt=0)
+    # Evidence engine: paper characters one reading agent covers; a summary
+    # needs fewer details, so one reader covers more of the paper.
+    chars_per_reader: int = Field(default=40_000, ge=2_000, le=200_000)
+
+
+# The default demoted domain classes of ``tech_guide.demoted_domains``.
+DEMOTED_DOMAINS: dict[str, tuple[str, ...]] = {
+    "forum": (
+        "stackoverflow.com",
+        "*.stackexchange.com",
+        "reddit.com",
+        "news.ycombinator.com",
+        "discuss.*",
+        "forum.*",
+        "forums.*",
+        "community.*",
+    ),
+    "social": ("x.com", "twitter.com", "linkedin.com", "facebook.com", "youtube.com"),
+    "aggregator": ("*.libhunt.com", "stackshare.io", "alternativeto.net"),
+}
 
 
 class TechGuide(_Section):
+    # The guide is written by the evidence engine (docs/redesign.md): the
+    # relevance model gates the sources, plans the searches and files the
+    # guide; reading agents use the synopsis model, the outline and sections
+    # the writing model and the checks the evaluation model.
     relevance_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_5_HAIKU
     )
@@ -169,19 +280,10 @@ class TechGuide(_Section):
         default=LanguageModelId.CLAUDE_V5_5_SONNET
     )
     writing_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
-    # Per-section evaluator (0-100 score + feedback) gating the revise loop.
     evaluation_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
-    writer_enable_thinking: bool = Field(default=False)
-    # Thinking for the evaluator chain, independent of the writer (parity with
-    # the review pipeline's separate evaluator/synthesizer flags). None → inherit
-    # writer_enable_thinking, preserving prior single-flag behaviour.
-    evaluator_enable_thinking: bool | None = Field(default=None)
     thinking_effort: ThinkingEffort = Field(default="medium")
-    # Fact-check each drafted section against the sources to remove ungrounded
-    # claims (hallucinated APIs/flags). Adds one LLM call per section.
-    verify_grounding: bool = Field(default=True)
     # Deep-research planning: derive web-search queries from the seed docs so the
     # guide draws on complementary material, not just a single page. Requires a
     # configured search provider (Tavily or Brave); a no-op otherwise.
@@ -191,17 +293,70 @@ class TechGuide(_Section):
     # material reaches the section writer (not just the outline planner); taken
     # round-robin across the queries, so 12 reads the top two of each.
     fetch_top_results: int = Field(default=12, ge=0)
+    # Search results are ranked by source authority, then publication year,
+    # then search rank; at most this many of the fetched pages are
+    # third-party (or a demoted class below), the rest go to the official
+    # docs and repository.
+    max_third_party_pages: int = Field(default=4, ge=0)
+    # Of the fetched result pages, this many slots are kept for primary
+    # non-official material (papers, the project's design docs and posts,
+    # reference-quality pages) while such results remain, so official pages
+    # cannot fill every slot and the guide keeps its design rationale. The
+    # third-party cap above still bounds them; demoted classes never count.
+    # 3 is a quarter of the default fetch budget, within the default cap.
+    min_secondary_pages: int = Field(default=3, ge=0)
+    # A requested docs page without a version in its path makes official the
+    # deepest prefix of its path that at least this share of its own
+    # same-host links (navigation and content) stay under: a docs site's
+    # sidebar keeps most links inside the product, while the header's few
+    # links to other products, a blog or a forum fall outside. 0.6 is a
+    # clear majority that a handful of header and footer links cannot reach.
+    official_scope_link_share: float = Field(default=0.6, gt=0, le=1)
+    # Domain classes (e.g. forum, social, aggregator) -> host patterns
+    # ("example.com" with its subdomains, "*.example.com", "forum.*"): their
+    # pages rank last and count as third-party (config-template.yaml lists
+    # the same defaults; a test keeps the two equal).
+    demoted_domains: dict[str, list[str]] = Field(
+        default_factory=lambda: {k: list(v) for k, v in DEMOTED_DOMAINS.items()}
+    )
+    # Domains the search backends leave out (Tavily exclude_domains, Brave
+    # -site:); "*.example.com" is sent as example.com.
+    excluded_domains: list[str] = Field(default_factory=list)
+    # The gathered corpus (queries, results, pages and their records) is
+    # saved under a hash of the inputs and reused by a rerun with the same
+    # inputs within this many days (0 = always gather again; the CLI's
+    # --fresh-sources forces a fresh gather once).
+    source_snapshot_ttl_days: float = Field(default=7.0, ge=0)
     # Upper bound on guide sections, told to the outline planner so it plans a
     # self-contained guide (usage, internals and integration) within it.
-    max_sections: int = Field(default=14, ge=3, le=30)
-    # Per-section evaluate-and-revise loop (the review pipeline's evaluate gate):
-    # sections scoring below the threshold are revised up to N times.
-    min_quality_score: int = Field(default=75, ge=0, le=100)
-    max_revision_attempts: int = Field(default=1, ge=0, le=5)
-    # Soft limit on one guide run (None = no limit); default keeps a run near
-    # $15 on Opus 5.5. Past it the remaining sections skip evaluate/revise/
-    # grounding; past 1.5x the run aborts.
-    max_total_tokens: int | None = Field(default=3_000_000, gt=0)
+    # Fewer, deeper sections: each teaches its features once (the guide's
+    # facts and code are checked; more sections, more places to slip).
+    max_sections: int = Field(default=11, ge=3, le=30)
+    # Hard ceiling on one run's estimated cost (list prices, USD; None = no
+    # limit). A guide costs about $15-23.
+    max_cost_usd: float | None = Field(default=60.0, gt=0)
+    # Pages read (the docs and reference material first) and the guide's
+    # prose characters (Korean).
+    max_sources_read: int = Field(default=40, ge=1, le=120)
+    min_total_chars: int = Field(default=25_000, ge=5_000, le=200_000)
+    max_total_chars: int = Field(default=45_000, ge=5_000, le=200_000)
+    # Run the guide's Python examples in order in an AgentCore Code
+    # Interpreter sandbox (no credentials) and fix a block that fails as
+    # pasted. A Batch job uses the stack's interpreter (public network, so
+    # the docs' packages install); a local run uses ``code_interpreter_id``,
+    # by default AWS's system interpreter (no network, nothing installed).
+    run_examples: bool = False
+    code_interpreter_id: str | None = None
+    # The time one block and the whole program may run (seconds).
+    run_block_timeout_s: int = Field(default=60, ge=5, le=600)
+    # At most 840: one synchronous Code Interpreter call may take 15 minutes.
+    run_timeout_s: int = Field(default=600, ge=30, le=840)
+
+    @model_validator(mode="after")
+    def _length_range(self) -> "TechGuide":
+        if self.min_total_chars > self.max_total_chars:
+            raise ValueError("tech_guide.min_total_chars exceeds max_total_chars")
+        return self
 
 
 class Survey(_Section):
@@ -222,20 +377,16 @@ class Survey(_Section):
     # is skipped; past 1.5x the run aborts. A plan uses ~50k tokens.
     max_total_tokens: int | None = Field(default=300_000, gt=0)
 
-    # Write stage (`survey write`). One card call per paper (cached), one
-    # outline call, then per section: writer, evaluator, at most
-    # max_revision_attempts revisions, grounding; one finalization call.
+    # Write stage (`survey write`, the evidence engine; docs/redesign.md):
+    # reading agents use card_model_id, the outline (and the finalization
+    # call) outline_model_id, the sections writing_model_id and the checks
+    # evaluation_model_id.
     card_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_SONNET)
     outline_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
     writing_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
     evaluation_model_id: LanguageModelId = Field(
         default=LanguageModelId.CLAUDE_V5_5_OPUS
     )
-    # Characters of a core paper's arXiv HTML text its card call reads.
-    card_source_chars: int = Field(default=150_000, ge=10_000, le=600_000)
-    min_quality_score: int = Field(default=75, ge=0, le=100)
-    max_revision_attempts: int = Field(default=1, ge=0, le=3)
-    verify_grounding: bool = Field(default=True)
     # Post length in characters of prose (Korean; other languages x2.5):
     # each core and supporting paper adds its share to its lineage section,
     # the other sections their depth's size; the total is then scaled into
@@ -244,9 +395,9 @@ class Survey(_Section):
     chars_per_supporting_paper: int = Field(default=800, ge=100, le=5_000)
     min_total_chars: int = Field(default=20_000, ge=5_000, le=200_000)
     max_total_chars: int = Field(default=70_000, ge=5_000, le=200_000)
-    # Soft limit on one write run: past it sections are written without
-    # evaluation, revision or grounding; past 1.5x the run aborts.
-    write_max_total_tokens: int | None = Field(default=4_500_000, gt=0)
+    # Hard ceiling on one write run's estimated cost (list prices, USD; None
+    # = no limit). A survey costs about $15-18.
+    write_max_cost_usd: float | None = Field(default=60.0, gt=0)
 
     @model_validator(mode="after")
     def _check_bounds(self) -> "Survey":
@@ -268,6 +419,10 @@ class Survey(_Section):
         return self
 
 
+class ConfigFileError(ValueError):
+    """A configuration file with invalid settings."""
+
+
 class Config(_Section):
     resources: Resources = Field(
         default_factory=lambda: Resources(project_name="scholar-lens")
@@ -279,17 +434,41 @@ class Config(_Section):
     summary: Summary = Field(default_factory=Summary)
     tech_guide: TechGuide = Field(default_factory=TechGuide)
     survey: Survey = Field(default_factory=Survey)
-    output_language: str = Field(default="Korean")
+    output_language: str = Field(default="Korean", min_length=1)
+
+    @field_validator("output_language")
+    @classmethod
+    def _language_name(cls, value: str) -> str:
+        # One spelling for every comparison and lookup ("korean" -> "Korean"):
+        # fixed titles, alt texts and length targets are keyed by it. A word
+        # with other than letters ("zh-TW") is kept as written.
+        words = value.split()
+        if not words:
+            raise ValueError("output_language must name a language")
+        return " ".join(w.capitalize() if w.isalpha() else w for w in words)
 
     @classmethod
     def from_yaml(cls, file_path: str | Path) -> "Config":
+        """The configuration in ``file_path``.
+
+        Raises:
+            ConfigFileError: The file's settings are invalid (each failing
+                key named, with the file).
+        """
         with open(file_path, encoding="utf-8") as f:
             config_data = yaml.safe_load(f)
-        return cls(**config_data if config_data else {})
+        try:
+            return cls(**config_data if config_data else {})
+        except ValidationError as e:
+            raise ConfigFileError(f"{file_path}: {validation_summary(e)}") from e
 
     @classmethod
     def load(cls) -> "Config":
+        """``config.yaml`` next to this module, or the file named by
+        ``SCHOLAR_LENS_CONFIG`` (an evaluation run with other settings)."""
         load_dotenv()
+        if override := os.environ.get(CONFIG_PATH_ENV):
+            return cls.from_yaml(override)
         if CONFIG_PATH.exists():
             return cls.from_yaml(CONFIG_PATH)
         if is_running_in_aws():

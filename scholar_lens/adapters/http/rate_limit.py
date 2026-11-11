@@ -1,0 +1,150 @@
+"""A thread-safe token-bucket rate limiter for polite external API access.
+
+arXiv (and similar) APIs throttle aggressively; firing many concurrent requests
+(as the citation stage does) triggers HTTP 429/503 storms that previously stalled
+whole jobs for hours. This limiter paces requests to a configured rate and lets a
+server-provided ``Retry-After`` push the next allowed time further out.
+
+It is deliberately simple and synchronous (``acquire`` blocks), because the arXiv
+client runs on worker threads via ``asyncio.to_thread`` — so a plain ``threading``
+primitive is the right tool and composes with concurrent callers.
+"""
+
+from __future__ import annotations
+
+import logging
+import math
+import threading
+import time
+from collections.abc import Callable
+
+logger = logging.getLogger(__name__)
+
+
+class RateLimiter:
+    """Token-bucket limiter: at most ``rate`` requests per ``per`` seconds."""
+
+    def __init__(
+        self,
+        rate: float = 1.0,
+        per: float = 3.0,
+        *,
+        name: str = "api",
+        monotonic: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        if rate <= 0 or per <= 0:
+            raise ValueError("rate and per must be positive")
+        self.rate = rate
+        self.per = per
+        self.name = name
+        self._capacity = rate
+        self._tokens = rate
+        self._lock = threading.Lock()
+        self._monotonic = monotonic
+        self._sleep = sleep
+        self._last_refill = self._monotonic()
+        # Absolute monotonic time before which no request may proceed (set by a
+        # server Retry-After). 0 means "no penalty in effect".
+        self._blocked_until = 0.0
+
+    def acquire(self) -> None:
+        """Block until a token is available (and any Retry-After penalty clears)."""
+        while True:
+            with self._lock:
+                now = self._monotonic()
+                wait = self._time_until_available(now)
+                if wait <= 0:
+                    self._tokens -= 1
+                    return
+            # Sleep outside the lock so other threads can refill/observe.
+            self._sleep(min(wait, self.per))
+
+    def penalize(self, retry_after_seconds: float) -> None:
+        """Honour a server ``Retry-After``: block all callers until it elapses."""
+        if retry_after_seconds <= 0:
+            return
+        with self._lock:
+            target = self._monotonic() + retry_after_seconds
+            self._blocked_until = max(self._blocked_until, target)
+            self._tokens = 0.0
+        logger.warning(
+            "Rate limiter '%s' penalized for %.1fs (server Retry-After).",
+            self.name,
+            retry_after_seconds,
+        )
+
+    def _time_until_available(self, now: float) -> float:
+        """Seconds to wait before a token is available. Refills under the lock."""
+        if now < self._blocked_until:
+            # A penalty is in force. Advance the refill clock so the penalty
+            # window is NOT later credited as accrued tokens (which would let a
+            # burst through the instant the penalty clears).
+            self._last_refill = now
+            return self._blocked_until - now
+        # Refill proportionally to elapsed time.
+        elapsed = now - self._last_refill
+        self._last_refill = now
+        self._tokens = min(
+            self._capacity, self._tokens + elapsed * (self.rate / self.per)
+        )
+        if self._tokens >= 1:
+            return 0.0
+        # Time for one more token to accrue.
+        return (1 - self._tokens) * (self.per / self.rate)
+
+
+# arXiv asks for about one request every 3 seconds: one limiter for the whole
+# process (the arXiv API client, citation fetches and the guide's arXiv pages).
+ARXIV_RATE_LIMITER = RateLimiter(rate=1.0, per=3.0, name="arxiv")
+# Penalty when an arXiv 429 carries no Retry-After header (arXiv usually omits
+# it).
+_ARXIV_429_FALLBACK_RETRY_SECONDS: float = 30.0
+# The longest server-requested wait honoured: a larger Retry-After is capped
+# here so one response cannot stall every later request for hours.
+MAX_RETRY_AFTER_SECONDS: float = 60.0
+
+
+def arxiv_retry_after_seconds(error: Exception) -> float:
+    """Best-effort extraction of a Retry-After hint from an arXiv/HTTP error,
+    capped at :data:`MAX_RETRY_AFTER_SECONDS`."""
+    response = getattr(error, "response", None)
+    headers = getattr(response, "headers", None) or {}
+    raw = headers.get("Retry-After") or headers.get("retry-after")
+    if raw:
+        try:
+            seconds = float(raw)
+        except (TypeError, ValueError):
+            return 0.0
+        if not math.isfinite(seconds):
+            return 0.0
+        return min(seconds, MAX_RETRY_AFTER_SECONDS)
+    # arXiv 429s rarely include Retry-After; apply a conservative default.
+    # The status comes from the HTTP response (httpx, requests) or the arxiv
+    # client's own HTTPError, never from the message: "2405.04291" holds 429.
+    status = getattr(response, "status_code", None) or getattr(error, "status", None)
+    if status == 429:
+        return _ARXIV_429_FALLBACK_RETRY_SECONDS
+    return 0.0
+
+
+# An arXiv 429 or 5xx is asked again this many times through the limiter
+# before the caller falls back (HTML -> PDF -> abstract) or fails.
+ARXIV_RETRIES: int = 2
+# The hold after an arXiv 5xx without Retry-After, doubled per attempt.
+ARXIV_SERVER_ERROR_SECONDS: float = 10.0
+
+
+def is_retryable_status(status: int | None) -> bool:
+    """A rate limit or server error: worth asking again later."""
+    return status is not None and (status == 429 or status >= 500)
+
+
+def arxiv_retry_hold(error: Exception, attempt: int) -> float:
+    """How long the shared arXiv limiter holds every arXiv request after
+    ``error`` on ``attempt`` (0-based): its Retry-After (capped), the 429
+    default, or a growing wait for a server error."""
+    hinted = arxiv_retry_after_seconds(error)
+    if hinted:
+        return hinted
+    return min(ARXIV_SERVER_ERROR_SECONDS * 2**attempt, MAX_RETRY_AFTER_SECONDS)

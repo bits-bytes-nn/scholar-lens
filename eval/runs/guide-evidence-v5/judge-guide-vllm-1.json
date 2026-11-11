@@ -1,0 +1,107 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/eval-guide/guide-vllm-v5.md",
+  "judge_run": 1,
+  "scores": {"A": 8.5, "B": 7.5, "C": 8.0, "D": 8.5, "E": 8.5, "F": 6.0, "T1": 8.0, "T2": 8.5, "T3": 9.0},
+  "score_notes": {
+    "A": "Front matter, two-level categories, no body H1, fenced code, $$ math all fine. Deductions: L244 table cell is an em-dash placeholder ('| `running` | ... | — |'); L27 is a one-sentence orphan paragraph ('어림 계산으로 옮기면, 40GB의 약 30%인 12GB 남짓이...'); L752 H2 is a very long heading.",
+    "B": "L509 broken sentence from a removed evidence marker: '이 남은 공간을에서 본 고정 크기 물리 블록으로 잘라 풀을 만듭니다.' (rewrite: '이 남은 공간을 앞서 본 고정 크기 물리 블록으로 잘라 풀을 만듭니다.'). L19 repeats the TL;DR's opening almost verbatim ('vLLM은 UC Berkeley에서 개발한 오픈소스 LLM 추론·서빙 ...', also L13). Formulaic '~하는 셈입니다' (L43, L258, L313). Otherwise natural 입니다 register.",
+    "C": "Back-references are accurate and no phantom section numbers, but L103 restates 20.4%~38.2% a third time (L13, L39) inside a worked example where it breaks the arithmetic thread; L294 spends a paragraph on Runpod's swap latency only to say it does not apply to V1.",
+    "D": "Hard parts get worked examples at the right moment: block allocation table (L94-99), slot_mapping vs block_table table (L137-142), CoW refcount table (L179-183), beam-search tables (L203-217), V1 token dict (L306-310). Mild over-use of OS analogies (L43, L55-60, L133, L237-244).",
+    "E": "Tables and code placed where discussed, figures referred to descriptively. Deductions: remote GIFs/PNG not localized (L148, L193, L760); L760 shows only the n=3 chart while L762 discusses both n=1 and n=3; L203-208 beam table is the writer's reconstruction (labeled as such at L201).",
+    "F": "Two claims wrong in the sample (stale metric name vllm:gpu_cache_usage_perc, Helm values excerpt with modelRevision under vllmConfig and no repository/tag) plus an out-of-sample overbroad claim at L378 'vLLM은 Linux 전용입니다.' that the post's own table at L414-415 contradicts (Apple Silicon via vLLM-Metal, CPU backend on Apple silicon).",
+    "T1": "Install, LLM/SamplingParams, llm.chat, curl, vllm serve flags, docker run all match current docs; the Helm values excerpt would fail and the metrics grep matches nothing for the KV-cache gauge on current vLLM.",
+    "T2": "Covers paper, launch blog, V1 blog, quickstart, engine args, conserving memory, Helm in a sensible order. Comparison table L772-773 leans on low-provenance third-party benchmark blogs (buildmvpfast, iotdigitaltwinplm).",
+    "T3": "Strong internals (PagedAttention math, block manager, TP, CoW, beam search, preemption, V1 EngineCore, prefix-cache hashing, KVConnector lookup), observability and when-to-choose. Design advice reads as recommendation (L566, L790). Minor: L144 states prefill uses conventional self-attention in present tense, which is the paper's (V0-era) design."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "H2s are claim noun phrases, e.g. L17 '연속 사전할당 방식이 낭비하는 GPU 메모리 60~80%', L229 '토큰 예산 안에서 반복마다 배치를 짜는 스케줄러와 선점·재계산 정책'."},
+    "running_example": {"status": "met", "evidence": "Qwen2.5-1.5B-Instruct chat service runs through block math (L103), preemption (L260), offline/serve (L424-491), tuning (L541), Docker (L648), Helm (L680), metrics (L698)."},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "L47-109: problem → block design vs contiguous → block-wise attention formula (L70-72) → 7-token worked example (L84-99) → block-size trade-off (L105-109)."},
+    "facts_said_once": {"status": "partly met", "evidence": "20.4~38.2% at L13, L39, L103; under 4% at L13, L43, L103; 24x at L13, L43; 55%/2.2x at L15, L227; UC Berkeley intro at L13 and L19."},
+    "numbers_with_scope_and_unit": {"status": "met", "evidence": "L327 'V0(multi-step scheduling 제외)보다 최대 1.7배 ... ShareGPT ... Llama 3.1 8B와 Llama 3.3 70B'; L766-773 table carries source and condition per row."},
+    "nothing_invented": {"status": "partly met", "evidence": "L684 places modelRevision under vllmConfig (chart reads modelSpec.modelRevision); L703/L710 use the removed metric vllm:gpu_cache_usage_perc; L378 'Linux 전용'. Illustrative numbers are labeled (L304, L362)."},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L788-792 '이 글의 판단은 이렇습니다 ...' with conditions for vLLM, TensorRT-LLM, SGLang and batch-1."},
+    "length_fitted_to_difficulty": {"status": "partly met", "evidence": "815 lines; depth is spent on hard parts, but OS analogies and repeated headline numbers add length."},
+    "type_specific_shape": {"status": "met", "evidence": "Opens with TL;DR and problem (L11-45); architecture/internals L47-370 precede install (L372) and config (L501); non-official design sources included; ends with failure conditions (L777-786) and choice criteria (L788)."},
+    "korean_style": {"status": "partly met", "evidence": "L509 '공간을에서'; L19 duplicates L13; repeated '~하는 셈입니다'. Register otherwise consistent."}
+  },
+  "sampling": "Paragraph blocks (prose, tables, code, images; headings excluded) between front matter and Sources: 213 blocks; sampled blocks 1, 4, 7, ... (71 blocks); 15 claims chosen from these.",
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 0,
+    "wrong": 2,
+    "unverifiable": 0,
+    "numbers": 10,
+    "examples": [
+      {"line": 13, "claim": "HF Transformers보다 최대 24배 높은 처리량, 모델 구조 변경 없이", "verdict": "supported", "source": "vLLM blog 2023-06-20: 'delivers up to 24x higher throughput than HuggingFace Transformers, without requiring any model architecture changes.'"},
+      {"line": 39, "claim": "KV 캐시 메모리의 20.4%~38.2%만 실제 토큰 상태 저장, 60%~80% 낭비", "verdict": "supported", "source": "arXiv 2309.06180 §3: 'only 20.4% - 38.2% of the KV cache memory is used to store the actual token states'; blog: 'existing systems waste 60% – 80% of memory'."},
+      {"line": 210, "claim": "빔 서치 예시: 블록 2, 4, 5, 8 해제, 9~12 새로 할당; 0,1,3 전부 공유, 6은 후보 0·1, 7은 후보 2·3", "verdict": "supported", "source": "arXiv §4.4: 'vLLM frees all physical blocks whose reference counts reach 0 (blocks 2, 4, 5, 8). Then, vLLM allocates new physical blocks (blocks 9-12) ... all candidates share blocks 0, 1, 3; candidates 0 and 1 share block 6, and candidates 2 and 3 ...'"},
+      {"line": 318, "claim": "v0.6.0이 ZeroMQ IPC 멀티프로세싱 API 서버 도입; V1은 격리된 EngineCore 루프", "verdict": "supported", "source": "V1 blog: 'In the v0.6.0 release, vLLM introduced a multiprocessing API server utilizing ZeroMQ for IPC ... creating an isolated EngineCore execution loop'."},
+      {"line": 331, "claim": "적중률 0%에서도 처리량 하락 1% 미만, V1에서 기본으로 켬; V0에서는 기본 꺼짐", "verdict": "supported", "source": "V1 blog: 'less than 1% decrease in throughput even when the cache hit rate is 0% ... we now enable prefix caching by default in V1'; 'it is disabled by default' (V0)."},
+      {"line": 412, "claim": "ROCm 휠: Python 3.12, ROCm 7.0, glibc 2.35 이상", "verdict": "supported", "source": "quickstart.md: 'It currently supports Python 3.12, ROCm 7.0 and glibc >= 2.35.'"},
+      {"line": 463, "claim": "SamplingParams 미지정 시 generation_config.json 적용, generation_config=\"vllm\"로 끔, VLLM_USE_MODELSCOPE", "verdict": "supported", "source": "quickstart.md: 'By default, vLLM will use sampling parameters recommended by model creator by applying the generation_config.json ... set generation_config=\"vllm\" ... export VLLM_USE_MODELSCOPE=True'."},
+      {"line": 473, "claim": "기본 주소 http://localhost:8000, --host/--port, 한 번에 모델 하나", "verdict": "supported", "source": "quickstart.md: 'By default, it starts the server at http://localhost:8000. You can specify the address with --host and --port ... hosts one model at a time'."},
+      {"line": 497, "claim": "NVIDIA CUDA에서 --attention-backend 값은 FLASH_ATTN과 FLASHINFER", "verdict": "supported", "source": "quickstart.md: 'On NVIDIA CUDA: FLASH_ATTN or FLASHINFER.'"},
+      {"line": 507, "claim": "gpu_memory_utilization 0~1, 인스턴스 단위, 기본값 확장형 KV 캐시 1.0, 그 밖 0.92", "verdict": "supported", "source": "vllm/config/cache.py docstring: 'This is a per-instance limit ... If unspecified, 1.0 with the extensible KV cache (sized from measured memory) and 0.92 otherwise'."},
+      {"line": 533, "claim": "kv-cache-dtype 기본 auto; CUDA 11.8+ fp8(=fp8_e4m3)/fp8_e5m2, ROCm fp8, Intel Gaudi fp8_inc", "verdict": "supported", "source": "vllm/config/cache.py: 'CUDA 11.8+ supports fp8 (=fp8_e4m3) and fp8_e5m2. ROCm (AMD GPU) supports fp8 (=fp8_e4m3). Intel Gaudi (HPU) supports fp8 (using fp8_inc).'"},
+      {"line": 593, "claim": "CUDA 그래프 캡처 크기는 기본적으로 max_num_seqs까지; CompilationConfig(mode=CompilationMode.VLLM_COMPILE, cudagraph_capture_sizes=[1,2,4,8,16])", "verdict": "supported", "source": "conserving_memory.md code: 'mode=CompilationMode.VLLM_COMPILE, # By default, it goes up to max_num_seqs cudagraph_capture_sizes=[1, 2, 4, 8, 16]'."},
+      {"line": 676, "claim": "Helm values 발췌: modelSpec에 name/modelURL/requestGPU, vllmConfig 아래 maxModelLen과 modelRevision, hf_token", "verdict": "wrong", "source": "production-stack helm/values.yaml defines modelRevision at the modelSpec level ('# -- Hugging Face model revision ... modelRevision: \"\"'); deployment-vllm-multi.yaml reads '{{- if $modelSpec.modelRevision }} - \"--revision\"', so under vllmConfig it is ignored. The template also requires modelSpec.repository and modelSpec.tag ('Required value ... must be defined'), which the excerpt omits; tutorial 02 snippet includes repository/tag."},
+      {"line": 710, "claim": "/metrics의 KV 캐시 사용률 지표 이름은 vllm:gpu_cache_usage_perc", "verdict": "wrong", "source": "vllm/v1/metrics/loggers.py (main) defines 'vllm:kv_cache_usage_perc'; no gpu_cache_usage_perc remains. The post's grep at L703 would match only the two queue gauges. Name comes from a vLLM forum thread, not the current metrics reference."},
+      {"line": 762, "claim": "LMSYS가 FastChat-vLLM으로 서빙 GPU 수를 절반으로 줄였고, 일평균 3만 건, 피크 6만 건 (4~5월)", "verdict": "supported", "source": "vLLM blog: 'cut the number of GPUs used for serving the above traffic by 50%. vLLM has been handling an average of 30K requests daily and a peak of 60K'; caption 'between April to May'."}
+    ]
+  },
+  "checklist": {
+    "source": "human_fixes.yaml guide-vllm has fixes: []; its notes list generic guide defects, used here as checks.",
+    "repeated": 1,
+    "avoided": 5,
+    "na": 0,
+    "repeated_ids": ["stale-third-party-identifiers"],
+    "items": [
+      {"id": "phantom-chapter-xrefs", "status": "avoided", "evidence": "No 'N장'/section-number cross-references; back-references use '앞서 본 ...' (L189, L286, L312)."},
+      {"id": "tag-remnant", "status": "avoided", "evidence": "No '</path></name>' or other stray tags."},
+      {"id": "entity-leak", "status": "avoided", "evidence": "No '&gt;'/'&lt;' in body; Sources link text uses '&#124;', '&#91;', '&amp;' (L803-810), which kramdown renders as characters."},
+      {"id": "unclosed-code-fence", "status": "avoided", "evidence": "Fence count is even; all 8 Python blocks parse with ast."},
+      {"id": "stale-third-party-identifiers", "status": "repeated", "evidence": "L703/L710/L735 'vllm:gpu_cache_usage_perc' (renamed vllm:kv_cache_usage_perc in current vLLM), taken from the vLLM forum thread (L812)."},
+      {"id": "install-usage-centric", "status": "avoided", "evidence": "Internals occupy L17-370 before installation at L372; config, deployment and metrics follow."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 47,
+    "architecture_notes": "Mechanism (PagedAttention blocks) from L47; system architecture diagram and scheduler/worker path at L111-115; V1 EngineCore at L314.",
+    "sources_total": 19,
+    "non_official_sources": 9,
+    "non_official_share": 0.47,
+    "non_official_list": ["jacklei0901.github.io Inside vLLM", "runpod.io vLLM Explained", "GitHub issue vllm#46383 (community comment)", "unsloth.ai engine-args guide", "premai.io Kubernetes guide", "GitHub issue guidellm#457", "discuss.vllm.ai forum thread", "buildmvpfast.com vLLM vs TGI", "iotdigitaltwinplm.com Q2 2026 benchmark"],
+    "official_or_primary": "7 docs.vllm.ai pages (Engine Arguments listed twice: latest and v0.9.2), 2 vLLM blog posts, the arXiv paper",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose": true,
+    "closes_with_failure_modes": true,
+    "closing_lines": "L777-786 conditions where vLLM's lead shrinks; L788-792 choice criteria"
+  },
+  "runnable_code": {
+    "verdict": "mostly runnable; two snippets broken",
+    "ok": [
+      "L384-389 uv venv/uv pip install vllm --torch-backend=auto/vllm download-kernels match quickstart.md lines 25-28",
+      "L399-402 pip install --extra-index-url .../cu129 matches gpu.cuda.inc.md",
+      "L404 'uv run --with vllm vllm --help' matches quickstart",
+      "L430-448 offline LLM/SamplingParams example matches quickstart with the model swapped; parses",
+      "L454-461 llm.chat(messages) matches LLM.chat in vllm/entrypoints/llm.py",
+      "L477-487 curl /v1/chat/completions request shape correct",
+      "L541-550 every flag exists (--max-model-len accepts '8k' per model.py; --block-size, --max-num-seqs, --max-num-batched-tokens, --enable-chunked-prefill, --kv-cache-dtype fp8)",
+      "L554-564, L583-587, L595-607, L619-623 LLM kwargs exist; CompilationMode exported from vllm.config",
+      "L641-650 docker run matches gpu.cuda.inc.md (image tag then --model)"
+    ],
+    "broken": [
+      "L676-686 Helm values: modelRevision under vllmConfig is ignored by the chart, and without repository/tag in the modelSpec list entry helm template fails on the required() check",
+      "L702-704 metrics grep: vllm:gpu_cache_usage_perc no longer exists; only the two queue gauges match"
+    ],
+    "not_run": "No model download or GPU use; checks are static against docs and source on vllm main and production-stack main."
+  },
+  "top_issues": [
+    "Metrics section (L703, L710, L735, L750) is built on vllm:gpu_cache_usage_perc, which current vLLM names vllm:kv_cache_usage_perc; the curl|grep example misses it.",
+    "Helm values excerpt (L676-686) puts modelRevision under vllmConfig (chart reads modelSpec.modelRevision) and omits the required repository/tag, so it would not deploy as shown.",
+    "L378 'vLLM은 Linux 전용입니다.' contradicts the platform table (L414-415); L509 has a broken sentence '이 남은 공간을에서 본'; headline numbers 20.4~38.2%, 4%, 24x repeated two to three times (L13, L39/L43, L103)."
+  ]
+}

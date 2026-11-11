@@ -1,0 +1,69 @@
+{
+  "item": "review-zep",
+  "post": "eval/baselines/2026-11-03/out/review-zep.md",
+  "source": "arXiv 2501.13956v1 HTML (full text)",
+  "sampling": "body paragraphs (non-blank blocks, headings excluded) starting at paragraph 2, every third: start lines 20,37,43,53,61,75,85,97,105,112,120,128,136,147,154,164,172,182,192,205,213,223,231,238,246,256,264,276,286,296,304,325,335,343,351,365,375,392,400,410,423,436,446,461,473,479",
+  "scores": {"A": 8.0, "B": 8.0, "C": 7.5, "D": 8.0, "E": 7.5, "F": 9.0, "G": 9.0, "R1": 9.0, "R2": 7.5, "R3": 7.5, "X1": 7.0},
+  "score_notes": {
+    "A": "Front matter complete (subtitle, paper_author 'Zep AI', paper_doi, two-level categories, use_math true, no author key); math only $$..$$ (0 \\( \\), 0 \\[ \\], no single $). Deductions: L35 '## 정적 RAG를 넘어서...' is an intro/abstract section right after the TL;DR (L45 restates the abstract numbers); L467 '### 논문의 결론' only retells the paper's conclusion.",
+    "B": "Consistent 입니다 register, natural technical Korean. Formulaic sentences: L99 '예를 들어 보겠습니다.' (drop; start with the example), L207 '예를 들어 앨리스의 이직을 따라가 보면 다음과 같습니다.' (-> '앨리스의 이직으로 따라가 봅니다.'), L343 '...최근 대화를 검색에 끌어들인다는 점입니다' (-> '...최근 대화를 검색에 끌어들이는 것이 BFS의 장점입니다'), L116 '...범위로 읽는 것이 정확합니다', L124 '설계상 가능성으로만 보는 편이 맞습니다', L211 '...보는 것이 자연스럽습니다'.",
+    "C": "Concepts introduced before use, the Alice/Acme/Betacorp example threads sections 3-6. Deductions: facts restated instead of pointed to: DMR 94.8 vs 93.4 at L29, L45, L388, L469; 115k->1.6k at L30, L442, L473; ~90% latency at L30, L45, L442.",
+    "D": "Hard parts get help at the right moment: t_ref worked example L99, four-timestamp walk-through L209-213, overlap example L233-236, plurality example L268. Padding for a competent reader: BM25/IDF primer L325, generic RRF/MMR definitions L351-352, graph-theory note on phi L57.",
+    "E": "Good tables (subgraphs L61, timestamps L198, DMR L377, LongMemEval L427, question types L446), cells match the source. Deductions: Table L446 drops four gpt-4o rows and then lists all of them in prose at L457 (should be whole rows in the table, or omitted); writer-made formulas L226 (marked as interpretation at L229), L265 (not marked as the writer's) and L437.",
+    "F": "15/15 sampled claims supported. Minor: L265 plurality-vote formula is the writer's formalization presented without saying the paper has no formula; L457 speculates the gpt-4o single-session-user row is 'a copy error in the source data' (paper says nothing); L20 TL;DR drops the 'temporally overlapping' condition for invalidation (stated correctly at L221).",
+    "G": "description 158 chars, opens with 'Zep', numbers 94.8/93.4/18.5/90 all in TL;DR; use_math true with $$; fences 'text'; no Liquid.",
+    "R1": "Section-by-section depth with prompts, timestamps, retrieval types, experiments and limits.",
+    "R2": "Layering intuition -> rule -> example is good, but length (484 lines) exceeds the paper's difficulty; generic IR primers inflate it.",
+    "R3": "TL;DR answers the four questions with scoped numbers (L29-30). Closing L473-479 has the writer's judgment and when to use it, but L477 retells the paper's future work and L467-469 the conclusion.",
+    "X1": "7 tags; 'Temporal-Knowledge-Graph' restates the title, 'Agentic-AI' and 'Knowledge-Graph' overlap with it."
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Claim headings L47, L174, L250, L361 '실험 설정과 DMR: MemGPT를 앞섰지만 너무 쉬운 벤치마크'; topic-name headings L49 '그래프를 수식으로 정의하기', L274 '커뮤니티 요약과 이름', L363 '공통 실험 설정', L369 'DMR 벤치마크의 구성'."},
+    "running_example": {"status": "met", "evidence": "Alice/Acme/Betacorp thread from L75 through L209-213, L236, L268, L319."},
+    "mechanism_order": {"status": "met", "evidence": "Edge invalidation L217-240: procedure -> rule formula L226 -> overlap example L233-236 -> why not overwrite L240."},
+    "facts_once": {"status": "not met", "evidence": "115k->1.6k at L30, L442, L473; DMR 94.8 vs 93.4 at L29, L45, L388, L469."},
+    "numbers_scoped": {"status": "met", "evidence": "L30 'LongMemEval_s(gpt-4o) ... 60.2%에서 71.2% ... 상대 개선율로 최대 18.5%'; L440 absolute vs relative with 18.3% computed."},
+    "nothing_invented": {"status": "partly met", "evidence": "Writer formulas L226 (labelled interpretation L229), L265 (unlabelled); L457 copy-error speculation. Writer examples are labelled ('설명용 예시', L99, L182, L268, L343)."},
+    "own_assessment_at_end": {"status": "partly met", "evidence": "L473-L479 give judgment and fit; L477 retells the paper's future work; L467-469 retells the conclusion."},
+    "length_fitted": {"status": "partly met", "evidence": "484 lines; generic primers L325 (BM25 IDF), L351-352 (RRF/MMR)."},
+    "type_shape": {"status": "partly met", "evidence": "Has TL;DR and closing '한계와 시사점', but an intro section follows the TL;DR (L35-45) restating the abstract."},
+    "korean_style": {"status": "partly met", "evidence": "No 이러한/즉/결국; formulaic frames L99, L207, L343, L116, L124."}
+  },
+  "claims": {
+    "checked": 15, "supported": 15, "unsupported": 0, "wrong": 0, "unverifiable": 0,
+    "examples": [
+      {"line": 20, "claim": "엣지마다 이중 시간 모델에 따라 타임스탬프 네 개", "verdict": "supported", "source": "\"the system tracks four timestamps: t'created and t'expired ∈ T' ... t_valid and t_invalid ∈ T\""},
+      {"line": 365, "claim": "실험 개요에는 꺼내는 항목이 20개, DMR 설명에는 상위 10개", "verdict": "supported", "source": "\"retrieve the 20 most relevant edges (facts) and entity nodes\"; DMR: \"retrieve the top 10 most relevant nodes and edges\""},
+      {"line": 375, "claim": "재귀 요약과 MemGPT 수치는 MemGPT 논문 보고값; gpt-4o-mini로는 재현하지 못함", "verdict": "supported", "source": "Table 1 'Recursive Summarization †', 'MemGPT †'; \"We were unable to reproduce MemGPT's results using gpt-4o-mini due to insufficient methodological details\""},
+      {"line": 392, "claim": "대화 하나에 메시지가 60개뿐", "verdict": "supported", "source": "\"each conversation contains only 60 messages, easily fitting within current LLM context windows\""},
+      {"line": 448, "claim": "single-session-preference gpt-4o-mini 30.0% -> 53.3%, 77.7%↑", "verdict": "supported", "source": "Table 3 row 'single-session-preference gpt-4o-mini 30.0% 53.3% 77.7% ↑'"},
+      {"line": 450, "claim": "temporal-reasoning gpt-4o-mini 36.5% -> 54.1%, 48.2%↑", "verdict": "supported", "source": "Table 3 row 'temporal-reasoning gpt-4o-mini 36.5% 54.1% 48.2% ↑'"},
+      {"line": 455, "claim": "single-session-assistant gpt-4o 94.6% -> 80.4%, 17.7%↓", "verdict": "supported", "source": "Table 3 row 'single-session-assistant gpt-4o 94.6% 80.4% 17.7% ↓'"},
+      {"line": 461, "claim": "knowledge-update: gpt-4o 78.2->83.3, gpt-4o-mini 76.9->74.4 (2.5%p 하락); 약한 모델에 추가 개발 필요", "verdict": "supported", "source": "Table 3 'knowledge-update gpt-4o-mini 76.9% 74.4% 3.36% ↓', 'gpt-4o 78.2% 83.3% 6.52% ↑'; \"additional development may be needed to improve less capable models' understanding of Zep's temporal data\""},
+      {"line": 473, "claim": "컨텍스트를 115k에서 1.6k 토큰으로 줄임", "verdict": "supported", "source": "Table 2 Avg Context Tokens 115k (Full-context) vs 1.6k (Zep)"},
+      {"line": 479, "claim": "DMR에서 gpt-4o-mini의 전체 컨텍스트 기준선은 98.0%", "verdict": "supported", "source": "\"When using gpt-4o-mini ... 98.0% for full-conversation\""},
+      {"line": 264, "claim": "새 엔티티는 이웃 다수가 속한 커뮤니티에 배정(레이블 전파의 재귀 단계 하나)", "verdict": "supported", "source": "\"implements the logic of a single recursive step in label propagation ... assigns the new node to the community held by the plurality of its neighbors\""},
+      {"line": 276, "claim": "커뮤니티 요약은 반복적 맵리듀스 요약; 커뮤니티 이름을 임베딩해 코사인 검색", "verdict": "supported", "source": "\"summaries derived through an iterative map-reduce-style summarization of member nodes ... These names are embedded and stored to enable cosine similarity searches\""},
+      {"line": 256, "claim": "GraphRAG는 Leiden을 쓰고 Zep은 레이블 전파를 동적 확장이 간단해서 택함", "verdict": "supported", "source": "\"we employ a label propagation algorithm rather than the Leiden algorithm. This choice was influenced by label propagation's straightforward dynamic extension\""},
+      {"line": 335, "claim": "LightRAG 고수준 키 검색과 비슷하나 독자 개발; 결합은 유망한 후속 연구", "verdict": "supported", "source": "\"While developed independently, our community search approach parallels the high-level key search methodology in LightRAG. The hybridization ... presents a promising direction for future research.\""},
+      {"line": 423, "claim": "MemGPT는 기존 메시지 기록 수집을 지원하지 않아 archival history 우회를 시도했지만 답을 얻지 못함", "verdict": "supported", "source": "\"does not support direct ingestion of existing message histories, we implemented a workaround by adding conversation messages to the archival history. However, we were unable to achieve successful question responses\""}
+    ]
+  },
+  "checklist": {
+    "repeated": 0, "avoided": 6, "na": 0, "repeated_ids": [],
+    "details": [
+      {"id": "inline-math-delimiters", "result": "avoided", "evidence": "0 occurrences of \\( or \\[; inline math is $$..$$ (e.g. L20 '$$t_{\\text{invalid}}$$')."},
+      {"id": "longmemeval-tldr-relative", "result": "avoided", "evidence": "L30 '저자들은 이를 상대 개선율로 최대 18.5%라고 보고합니다' (15.2% is not in the TL;DR; no %포인트)."},
+      {"id": "longmemeval-results-relative", "result": "avoided", "evidence": "L440 'gpt-4o-mini는 55.4%에서 63.8%로 ... 상대 개선율은 8.4/55.4 ≈ 15.2%', 'gpt-4o는 60.2%에서 71.2%로'; no '%포인트'."},
+      {"id": "longmemeval-baseline-misattributed", "result": "avoided", "evidence": "L30 'LongMemEval_s(gpt-4o)에서 정확도가 전체 컨텍스트 기준선의 60.2%에서 71.2%로'."},
+      {"id": "longmemeval-185-arithmetic", "result": "avoided", "evidence": "L440 '11.0/60.2 ≈ 18.3%로, 논문의 18.5%와 조금 다른데'."},
+      {"id": "missing-description", "result": "avoided", "evidence": "L8 description starts 'Zep은 ...', numbers 94.8/93.4/18.5/90 all in TL;DR, 158 chars."}
+    ]
+  },
+  "extras": {},
+  "top_issues": [
+    "Facts restated instead of pointed to: DMR 94.8 vs 93.4 (L29, L45, L388, L469), 115k->1.6k (L30, L442, L473), ~90% latency (L30, L45, L442).",
+    "Intro/abstract section after the TL;DR (L35-45) and a '논문의 결론' retelling (L467-469); closing L477 retells the paper's future work.",
+    "Writer-made formulas (L265 unlabelled, L226, L437) and speculation that a source row is a copy error (L457); Table 3 cut by rows but the cut rows reappear in prose (L457)."
+  ]
+}

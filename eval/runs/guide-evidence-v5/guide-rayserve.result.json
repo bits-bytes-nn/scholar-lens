@@ -1,0 +1,152 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.ray.io/en/latest/serve/getting_started.html",
+  "title": "Ray Serve: Deployments, Autoscaling, Routing and KubeRay in Production",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-ray-serve-deployments-autoscaling-routing-and-kuberay-in-production/2026-11-04-ray-serve-deployments-autoscaling-routing-and-kuberay-in-production.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-ray-serve-deployments-autoscaling-routing-and-kuberay-in-production.md",
+  "pr_url": null,
+  "warnings": [
+    "Section 'Power of Two Choices에서 접두사 인식 라우팅으로 넓어지는 레플리카 선택' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 소개한 RFC가 제안한 설계에서 라우터는 후보 레플리카에 순위를 매겨 반환합니다.",
+    "Section '진행 중 요청 수를 목표값에 맞추는 2단 오토스케일러': check 2 sentence(s) the evidence may not support: 숫자로 보면 목표가 2일 때 권장 범위는 $$2 \\times 1.2 = 2.4$$에서 $$2 \\times 1.5 = 3$$까지입니다 [[E144]]. (numbers not in its evidence) | `num_replicas=\"auto\"`의 기본값 5는 목표 2의 $$5 / 2 = 2.5$$배라 이 범위보다 넉넉합니다 [[E121]]. (numbers not in its evidence)",
+    "Section '진행 중 요청 수를 목표값에 맞추는 2단 오토스케일러' still has: numbers ['1.2', '2.4', '1.5'] are not in the cited evidence: 숫자로 보면 목표가 2일 때 권장 범위는 $$2 \\times 1.2 = 2.4$$에서 $$2 \\times 1.5 = 3$$까지입니다 . | numbers ['2.5'] are not in the cited evidence: `num_replicas=\"auto\"`의 기본값 5는 목표 2의 $$5 / 2 = 2.5$$배라 이 범위보다 넉넉합니다 .",
+    "Section '@serve.batch 동적 배칭과 지연 SLO 기반 성능 튜닝': check 1 sentence(s) the evidence may not support: Ray 2.59.0 기준 데코레이터 인자의 기본값은 표에 정리했습니다. (numbers not in its evidence)",
+    "Section '@serve.batch 동적 배칭과 지연 SLO 기반 성능 튜닝' still has: numbers ['2.59'] without evidence: Ray 2.59.0 기준 데코레이터 인자의 기본값은 표에 정리했습니다. | ['2.59'] already stated in '진행 중 요청 수를 목표값에 맞추는 2단 오토스케일러': refer back without repeating: Ray 2.59.0 기준 데코레이터 인자의 기본값은 표에 정리했습니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 배치를 8로 키우려면 앞서 다룬 `max_ongoing_requests`와 `target_ongoing_requests`도 함께 올려야 합니다. | ['100', '50'] already stated in '진행 중 요청 수를 목표값에 맞추는 2단 오토스케일러': refer back without repeating: 목표가 150ms이고 모델이 배치 하나를 100ms에 처리한다면, 대기 시간은 150 − 100 = 50ms보다 훨씬 작아야 합니다 . | ['100'] already stated in '진행 중 요청 수를 목표값에 맞추는 2단 오토스케일러': refer back without repeating: 같은 지침은 async를 쓰는데도 큐잉이 생기면 `max_concurrent_queries`(기본 100)를 올리라고 합니다 .",
+    "Section 'LLMConfig로 선언하는 LLM 디플로이먼트 설정' still has: 1,691 characters of prose for a target of 1,000: cut background, repetition and minor detail",
+    "Section '서빙 primitive로서의 강점과 ML 플랫폼으로서의 공백': check 2 sentence(s) the evidence may not support: Summarizer와 Translator는 각자 레플리카 수와 CPU·GPU 예약량을 따로 가지고, 앞서 붙인 `@serve.batch`와 `num_replicas=\"auto\"`도 디플로이먼트마다 다르게 걸립니다. (unsupported: No evidence that the text ML app's Summarizer/Translator use @serve.batch or num_replicas=\"auto\"; the config (E90) shows num_replicas: 1 for each.) | 클러스터 수준 업그레이드 중에 두 번째 클러스터를 스케줄하지 못하면 전환이 멈춥니다. (unsupported: Evidence only says the K8s cluster must be large enough to schedule both clusters; it does not say the switchover stalls if it can't.)",
+    "Section '서빙 primitive로서의 강점과 ML 플랫폼으로서의 공백' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 언급한 TrueFoundry 블로그 글은 네이티브 모델 버저닝과 고급 모니터링이 부족할 수 있다고 평가합니다 . | evidence ['E84'] was already referred back to once; do not restate it again: 컨테이너 이미지 같은 클러스터 수준 변경을 반영하려면 Kubernetes 클러스터가 Ray 클러스터 두 개를 동시에 띄울 만큼 커야 하고 , 헤드 노드 장애 허용 설정도 권장됩니다 . | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 운영에서 문제가 되는 지점은 대부분 앞서 다룬 메커니즘에서 나옵니다. | an evidence marker stands for a word; state the fact and put the marker at the end of the sentence: 스트리밍 챗봇과 비디오 분석 파이프라인 [[E74]], 추천 시스템용 모델 합성과 모델 멀티플렉싱 [[E75]], 소형부터 대형까지의 LLM과 비전·추론 LLM [[E77]], AWS NeuronCores와 Intel Gaudi 가속기 [[E78]]를 다룹니다.",
+    "Flags/metrics the official pages fetched for this guide never mention; verify them against the current reference: request_router_class"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3693.4,
+  "input_tokens": 4121409,
+  "output_tokens": 520284,
+  "estimated_cost_usd": 22.0549,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 240,
+      "failed_calls": 0,
+      "input_tokens": 20037,
+      "output_tokens": 520284,
+      "cache_read_tokens": 1494107,
+      "cache_write_tokens": 2607265,
+      "cost_usd": 22.054887
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2617,
+        "output_tokens": 185,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000354
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2786,
+        "output_tokens": 661,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000609
+      },
+      "read": {
+        "calls": 117,
+        "failed_calls": 0,
+        "input_tokens": 280,
+        "output_tokens": 120411,
+        "cache_read_tokens": 829305,
+        "cache_write_tokens": 229324,
+        "cost_usd": 1.943836
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 6983,
+        "cache_read_tokens": 1856,
+        "cache_write_tokens": 21421,
+        "cost_usd": 0.247523
+      },
+      "verify": {
+        "calls": 55,
+        "failed_calls": 0,
+        "input_tokens": 220,
+        "output_tokens": 123840,
+        "cache_read_tokens": 536362,
+        "cache_write_tokens": 1248135,
+        "cost_usd": 8.932907
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 63558,
+        "cache_read_tokens": 47190,
+        "cache_write_tokens": 346843,
+        "cost_usd": 3.024475
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 33384,
+        "cache_read_tokens": 26544,
+        "cache_write_tokens": 67524,
+        "cost_usd": 1.016152
+      },
+      "fix": {
+        "calls": 35,
+        "failed_calls": 0,
+        "input_tokens": 140,
+        "output_tokens": 169755,
+        "cache_read_tokens": 52850,
+        "cache_write_tokens": 694018,
+        "cost_usd": 6.88689
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 13874,
+        "output_tokens": 1507,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002141
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 19277,
+        "output_tokens": 2353,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003104
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 117,
+        "failed_calls": 0,
+        "input_tokens": 280,
+        "output_tokens": 120411,
+        "cache_read_tokens": 829305,
+        "cache_write_tokens": 229324,
+        "cost_usd": 1.943836
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 120,
+        "failed_calls": 0,
+        "input_tokens": 480,
+        "output_tokens": 397520,
+        "cache_read_tokens": 664802,
+        "cache_write_tokens": 2377941,
+        "cost_usd": 20.107947
+      }
+    }
+  }
+}

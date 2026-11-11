@@ -1,0 +1,156 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/, https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+  "title": "Strands Agents Loop: Model-Driven Cycle and the Controls Around It",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-strands-agents-loop-model-driven-cycle-and-the-controls-around-it/2026-11-05-strands-agents-loop-model-driven-cycle-and-the-controls-around-it.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-05-strands-agents-loop-model-driven-cycle-and-the-controls-around-it.md",
+  "pr_url": null,
+  "warnings": [
+    "Evidence that misstates its quote was left out: E224 (The same page's comparison table (E222) lists the columns in the order Strands, LangGraph, Swarm. Read that way, the Avg)",
+    "Section '직접 짠 오케스트레이션 대신 모델이 오케스트레이터가 되는 접근': check 4 sentence(s) the evidence may not support: 대신 모델이 매 단계 다음 행동을 정하는 루프를 SDK로 제공하고, 그 루프를 사용자 프로세스 안에서 실행합니다. (unsupported: Only the third-party DEV Community page (E226) says the loop runs inside the user's process. No official source confirms this as current behaviour.) | Strands Agents는 Python과 TypeScript용 오픈소스 SDK입니다. (unsupported: Python/TypeScript language support is platform support, which only an official source can decide. Here it comes only from a third-party page (E226).) | 호스팅되는 컨트롤 플레인 없이 사용자 프로세스 안에서 실행됩니다 [[E226]]. (unsupported: Running in-process with no hosted control plane is stated as current behaviour, but only the third-party page (E226) gives it. No official item confirms it.) | 턴 제한, 토큰 예산, 취소, 중단 사유 같은 수명주기 제어가 있고, 도구 실행과 구조화 출력도 포함됩니다 [[E226]]. (unsupported: The lifecycle controls (turn limits, token budgets, cancellation, stop reasons), tool execution and structured output are listed only by the third-party page (E226). No official item confirms them as current features.)",
+    "Section '모델·도구 단계를 Input·Wrap·Output으로 감싸는 미들웨어 체인' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 훅도 `AfterModelCallEvent.retry`로 재시도를 요청할 수 있습니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 같은 단계에 훅과 미들웨어를 함께 걸 수 있고, 겹칠 때 동작은 앞서 설명한 위치 관계를 그대로 따릅니다. | English stem with a Korean ending 'yield하고': 면 저장해 둔 `ModelStopReason`을 바로 yield하고 끝내며, 빗나갈 때만 `next_fn`을 불러 결과 | a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "English stem with a Korean ending 'yield하고': 면 저장해 둔 `ModelStopReason`을 바로 yield하고 끝내며, 빗나갈 때만 `next_fn`을 불러 결과"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 4269.6,
+  "input_tokens": 4317081,
+  "output_tokens": 581333,
+  "estimated_cost_usd": 23.7527,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 248,
+      "failed_calls": 1,
+      "input_tokens": 21319,
+      "output_tokens": 581333,
+      "cache_read_tokens": 1547778,
+      "cache_write_tokens": 2747984,
+      "cost_usd": 23.752654
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2686,
+        "output_tokens": 184,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000361
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2855,
+        "output_tokens": 784,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000678
+      },
+      "read": {
+        "calls": 118,
+        "failed_calls": 0,
+        "input_tokens": 282,
+        "output_tokens": 134709,
+        "cache_read_tokens": 872757,
+        "cache_write_tokens": 257556,
+        "cost_usd": 2.166092
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 7877,
+        "cache_read_tokens": 1856,
+        "cache_write_tokens": 29248,
+        "cost_usd": 0.304538
+      },
+      "verify": {
+        "calls": 61,
+        "failed_calls": 0,
+        "input_tokens": 244,
+        "output_tokens": 147463,
+        "cache_read_tokens": 547303,
+        "cache_write_tokens": 1430534,
+        "cost_usd": 10.321826
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 65667,
+        "cache_read_tokens": 47190,
+        "cache_write_tokens": 320695,
+        "cost_usd": 2.935915
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 37607,
+        "cache_read_tokens": 25822,
+        "cache_write_tokens": 117321,
+        "cost_usd": 1.349309
+      },
+      "fix": {
+        "calls": 35,
+        "failed_calls": 0,
+        "input_tokens": 140,
+        "output_tokens": 184311,
+        "cache_read_tokens": 52850,
+        "cache_write_tokens": 592630,
+        "cost_usd": 6.67107
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 1,
+        "input_tokens": 14992,
+        "output_tokens": 2731,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002865
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 20533,
+        "output_tokens": 3699,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003904
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 118,
+        "failed_calls": 0,
+        "input_tokens": 282,
+        "output_tokens": 134709,
+        "cache_read_tokens": 872757,
+        "cache_write_tokens": 257556,
+        "cost_usd": 2.166092
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 126,
+        "failed_calls": 0,
+        "input_tokens": 504,
+        "output_tokens": 442925,
+        "cache_read_tokens": 675021,
+        "cache_write_tokens": 2490428,
+        "cost_usd": 21.582658
+      },
+      "unknown": {
+        "calls": 1,
+        "failed_calls": 1,
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.0
+      }
+    }
+  }
+}

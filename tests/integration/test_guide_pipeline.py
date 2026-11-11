@@ -1,0 +1,460 @@
+"""The guide pipeline's deterministic parts (no LLM calls)."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
+
+import boto3
+import pytest
+
+from scholar_lens import bootstrap
+from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+from scholar_lens.adapters.conventions_file import load_local_conventions
+from scholar_lens.adapters.github.publisher import Publisher
+from scholar_lens.application.run import RunContext
+from scholar_lens.application.use_cases import guide as guide_pipeline
+from scholar_lens.application.use_cases.guide import guide_branch_id, guide_title
+from scholar_lens.configs import Github
+from scholar_lens.configs.config import Config
+from scholar_lens.domain.conventions import BlogPost
+from scholar_lens.domain.guide.models import TechGuide
+from scholar_lens.domain.jobs import JobRequest
+from tests.integration.test_publisher import PNG, FakeGithub, FakeRepo
+
+
+def test_branch_id_follows_the_source_urls_not_the_title() -> None:
+    a = guide_branch_id(["https://docs.vllm.ai/en/latest/", "https://X.org/a"])
+    b = guide_branch_id(["https://x.org/a/", "https://docs.vllm.ai/en/latest"])
+    assert a == b and a.startswith("guide-") and len(a) == len("guide-") + 12
+    assert guide_branch_id(["https://x.org/b"]) != a
+
+
+def test_branch_id_tells_pages_apart_by_query() -> None:
+    intro = guide_branch_id(["https://docs.example.com/view?id=intro"])
+    advanced = guide_branch_id(["https://docs.example.com/view?id=advanced"])
+    assert intro != advanced
+    assert intro == guide_branch_id(["https://docs.example.com/view?id=intro#top"])
+
+
+def test_guide_document_converts_markers_and_drops_unoffered_images() -> None:
+    from scholar_lens.application.use_cases.guide import guide_document
+    from scholar_lens.domain.guide.models import TechGuide
+
+    arch = "https://docs.x.dev/img/arch.png"
+    guide = TechGuide(topic="X 시작하기", body="", image_urls=[arch])
+    document = (
+        "## 구조\n\n아래 그림은 구조를 보여 줍니다.\n\n"
+        f'[Image: alt="아키텍처", src="{arch}"]\n\n'
+        "![로고](https://docs.x.dev/img/logo.svg)\n"
+    )
+    out = guide_document(document, guide, korean=True)
+    assert "[Image:" not in out
+    assert f"]({arch})" in out
+    assert "logo.svg" not in out
+
+
+def test_branch_id_counts_reference_material() -> None:
+    docs = ["https://docs.vllm.ai/en/latest/"]
+    assert guide_branch_id(docs) != guide_branch_id(
+        [*docs, "https://arxiv.org/abs/2309.06180"]
+    )
+    # A guide from reference material alone still gets its own branch.
+    assert guide_branch_id(["https://blog.x.io/a"]) != guide_branch_id([])
+
+
+LONG = (
+    "vLLM: Installation, Offline and Online Serving, PagedAttention and "
+    "Continuous Batching Internals, Configuration and Deployment"
+)
+
+
+@pytest.mark.parametrize(
+    ("title", "seo_title", "expected"),
+    [
+        ("vLLM Serving Guide", "", "vLLM Serving Guide"),
+        (LONG, "vLLM: Serving and Internals", "vLLM: Serving and Internals"),
+        # An over-long seo_title: the title cut at a word boundary, never
+        # reduced to the tool's name before the colon.
+        (
+            LONG,
+            "x" * 71,
+            "vLLM: Installation, Offline and Online Serving, PagedAttention and",
+        ),
+        (
+            LONG,
+            "",
+            "vLLM: Installation, Offline and Online Serving, PagedAttention and",
+        ),
+    ],
+)
+def test_a_guide_title_over_the_seo_limit_is_replaced(
+    title: str, seo_title: str, expected: str
+) -> None:
+    assert guide_title(title, seo_title, 70) == expected
+
+
+class FakeGuideGenerator:
+    """The guide generator with its model calls replaced: each run gives the
+    guide a new title and proposes a new topic."""
+
+    def __init__(
+        self,
+        title: str,
+        topic: str,
+        *,
+        blocking: list[str] | None = None,
+        notes: list[str] | None = None,
+    ) -> None:
+        self.title, self.topic = title, topic
+        self.notes: list[str] = []
+        self.blocking = blocking or []
+        self.guide_notes = notes or []
+
+    def guide(self, urls: list[str]) -> TechGuide:
+        """What the evidence engine (faked) writes for this run."""
+        body = "## 설치\n\n![구조](https://arxiv.org/html/2309.06180v1/x1.png)\n\n설명입니다.\n"
+        return TechGuide(
+            topic=self.title,
+            body=body,
+            source_urls=list(urls),
+            image_urls=["https://arxiv.org/html/2309.06180v1/x1.png"],
+            notes=list(self.guide_notes),
+            blocking=list(self.blocking),
+        )
+
+    async def classify(self, guide: TechGuide, **_: Any) -> dict[str, str]:
+        return {
+            "category": self.topic,
+            "keywords": "vLLM",
+            "controlled_tags": "Efficient-Attention",
+        }
+
+
+async def _run_guide(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    context: RunContext,
+    generator: FakeGuideGenerator,
+    *,
+    create_pr: bool = False,
+) -> Any:
+    async def no_guideline(_: RunContext) -> None:
+        return None
+
+    context.root_dir = tmp_path
+
+    async def evidence(
+        _context: RunContext,
+        _tools: Any,
+        gen: FakeGuideGenerator,
+        *,
+        urls: list[str],
+        **_: Any,
+    ) -> TechGuide:
+        return gen.guide(urls)
+
+    monkeypatch.setattr(bootstrap, "TechGuideGenerator", lambda **_: generator)
+    monkeypatch.setattr(guide_pipeline, "write_guide_with_evidence", evidence)
+    monkeypatch.setattr(
+        bootstrap,
+        "WebResearcher",
+        lambda **_: SimpleNamespace(
+            close=lambda: None,
+            search_notes=lambda: [],
+            repo_tags=lambda _: None,
+            supports_search=True,
+        ),
+    )
+    monkeypatch.setattr(guide_pipeline, "load_translation_guideline", no_guideline)
+    request = JobRequest(kind="guide", urls=[DOCS], create_pr=create_pr)
+    return await guide_pipeline.run_guide(
+        context,
+        request,
+        TokenUsageTracker(),
+        bootstrap.GuideToolkit(context),  # type: ignore[arg-type]
+    )
+
+
+DOCS = "https://docs.vllm.ai/en/latest/"
+_GITHUB = Github(
+    enabled=True,
+    repo_name="owner/blog",
+    author_name="Bot",
+    author_email="bot@example.com",
+)
+
+
+async def test_a_retitled_rerun_updates_the_published_guide(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The guide's identity is its sources (the branch), not the model's
+    title: a rerun under a new title and topic replaces the published guide,
+    keeping its file name, URL (date, topic) and image names."""
+    spec = load_local_conventions()
+    repo = FakeRepo({})
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_x")
+    monkeypatch.setattr(FakeGithub, "repo", repo)
+    monkeypatch.setattr("scholar_lens.adapters.github.publisher.Github", FakeGithub)
+    session = boto3.Session(region_name="us-east-1")
+
+    config = Config()
+
+    def context(posts: list[BlogPost]) -> RunContext:
+        ctx = bootstrap.run_context(
+            config,
+            default_boto_session=session,
+            bedrock_boto_session=session,
+            publisher_factory=lambda ctx: Publisher(
+                _GITHUB,
+                root_dir=tmp_path,
+                conventions=spec,
+                site_posts=ctx.blog_posts,
+                fetch_image=lambda url: PNG,
+            ),
+        )
+        ctx.conventions, ctx.blog_posts, ctx.blog_tags = spec, posts, {}
+        return ctx
+
+    first = await _run_guide(
+        tmp_path / "1",
+        monkeypatch,
+        context([]),
+        FakeGuideGenerator("vLLM Serving Guide", "Language-Models"),
+    )
+    # Merged a while ago: the post is on the blog, published by the branch.
+    published = f"_posts/2026-01-05-{first.markdown_path.name[11:]}"
+    repo.merge(f"paper-reviews/{guide_branch_id([DOCS])}", [published])
+    blog = BlogPost(
+        path=published,
+        date=datetime(2026, 1, 5, 3, tzinfo=UTC),
+        categories=["Tech Guides", "Language-Models"],
+    )
+    second = await _run_guide(
+        tmp_path / "2",
+        monkeypatch,
+        context([blog]),
+        FakeGuideGenerator("Serving LLMs with vLLM", "Finetuning"),
+    )
+    post = second.markdown_path.read_text()
+    assert second.markdown_path.name == "2026-01-05-vllm-serving-guide.md"
+    assert 'title: "Serving LLMs with vLLM"' in post
+    assert "\ndate: 2026-01-05 03:00:00\n" in post
+    assert 'categories: ["Tech Guides", "Language-Models"]' in post
+    assert "cover: /assets/images/language-models.jpg" in post
+    assert "](/assets/images/vllm-serving-guide-1.png)" in post
+
+
+async def test_blocking_problems_lead_the_warnings_and_the_pr_body(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The engine's blocking problems reach the job's warnings first and the
+    PR body's first checklist, ahead of the review notes."""
+    spec = load_local_conventions()
+    repo = FakeRepo({})
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_x")
+    monkeypatch.setattr(FakeGithub, "repo", repo)
+    monkeypatch.setattr("scholar_lens.adapters.github.publisher.Github", FakeGithub)
+    session = boto3.Session(region_name="us-east-1")
+    config = Config()
+    config.resources.github = _GITHUB
+    context = bootstrap.run_context(
+        config,
+        default_boto_session=session,
+        bedrock_boto_session=session,
+        publisher_factory=lambda ctx: Publisher(
+            _GITHUB,
+            root_dir=tmp_path,
+            conventions=spec,
+            site_posts=ctx.blog_posts,
+            fetch_image=lambda url: PNG,
+        ),
+    )
+    context.conventions, context.blog_posts, context.blog_tags = spec, [], {}
+    generator = FakeGuideGenerator(
+        "vLLM Serving Guide",
+        "Language-Models",
+        blocking=["the claim check of 'x' did not run"],
+        notes=["Section 'y' kept a flagged sentence."],
+    )
+    outcome = await _run_guide(
+        tmp_path, monkeypatch, context, generator, create_pr=True
+    )
+    assert outcome.warnings[0] == "Blocking: the claim check of 'x' did not run"
+    assert outcome.pr_url and repo.pulls
+    body = repo.pulls[-1].body
+    blocking = body.index("### Blocking")
+    assert body.index("- [ ] the claim check of 'x' did not run") > blocking
+    assert blocking < body.index("### Review checklist")
+    assert body.index("Section 'y' kept a flagged sentence.") > blocking
+
+
+async def test_the_evidence_engine_gets_the_request_and_failures_keep_the_notes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import MagicMock
+
+    seen: dict[str, object] = {}
+
+    class Stop(Exception):
+        pass
+
+    async def evidence(context, tools, generator, **kwargs):  # type: ignore[no-untyped-def]
+        seen.update(kwargs, generator=generator)
+        generator.notes.append("Reference material that could not be read")
+        raise Stop
+
+    class Generator:
+        def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+            seen["generator_kwargs"] = kwargs
+            self.notes: list[str] = []
+
+    researcher = MagicMock()
+    researcher.search_notes.return_value = ["Search fell back to Brave"]
+    monkeypatch.setattr(guide_pipeline, "write_guide_with_evidence", evidence)
+    monkeypatch.setattr(bootstrap, "TechGuideGenerator", Generator)
+    monkeypatch.setattr(bootstrap, "WebResearcher", lambda **_: researcher)
+
+    async def no_guideline(context):  # type: ignore[no-untyped-def]
+        return None
+
+    monkeypatch.setattr(guide_pipeline, "load_translation_guideline", no_guideline)
+    context = MagicMock()
+    context.config = Config()
+    context.require_conventions.return_value.type_problem.return_value = ""
+    request = MagicMock(
+        urls=[DOCS],
+        reference_urls=["https://blog.x.io/a"],
+        search_queries=["vllm paged attention"],
+        discover_subpages=False,
+    )
+    with pytest.raises(Stop) as failed:
+        await guide_pipeline.run_guide(
+            context, request, MagicMock(), bootstrap.GuideToolkit(context)
+        )
+    assert seen["urls"] == [DOCS]
+    assert seen["reference_urls"] == ["https://blog.x.io/a"]
+    assert seen["search_queries"] == ["vllm paged attention"]
+    assert seen["discover_subpages"] is False
+    assert isinstance(seen["generator"], Generator)
+    cfg = Config().tech_guide
+    assert seen["generator_kwargs"]["max_research_queries"] == cfg.max_research_queries  # type: ignore[index]
+    assert failed.value.run_notes == [  # type: ignore[attr-defined]
+        "Reference material that could not be read",
+        "Search fell back to Brave",
+    ]
+    researcher.close.assert_called_once()
+
+
+async def test_search_queries_without_a_provider_fail_before_any_model_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from unittest.mock import MagicMock
+
+    async def no_guideline(context):  # type: ignore[no-untyped-def]
+        return None
+
+    researcher = MagicMock()
+    researcher.supports_search = False
+    built = MagicMock()
+    monkeypatch.setattr(guide_pipeline, "load_translation_guideline", no_guideline)
+    monkeypatch.setattr(bootstrap, "WebResearcher", lambda **_: researcher)
+    monkeypatch.setattr(bootstrap, "TechGuideGenerator", built)
+    context = MagicMock()
+    context.config = Config()
+    context.require_conventions.return_value.type_problem.return_value = ""
+    request = MagicMock(urls=[DOCS], reference_urls=[], search_queries=["q"])
+    with pytest.raises(ValueError, match="TAVILY_API_KEY"):
+        await guide_pipeline.run_guide(
+            context, request, MagicMock(), bootstrap.GuideToolkit(context)
+        )
+    built.assert_not_called()
+
+
+def test_a_category_that_cannot_label_the_post_fails_at_run_start() -> None:
+    from scholar_lens.adapters.conventions_file import load_local_conventions
+    from scholar_lens.application.run import check_post_type
+
+    spec = load_local_conventions()
+    paper_type = next(t for t in spec.types if spec.is_paper_type(t))
+    with pytest.raises(ValueError, match="does not fit a guide"):
+        check_post_type(spec, paper_type, "tech_guide_category", artifact="guide")
+    with pytest.raises(ValueError, match="unknown type"):
+        check_post_type(spec, "Nope", "review_category", artifact="review")
+    check_post_type(spec, paper_type, "review_category", artifact="review")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://d.dev/static/logo-architecture.svg",
+        "https://d.dev/img/icons/gpu-layout.png",
+        "https://img.shields.io/badge/x",
+        "https://d.dev/img/banner-flow.png",
+    ],
+)
+def test_guide_documents_keep_content_images_whatever_their_url_says(url: str) -> None:
+    """No word or host list decides what an image is: a content image the
+    page kept reaches the reader, which judges whether it is decorative."""
+    from scholar_lens.application.use_cases.guide import guide_documents
+    from scholar_lens.domain.research import PageContent
+
+    page = PageContent(
+        url="https://d.dev/guide",
+        title="Guide",
+        text="A page long enough to become a source document. " * 10,
+        image_urls=[url],
+        authority="official",
+    )
+    (document,) = guide_documents([page])
+    assert [f.url for f in document.figures] == [url]
+
+
+async def test_the_guide_publishes_only_links_to_its_gathered_pages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A writer's link to a page the run never gathered keeps only its text
+    with a run note; links to the requested page, to a gathered page under
+    the address it landed on, and in code stay."""
+    spec = load_local_conventions()
+    session = boto3.Session(region_name="us-east-1")
+    context = bootstrap.run_context(
+        Config(),
+        default_boto_session=session,
+        bedrock_boto_session=session,
+        publisher_factory=lambda ctx: Publisher(
+            _GITHUB,
+            root_dir=tmp_path,
+            conventions=spec,
+            site_posts=ctx.blog_posts,
+            fetch_image=lambda url: PNG,
+        ),
+    )
+    context.conventions, context.blog_posts, context.blog_tags = spec, [], {}
+    landed = "https://docs.vllm.ai/en/stable/serving/"
+
+    class Linking(FakeGuideGenerator):
+        def guide(self, urls: list[str]) -> TechGuide:
+            guide = super().guide(urls)
+            guide.body += (
+                f"\n[문서]({DOCS}), [서빙](https://docs.vllm.ai/en/stable/serving), "
+                "[블로그](https://blog.example.org/made-up)와 "
+                "`[코드](https://blog.example.org/in-code)`를 봅니다.\n"
+            )
+            guide.link_urls = [*urls, "https://docs.vllm.ai/en/latest/serving", landed]
+            return guide
+
+    outcome = await _run_guide(
+        tmp_path, monkeypatch, context, Linking("vLLM Serving Guide", "Language-Models")
+    )
+    post = outcome.markdown_path.read_text()
+    assert "블로그와" in post and "](https://blog.example.org/made-up)" not in post
+    assert f"[문서]({DOCS})" in post
+    assert "[서빙](https://docs.vllm.ai/en/stable/serving)" in post
+    assert "`[코드](https://blog.example.org/in-code)`" in post
+    assert any(
+        "Unlinked 1 link" in w and "blog.example.org/made-up" in w
+        for w in outcome.warnings
+    )

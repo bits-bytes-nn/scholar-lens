@@ -1,0 +1,132 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/eval-guide/guide-vllm-v2.md",
+  "judge_run": 1,
+  "scores": {"A": 7, "B": 7, "C": 6, "D": 8, "E": 8, "F": 6, "T1": 7, "T2": 8, "T3": 7},
+  "deductions": {
+    "A": [
+      "L347 '표의 근거는입니다.' and L682 '출처는입니다.' are broken sentences left by an empty citation",
+      "Sources list repeats entries: Quickstart (L702, L721), the paper (L709, L722), the vLLM blog (L708, L723)",
+      "L327 heading names TPU, but TPU appears only as one install-table row (L396)",
+      "Five remote images are not localized (L69, L79, L161, L169, L672)"
+    ],
+    "B": [
+      "Broken sentences at L347 and L682 (see A)",
+      "L50 repeats the TL;DR sentence word for word: 'vLLM은 UC Berkeley에서 개발한 오픈소스 LLM 추론·서빙 라이브러리입니다' (L13 and L50)",
+      "L470 '대상 인자는 ...' restates the bullet list just above (L465-468) and L403",
+      "Hedging formula '~편이 안전합니다/좋습니다/맞습니다' used 12 times (L15, L151, L325, L349, L371, L399, L417, L513, L517, L692 ...)"
+    ],
+    "C": [
+      "L248 '앞서 설명했듯 매 반복의 입력은 프롬프트 단계 요청의 토큰과 생성 단계 요청의 최신 토큰을 이어 붙인 시퀀스 하나이므로' refers to an explanation the post never gives",
+      "L517 '앞서 소개한 fp8 KV 캐시의 절감 수치는 서드파티 자료의 주장이므로' refers to a figure the post never gives",
+      "L521 '앞서 본 예처럼, 지정한 양만큼 GPU 메모리를 가상으로 늘린 것' refers to an example that is not in the post",
+      "L397 '설치 절차는 뒤의 CPU 백엔드 절에서 다룸' refers to an install procedure the CPU section (L552-594) does not have"
+    ],
+    "D": [
+      "Hard parts get worked examples (block-table trace L87-96, CoW table L177-183, block-size table L134-139), but L457 gives the KV budget formula with no number plugged in, and the 40% static-batching figure (L46) is credited to '원 예시' with no source named"
+    ],
+    "E": [
+      "Swap vs recompute table (L265-268) has only two rows and restates L263",
+      "No OpenAI client request code for the chat-service running example, although L15, L429 and L594 send the reader to it"
+    ],
+    "F": [
+      "L602-606 presents `vllm:gpu_cache_usage_perc` and the Swapped count as current signals and bases the scale-out rule on 'Pending과 Swapped가 함께 늘어난다면'. The current metrics design doc names `vllm:kv_cache_usage_perc`, lists num_requests_swapped / cpu_cache_usage_perc as legacy, and says '--swap-space flag has been removed' in V1; the only source is a 0.6.1.post2 issue",
+      "L207 '스케줄러는 ... 스왑·재계산 방식의 선점을 맡습니다' (present tense, current engine) describes the paper-era V0 design; swap preemption is gone in V1 (same metrics doc)",
+      "L457-461 budget formula M_KV = M_GPU*u - (weights+act+graph) is not in any source; the official engine-args text says gpu_memory_utilization defaults to 1.0 with the extensible KV cache and 0.92 otherwise, which the post never states (L548 gives only Unsloth's 0.9)",
+      "L517 back-reference to an fp8 saving figure that does not exist (see C)",
+      "Empty citations at L347/L682"
+    ],
+    "T1": [
+      "Commands and flags are real and current (uv/download-kernels, --attention-backend, Docker, CompilationConfig)",
+      "No client request code; the CPU Docker run uses a source-built `vllm-cpu-env` image (L589) but gives no build steps; the scale-to-zero YAML (L636-641) leaves out the keepalive trigger the text says to add"
+    ],
+    "T2": [
+      "Topics are grounded and in a sensible order; the vLLM-Metal roadmap (L355-371) takes up a lot of room for a niche path"
+    ],
+    "T3": [
+      "Deep internals from the paper (block table, CoW, beam sharing, fused kernels, TP block IDs) plus system fit (KEDA, metrics, NUMA)",
+      "Paper-era mechanisms are presented as current (swap preemption, V0 metrics). Automatic prefix caching, the main current form of cross-request KV reuse, is never covered: L197 describes only the paper's reserved-prefix design"
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L17 '연속 메모리 사전 할당과 정적 배칭이 낭비하는 GPU 메모리와 연산', L373 'uv와 백엔드별 휠, 사전 컴파일 커널로 끝내는 설치'"},
+    "running_example": {"status": "partly met", "evidence": "Qwen/Qwen2.5-1.5B-Instruct chat service runs through L132, L319, L413, L426, L590, L612, but there is no client request"},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "Block table: problem L27 -> design L58 -> formula L104 -> worked trace L87-96; CoW: L167 -> table L177-183"},
+    "facts_said_once": {"status": "not met", "evidence": "60-80% at L13, L33, L118; <4% at L13, L118; 2-4x at L13, L54; hardware list at L15 and L333; UC Berkeley sentence at L13 and L50"},
+    "numbers_with_scope_unit": {"status": "partly met", "evidence": "Blog multiples scoped by GPU/model/dataset (L676-680); 20.4% (L33) drops the paper's 20.4-38.2% range"},
+    "nothing_invented": {"status": "partly met", "evidence": "Arithmetic examples are labelled as such (L37, L132, L175), but the KV budget formula L459 is unsourced, and the back-references at L517/L521 point to nothing"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L696 '이 글의 판단으로는 ...' with when to choose TensorRT-LLM / SGLang / Ollama / HF"},
+    "length_fitted": {"status": "partly met", "evidence": "About 41k characters; internals justify it, but the restatements (L470, L50) and the Metal roadmap pad it"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR then the problem (L17); architecture and mechanisms (L56-325) before install and config (L373+); ends with when to choose (L664-696); 6/20 unique sources non-official"},
+    "korean_style": {"status": "partly met", "evidence": "Natural 입니다 register overall; broken sentences at L347/L682; '~편이' hedges repeated 12 times"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 1,
+    "unverifiable": 0,
+    "sample_method": "Body paragraphs numbered from L13 (headings excluded); paragraphs 1,4,7,... taken (63 sampled); 15 claims drawn across them",
+    "examples": [
+      {"line": 13, "claim": "2-4x throughput vs FasterTransformer, Orca at same latency", "verdict": "supported", "source": "arXiv 2309.06180 abstract: 'improves the throughput of popular LLMs by 2-4x with the same level of latency compared to ... FasterTransformer and Orca'"},
+      {"line": 23, "claim": "OPT-13B 800 KB per token, 2048 tokens, up to 1.6 GB per request", "verdict": "supported", "source": "paper §3: 'the KV cache of a single token demands 800 KB ... up to 2048 tokens ... as much as 1.6 GB'"},
+      {"line": 33, "claim": "effective KV memory falls to 20.4% in existing systems", "verdict": "supported", "source": "paper §3: 'only 20.4% - 38.2% of the KV cache memory is used' (the post keeps only the lower bound)"},
+      {"line": 33, "claim": "existing systems waste 60-80% of memory", "verdict": "supported", "source": "vLLM blog: 'existing systems waste 60% - 80% of memory due to fragmentation and over-reservation'"},
+      {"line": 118, "claim": "waste under 4%", "verdict": "supported", "source": "vLLM blog: 'a mere waste of under 4%'"},
+      {"line": 147, "claim": "--block-size = tokens per contiguous block, None means default, no numeric default in current docs", "verdict": "supported", "source": "Engine Args: 'Size of a contiguous cache block in number of tokens. Accepts None (meaning \"use default\")'"},
+      {"line": 258, "claim": "swap space is bounded by GPU KV cache size; CPU block allocator", "verdict": "supported", "source": "paper §4.5: 'the swap space on the CPU RAM is bounded by the GPU memory allocated for the KV cache' (paper-era; removed in V1)"},
+      {"line": 322, "claim": "--attention-backend FLASH_ATTN; ROCm options TRITON_ATTN ... ROCM_AITER_TRITON_MLA", "verdict": "supported", "source": "Quickstart 'On Attention Backends' lists the same seven ROCm backends"},
+      {"line": 375, "claim": "Python 3.11-3.14, compute capability 7.5+, uv --torch-backend=auto, vllm download-kernels", "verdict": "supported", "source": "GPU install page: 'Python: 3.11 -- 3.14'; 'compute capability 7.5 or higher (e.g., T4, RTX20xx, A100, L4, H100, B200)'; 'uv pip install vllm --torch-backend=auto / vllm download-kernels'"},
+      {"line": 394, "claim": "ROCm wheel: Python 3.12, ROCm 7.0, glibc >= 2.35; XPU has no pre-built wheel", "verdict": "supported", "source": "Quickstart: 'It currently supports Python 3.12, ROCm 7.0 and glibc >= 2.35'; 'Pre-built XPU wheels will be available soon'. The GPU install page now says the default ROCm wheel is 10.0 (rocm700 covers only 0.14.0-0.18.0) and that XPU wheels are published, so the official pages disagree"},
+      {"line": 558, "claim": "VLLM_CPU_KVCACHE_SPACE in GiB, default 0 means no override", "verdict": "supported", "source": "CPU page: 'This value is 0 by default, which means vLLM doesn't override the KV cache size ... This is a legacy setting; use --kv-cache-memory-bytes instead' (the post leaves out the legacy note)"},
+      {"line": 568, "claim": "CPU defaults max-num-seqs 256/128 x world_size, max-num-batched-tokens 4096/2048 x world_size", "verdict": "supported", "source": "CPU page: 'Offline Inference: 4096 * world_size; Online Serving: 2048 * world_size' and '256 * world_size' / '128 * world_size'"},
+      {"line": 612, "claim": "KEDA: chart v0.1.11+, min 1 / max 3, polling 15, cooldown 360, threshold '5'", "verdict": "supported", "source": "production-stack autoscaling-keda: same values in the example values.yaml"},
+      {"line": 678, "claim": "HF 14-24x / TGI 2.2-2.5x (1 output); HF 8.5-15x / TGI 3.3-3.5x (3 outputs); LLaMA-7B A10G, LLaMA-13B A100 40GB", "verdict": "supported", "source": "vLLM blog, same numbers and settings"},
+      {"line": 602, "claim": "`vllm:gpu_cache_usage_perc` is the GPU KV cache usage metric; Swapped is a scale-out signal", "verdict": "wrong", "source": "Only issue #8612 (v0.6.1.post2) shows it; current docs/design/metrics.md: 'vllm:kv_cache_usage_perc (Gauge) - Fraction of used KV cache blocks'; num_requests_swapped and cpu_cache_usage_perc are legacy, '--swap-space flag has been removed'"}
+    ]
+  },
+  "checklist": {
+    "source": "human_fixes.yaml guide-vllm notes (no item-specific fixes; generic guide checks)",
+    "repeated": 2,
+    "avoided": 4,
+    "na": 0,
+    "repeated_ids": ["dangling-cross-reference", "stale-third-party-flags"],
+    "results": [
+      {"id": "dangling-cross-reference", "result": "repeated", "evidence": "L248 '앞서 설명했듯 매 반복의 입력은 ...', L517 '앞서 소개한 fp8 KV 캐시의 절감 수치', L521 '앞서 본 예처럼', L397 '뒤의 CPU 백엔드 절에서 다룸' all point to content the post does not have (no numbered-chapter references)"},
+      {"id": "tag-remnant", "result": "avoided", "evidence": "No '</path></name>' or other closing-tag remnants; note the separate empty-citation remnants at L347/L682"},
+      {"id": "entity-leak", "result": "avoided", "evidence": "No &gt;/&lt;/&amp; in the body; &#124;/&#91; appear only in Sources link text, where they render as | and ["},
+      {"id": "unclosed-code-fence", "result": "avoided", "evidence": "30 fence lines, all paired"},
+      {"id": "stale-third-party-flags", "result": "repeated", "evidence": "L602 `vllm:gpu_cache_usage_perc` and L606 Swapped (from a 0.6.1 issue; renamed or removed in V1); L548 Unsloth 'CPU 스왑 공간의 기본값을 4GB' (--swap-space removed)"},
+      {"id": "install-usage-centric", "result": "avoided", "evidence": "Internals take L56-325 before installation starts at L373"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 13,
+    "architecture_first_section_line": 56,
+    "engine_components_line": 205,
+    "sources_listed": 23,
+    "sources_unique": 20,
+    "non_official_sources": ["introl.com", "linkedin.com (Khandelwal)", "labhub.hopto.org", "spheron.network", "unsloth.ai", "jarvislabs.ai"],
+    "non_official_share": "6/20 unique (30%); 9/20 (45%) if the vLLM forum and the two GitHub issues are also counted as non-docs",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose": true,
+    "closes_with_failure_modes": "partly: benchmark pitfalls (L690-694) and engine limits (L686), but operational failure modes (NUMA warning L577, scale-to-zero cold start L662) sit in earlier sections, not in the closing"
+  },
+  "runnable_code": {
+    "verdict": "mostly runs as pasted; incomplete end to end",
+    "details": [
+      "L410-414 LLM(..., generation_config='vllm') + generate: valid per Quickstart",
+      "L496-511 CompilationConfig/CompilationMode from vllm.config: identical to the Conserving Memory example",
+      "L322, L426, L434, L528 vllm serve flags exist in Engine Args; fp8 KV cache depends on the hardware (the post says so)",
+      "L444-450 Docker GPU command matches the official image example",
+      "L582-592 CPU docker run needs a locally built `vllm-cpu-env` image (no build steps given) and has a `<CPU cores for inference>` placeholder",
+      "L636-641 scale-to-zero YAML has no triggers, so the keepalive trigger the text says to add is missing; the `keda` blocks are fragments meant to sit under servingEngineSpec.modelSpec[]",
+      "No OpenAI client or curl request for the chat-service example, so request shapes cannot be checked"
+    ]
+  },
+  "top_issues": [
+    "Stale V0 behaviour presented as current: `vllm:gpu_cache_usage_perc`, the Swapped signal and swap preemption (L207, L602-606) are legacy or removed in V1 (`vllm:kv_cache_usage_perc`, '--swap-space removed'), and automatic prefix caching is never covered",
+    "Broken text and dangling references: empty citations '표의 근거는입니다.' (L347) and '출처는입니다.' (L682); back-references to content that is not there (L248, L397, L517, L521)",
+    "Facts repeated across sections (60-80% x3, <4% x2, 2-4x x2, hardware list x2, verbatim UC Berkeley sentence) and an unsourced KV-budget formula (L459) that leaves out the official gpu_memory_utilization default (0.92 / 1.0)"
+  ]
+}

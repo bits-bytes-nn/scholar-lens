@@ -1,0 +1,135 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-rlhf.json",
+  "title": "From RLHF to DPO and GRPO: Preference Optimization for LLM Alignment",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-llm-rlhf-dpo-da36ac9a/2026-11-07-from-rlhf-to-dpo-and-grpo-preference-optimization-for-llm-alignment.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-from-rlhf-to-dpo-and-grpo-preference-optimization-for-llm-alignment.md",
+  "pr_url": null,
+  "warnings": [
+    "Evidence that misstates its quote was left out: E21 (인용문은 모델이 여전히 자연어 쪽으로 정규화되었다고 말하므로, KL 부호도 뒤집혔다는 주장과 모순됨.)",
+    "Section '비교에서 보상 모델로, 보상 모델에서 KL 페널티가 붙은 PPO로 이어진 파이프라인': the writer could not fix: 문제 목록의 항목은 모두 고쳤지만, 근거 밖의 내용으로 채운 곳이 세 군데 있어 확인이 필요합니다. - **컨텍스트 증류 정의:** 근거 자료 어디에도 정의가 없어 일반 배경 지식으로 한 문장을 쓰고 인용은 붙이지 않았습니다. - **Llama 2 PPO 보상 설명:** 근거 E128은 \"두 보상 모델을 조건부로 결합하고 logit 후 whitening한다\"고만 말합니다. 그래서 세 가지를 일반 지식으로 채웠습니다. - 어느 프롬프트에 어느 보상 모델을 쓰는지: 문제 목록의 예시를 따랐습니다. 논문의 구체적인 전환 기준은 근거에 없",
+    "Section '원칙 목록과 AI 라벨로 대체된 사람의 무해성 판단': the writer could not fix: '60' 반복 문제: 이 절의 '40-60%'는 CoT 라벨의 클램핑 범위이고, 앞 절의 '60'(175B PPO-ptx 학습 연산량 60 petaflops/s-days)과는 다른 사실입니다. 그래서 범위 값은 그대로 두고, 근거 없는 이유('0이나 1 쪽으로 쏠리기 쉬워서')만 지웠습니다. d-RLAIF 깊이 문제: d-RLAIF가 표준 RLAIF보다 나았다는 결과에 대해, 근거([[E130]], [[E132]])에는 비교한 과제나 지표, 수치가 없습니다. 그래서 설정은 덧붙이지 못했고, 저자들이 보고한 결과라고 범위를 좁히는 데",
+    "Section '원칙 목록과 AI 라벨로 대체된 사람의 무해성 판단': check 1 sentence(s) the evidence may not support: 이 그림은 크라우드워커의 모델 비교로 계산한 무해성과 유용성 Elo를 두 축으로 놓고, 52B RL 실행 전체를 한 평면에 배치합니다 [[E86]]. (numbers not in its evidence)",
+    "Section '원칙 목록과 AI 라벨로 대체된 사람의 무해성 판단' still has: ['60'] already stated in '비교에서 보상 모델로, 보상 모델에서 KL 페널티가 붙은 PPO로 이어진 파이프라인': refer back without repeating: CoT 라벨은 확률을 일정 범위로 잘라 냈는데(클램핑), 범위를 좁힐수록 결과가 좋아져 논문의 주요 결과에는 40-60%를 택했습니다 . | numbers ['52B'] are not in the cited evidence: 이 그림은 크라우드워커의 모델 비교로 계산한 무해성과 유용성 Elo를 두 축으로 놓고, 52B RL 실행 전체를 한 평면에 배치합니다 .",
+    "Section '보상 모델을 정책 안에 숨긴 닫힌 형태의 재매개화와 그 균열': the writer could not fix: 세 가지 문제는 일부만 고쳤습니다. 1. **HALO와 비HALO 승률의 비교 기준(문제 6)**: 근거에는 \"이기기 어려운 기준선\" 출력과 비교했다는 것과 판정자가 GPT-4-0613이라는 것만 나옵니다. 그림 설명 문구가 기준선을 밝히기 전에 끊겨 있습니다. 그래서 그 내용까지만 썼고, 평가 데이터셋 이름은 넣지 못했습니다. 2. **'기준선'이 무엇인지(문제 7)**: 같은 이유로 \"이 기준선 출력\"이라는 데까지만 밝혔습니다. SFT 타깃 응답인지는 근거로 확인할 수 없습니다. 그 설명이 붙어 있는 것은 KTO 대 DPO 그림",
+    "Section '참조 모델과 SFT 단계를 덜어낸 랭킹·오즈비·길이 정규화 손실': the writer could not fix: - Spearman 상관(0.82/0.59/0.34): 데이터셋은 UltraFeedback으로 적었습니다. 같은 측정을 다루는 E234 그림이 UltraFeedback에서 잰 것이기 때문입니다. 베이스 모델(Mistral, Llama 등)은 근거에 없어서 이름을 넣지 못했습니다. - IPO와 SimPO 비교: 근거(E233)에는 어떤 벤치마크와 지표로 쟀는지, 격차가 얼마인지가 없습니다. 그래서 저자들의 보고 내용까지만 남기고 수치는 넣지 못했습니다. - 참조 모델 없는 KTO 변형과 ORPO 비교: E164에는 벤치마크, 모델, ",
+    "Section '참조 모델과 별도의 SFT 단계를 덜어낸 랭킹·오즈비·길이 정규화 손실': check 1 sentence(s) the evidence may not support: RRHF는 참조 모델을 쓰지 않는 대신 외부 보상 모델에 기대므로, 초기 RLHF가 겪은 과최적화 문제를 그대로 물려받습니다. (unsupported: E99 only says RRHF tends to overoptimize the reward model under online/iterative sampling. No cited evidence says RRHF uses no reference model or that it inherits early RLHF's overoptimization problem as is.)",
+    "Section '참조 모델과 별도의 SFT 단계를 덜어낸 랭킹·오즈비·길이 정규화 손실' still has: ['50'] already stated in '비교에서 보상 모델로, 보상 모델에서 KL 페널티가 붙은 PPO로 이어진 파이프라인': refer back without repeating: 저자들이 학습 세트에서 DPO로 학습한 뒤 확인하자, 보상 순위와 평균 로그우도 순위가 일치하는 삼중항은 약 50%뿐이었습니다 .",
+    "Section '브래들리-테리를 넘어선 선호 게임과 현재 정책 샘플링': the writer could not fix: - Llama-3-8B 점수(70.29): 근거에는 이 값이 몇 회차 SPPO 모델에서 나왔는지도, 기준 모델(Instruct)이나 이전 회차의 점수도 없습니다. 그래서 Llama-3-8B 기반 SPPO의 값이라는 데까지만 적고 회차와 기준 점수는 채우지 못했습니다. - K=2/K=5 ablation: 근거에는 그림 캡션만 있고 어느 K가 나았는지, 차이가 몇 %p인지는 없습니다. 결과를 적지 못해 문장을 그대로 두었습니다. - E210의 %p 표기: 근거 인용에는 \"performance gains ... 7.69%\"라고만 되어 있",
+    "Section '브래들리-테리를 넘어선 선호 게임과 현재 정책 샘플링' still has: an evidence marker stands for a word; state the fact and put the marker at the end of the sentence: 앞서 본 샘플 기반 IPO 손실 [[E138]]에서 고정된 데이터 분포 자리에, 현재 정책 $$\\pi$$가 생성하고 기울기를 멈춘(stop-gradient) 응답 쌍을 넣습니다 [[E205]]. | an evidence marker stands for a word; state the fact and put the marker at the end of the sentence: 앞서 IPO가 지적한 결정적 선호에서의 과적합과 직접 정렬 알고리즘이 고정 데이터의 좁은 커버리지 때문에 과소제약된다는 진단 [[E240]]을 떠올리면, 손실은 그대로 두고 데이터를 정책 근처로 옮기는 처방이 자연스럽습니다. | evidence ['E240'] was already referred back to once; do not restate it again: 앞서 IPO가 지적한 결정적 선호에서의 과적합과 직접 정렬 알고리즘이 고정 데이터의 좁은 커버리지 때문에 과소제약된다는 진단 을 떠올리면, 손실은 그대로 두고 데이터를 정책 근처로 옮기는 처방이 자연스럽습니다. | an evidence marker stands for a word; state the fact and put the marker at the end of the sentence: NLHF는 우위 비교를 의도하지 않았고 [[E156]], Online IPO는 요약 과제 하나 [[E209]], SPPO는 데이터셋 하나 [[E214]]에서 평가했습니다.",
+    "Section '가치 모델 없이 그룹 평균을 기준선으로 삼는 RL과 검증 가능한 보상': the writer could not fix: 고치지 못한 부분이 두 가지 있습니다. 1. RFT 비교 문단의 두 벤치마크 이름은 넣지 못했습니다. E181 캡션은 \"two benchmarks\"라고만 하고 이름을 밝히지 않습니다. 2. 고정점 안정성 문장(E250)은 뜻을 \"안정성이 보장되지 않음\"으로 바로잡았지만, $$\\beta$$가 어떤 조건을 만족해야 하는지는 쓰지 못했습니다. E250에는 조건이 필요하다는 말만 있고 그 내용은 없습니다. 함께 알아 두실 점: '7B'와 '온도 0.7'은 지적에 따라 문장에서 뺐습니다. 다만 E180 그림 캡션에는 \"DeepSeekMath",
+    "Section '가치 모델 없이 그룹 평균을 기준선으로 삼는 RL과 검증 가능한 보상': the writer could not fix: Maj@K/Pass@K 문장의 수치는 고치지 않았습니다. \"DeepSeekMath 7B\"와 \"온도 0.7\"은 둘 다 E180 그림 캡션에 그대로 있습니다(\"SFT and RL DeepSeekMath 7B on GSM8K and MATH (temperature 0.7)\"). 그래서 이 문장은 근거가 있다고 보고 원문대로 두었습니다. 수치를 빼면 모델과 설정 정보도 함께 사라집니다.",
+    "Section '가치 모델 없이 그룹 평균을 기준선으로 삼는 RL과 검증 가능한 보상': check 4 sentence(s) the evidence may not support: 보상 모델을 갱신하며 RL을 되풀이하는 반복 RL은 성능을 크게 올리고, 효과는 첫 반복에서 특히 큽니다 [[E192]]. (unsupported: E192 only says iterative RL improves performance, most at the first iteration; the evidence does not say the reward model is updated between iterations.) | Mroueh의 GRPO Dynamics는 이 현상에 이론적 설명을 붙입니다. (unsupported: No evidence item links GRPO Dynamics to explaining the Maj@K/Pass@K result, and the author name Mroueh does not appear in the evidence.) | 다만 GRPO Dynamics의 분석은 이진 보상과 질문 단위 성공 확률이라는 단순화 위에 서 있어, 대규모 실험의 Pass@K 정체를 직접 검증한 것은 아닙니다. (unsupported: Says the paper did not directly test the Pass@K plateau; no cited item quotes the paper saying so.) | DeepSeekMath 7B의 SFT 모델과 RL 모델을 GSM8K와 MATH에서 온도 0.7로 비교하면, RL은 Maj@K를 높이지만 Pass@K는 높이지 않습니다 [[E180]]. (numbers not in its evidence)",
+    "Section '가치 모델 없이 그룹 평균을 기준선으로 삼는 RL과 검증 가능한 보상' still has: numbers ['7B', '0.7'] are not in the cited evidence: DeepSeekMath 7B의 SFT 모델과 RL 모델을 GSM8K와 MATH에서 온도 0.7로 비교하면, RL은 Maj@K를 높이지만 Pass@K는 높이지 않습니다 . | ['0.7'] already stated in '원칙 목록과 AI 라벨로 대체된 사람의 무해성 판단': refer back without repeating: DeepSeekMath 7B의 SFT 모델과 RL 모델을 GSM8K와 MATH에서 온도 0.7로 비교하면, RL은 Maj@K를 높이지만 Pass@K는 높이지 않습니다 .",
+    "Section '보상 모델 유무와 상관없이 되풀이되는 분포 이동과 과최적화' still has: a standard section needs at least 1 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '데이터 형태, 메모리 비용, 온라인성 사이의 맞교환': the writer could not fix: 잣대 문장(problem 7)은 일부만 고쳤습니다. 근거가 받쳐 주는 연결만 남겼습니다. 출처 표시가 있는 연결은 GRPO와 정답 검증입니다. SimPO 비교와 GPT-4 판정 AlpacaEval의 연결은 이 섹션 본문에 이미 적혀 있던 내용입니다. 예로 든 'DPO 대 PPO 비교는 GPT-4 승률'은 제공된 근거에 없습니다. NLHF와 RLAIF가 어떤 잣대로 보고했는지도 근거에 없어서, 방법과 잣대를 일대일로 잇지는 못했습니다. 근거 항목이 추가되면 그 연결을 넣을 수 있습니다. 'DPO와 PPO의 비교는 TL;DR 요약에서 ",
+    "Section '보상 모델을 지우려던 시도가 다시 돌아온 지점': check 1 sentence(s) the evidence may not support: 따라서 손실의 겉모양이 달라도 두 요소가 같으면 같은 해에 도달하며, 두 요소가 손실 형태보다 더 근본적인 자리에 있음을 이 결과가 보여 줍니다. (unsupported: E206 only shows Online IPO's minimiser equals the regularised-game Nash equilibrium (same as Nash-MD-PG); it does not show that any losses sharing the two elements reach the same solution or that these elements are more fundamental.)",
+    "verification hedge (fix the claim from an official source or drop it): l 2.0 6.35% | 비교 범위와 7B 초과 규모 미검증 |"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2863.3,
+  "input_tokens": 3931849,
+  "output_tokens": 441010,
+  "estimated_cost_usd": 15.3908,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 214,
+      "failed_calls": 0,
+      "input_tokens": 399932,
+      "output_tokens": 441010,
+      "cache_read_tokens": 2208971,
+      "cache_write_tokens": 1322946,
+      "cost_usd": 15.390777
+    },
+    "by_stage": {
+      "read": {
+        "calls": 140,
+        "failed_calls": 0,
+        "input_tokens": 324,
+        "output_tokens": 130305,
+        "cache_read_tokens": 1610329,
+        "cache_write_tokens": 360689,
+        "cost_usd": 2.527489
+      },
+      "outline": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 12,
+        "output_tokens": 32044,
+        "cache_read_tokens": 4090,
+        "cache_write_tokens": 176413,
+        "cost_usd": 1.524629
+      },
+      "verify": {
+        "calls": 26,
+        "failed_calls": 0,
+        "input_tokens": 259119,
+        "output_tokens": 52859,
+        "cache_read_tokens": 418744,
+        "cache_write_tokens": 387772,
+        "cost_usd": 4.200018
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 64449,
+        "cache_read_tokens": 24876,
+        "cache_write_tokens": 239790,
+        "cost_usd": 2.49806
+      },
+      "review": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 26070,
+        "cache_read_tokens": 15724,
+        "cache_write_tokens": 56364,
+        "cost_usd": 0.809687
+      },
+      "fix": {
+        "calls": 22,
+        "failed_calls": 0,
+        "input_tokens": 125766,
+        "output_tokens": 134403,
+        "cache_read_tokens": 135208,
+        "cache_write_tokens": 101918,
+        "cost_usd": 3.754802
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 14623,
+        "output_tokens": 880,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.076092
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 140,
+        "failed_calls": 0,
+        "input_tokens": 324,
+        "output_tokens": 130305,
+        "cache_read_tokens": 1610329,
+        "cache_write_tokens": 360689,
+        "cost_usd": 2.527489
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 74,
+        "failed_calls": 0,
+        "input_tokens": 399608,
+        "output_tokens": 310705,
+        "cache_read_tokens": 598642,
+        "cache_write_tokens": 962257,
+        "cost_usd": 12.863288
+      }
+    }
+  }
+}

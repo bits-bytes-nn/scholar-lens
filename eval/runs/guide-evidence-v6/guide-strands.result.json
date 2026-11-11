@@ -1,0 +1,153 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/, https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+  "title": "Strands Agents Loop Control: Hooks, Retries, Limits and Steering",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-strands-agents-loop-control-hooks-retries-limits-and-steering/2026-11-04-strands-agents-loop-control-hooks-retries-limits-and-steering.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-strands-agents-loop-control-hooks-retries-limits-and-steering.md",
+  "pr_url": null,
+  "warnings": [
+    "Evidence that misstates its quote was left out: E83 (The quoted diagram has a MessageAddedEvent between AfterModelCallEvent and BeforeToolsEvent; the claim goes straight fro)",
+    "Section '대화 기록을 쌓으며 반복하는 모델 호출-도구 실행 사이클' still has: the section must start with its '## ' heading (대화 기록을 쌓으며 반복하는 모델 호출-도구 실행 사이클)",
+    "Section '모델·도구 스테이지를 감싸 흐름을 바꾸는 미들웨어 체인': check 1 sentence(s) the evidence may not support: 등록 호출은 정리 함수를 반환하며, 이 함수를 부르면 핸들러가 제거됩니다 [[E122]]. (unsupported: The docs mention the cleanup function only in the text after the TypeScript addMiddleware example, so it is shown for TypeScript only. The sentence states it with no TypeScript qualifier.)",
+    "Section '모델·도구 스테이지를 감싸 흐름을 바꾸는 미들웨어 체인' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 그래서 모델은 앞서 본 도구 실패와 같은 경로로 이 결과를 읽고 다른 대응을 고를 수 있습니다. | English stem with a Korean ending 'short-circuit하고': 다. `next`를 한 번도 부르지 않으면 스테이지를 short-circuit하고, 한 번 부르면 그대로 통과시키며, 여러 번 부르면 | English stem with a Korean ending 'short-circuit해도': 때문에 두 가지 성질이 생깁니다. 첫째, 미들웨어가 short-circuit해도 훅은 항상 발화합니다 . 캐시가 `next` 없이 응 | a standard section needs at least 1 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '스키마를 도구로 바꿔 검증 오류를 루프로 되돌리는 구조화 출력': check 1 sentence(s) the evidence may not support: | 강제 재시도가 콘텐츠 필터에 막힘 | `content_filtered` 같은 정지 사유로 종료 | `content_filtered` 같은 정지 사유로 종료 | (unsupported: The docs describe Python's content-filter stop reason only in the Limit attempts context (with a limit set); behaviour without a limit is not stated.)",
+    "Section '스키마를 도구로 바꿔 검증 오류를 루프로 되돌리는 구조화 출력' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 도구 실패와 같은 경로를 타므로, 형식이 틀린 출력도 루프를 끝내지 않고 모델이 고칠 수 있는 오류 결과가 됩니다. | a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '오래된 메시지를 잘라내거나 요약해 컨텍스트 한도를 지키는 대화 관리자' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 오버플로 트리밍은 반응형 복구로, 컨텍스트 윈도우 오버플로가 난 뒤에야 가장 오래된 메시지부터 잘라냅니다 .",
+    "Section '요청별 새 에이전트와 타입 있는 결과로 짜는 고동시성 서비스' still has: ['2025'] already stated in '직접 짠 에이전트 루프 대신 프로세스 내 SDK가 맡는 수명주기 제어': refer back without repeating: 에이전트와 도구 제작을 돕는 에이전트는 `strands-agents-builder` 패키지로 따로 나와 있습니다(InfoQ, 2025년 6월 정리) .",
+    "English stem with a Korean ending 'short-circuit하고': 다. `next`를 한 번도 부르지 않으면 스테이지를 short-circuit하고, 한 번 부르면 그대로 통과시키며, 여러 번 부르면",
+    "English stem with a Korean ending 'short-circuit해도': 때문에 두 가지 성질이 생깁니다. 첫째, 미들웨어가 short-circuit해도 훅은 항상 발화합니다. 캐시가 `next` 없이 응답"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3325.2,
+  "input_tokens": 2544628,
+  "output_tokens": 372422,
+  "estimated_cost_usd": 16.5917,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 142,
+      "failed_calls": 0,
+      "input_tokens": 19372,
+      "output_tokens": 372422,
+      "cache_read_tokens": 687087,
+      "cache_write_tokens": 1838169,
+      "cost_usd": 16.591695
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2686,
+        "output_tokens": 187,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000362
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2855,
+        "output_tokens": 608,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000589
+      },
+      "read": {
+        "calls": 32,
+        "failed_calls": 0,
+        "input_tokens": 78,
+        "output_tokens": 14141,
+        "cache_read_tokens": 136145,
+        "cache_write_tokens": 46465,
+        "cost_usd": 0.284959
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 6276,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 24789,
+        "cost_usd": 0.249481
+      },
+      "verify": {
+        "calls": 50,
+        "failed_calls": 0,
+        "input_tokens": 200,
+        "output_tokens": 113958,
+        "cache_read_tokens": 445370,
+        "cache_write_tokens": 953977,
+        "cost_usd": 7.227998
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 67914,
+        "cache_read_tokens": 43560,
+        "cache_write_tokens": 296438,
+        "cost_usd": 2.858118
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 31811,
+        "cache_read_tokens": 22752,
+        "cache_write_tokens": 72884,
+        "cost_usd": 1.009976
+      },
+      "fix": {
+        "calls": 27,
+        "failed_calls": 0,
+        "input_tokens": 108,
+        "output_tokens": 136200,
+        "cache_read_tokens": 39260,
+        "cache_write_tokens": 443616,
+        "cost_usd": 4.958216
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 13325,
+        "output_tokens": 1327,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001996
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 18866,
+        "output_tokens": 2122,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002947
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 32,
+        "failed_calls": 0,
+        "input_tokens": 78,
+        "output_tokens": 14141,
+        "cache_read_tokens": 136145,
+        "cache_write_tokens": 46465,
+        "cost_usd": 0.284959
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 107,
+        "failed_calls": 0,
+        "input_tokens": 428,
+        "output_tokens": 356159,
+        "cache_read_tokens": 550942,
+        "cache_write_tokens": 1791704,
+        "cost_usd": 16.303789
+      }
+    }
+  }
+}

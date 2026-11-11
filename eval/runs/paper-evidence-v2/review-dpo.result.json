@@ -1,0 +1,172 @@
+{
+  "kind": "review",
+  "status": "succeeded",
+  "input": "2305.18290",
+  "title": "Direct Preference Optimization: Your Language Model is Secretly a Reward Model",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/2305_18290/2025-10-19-direct-preference-optimization--your-language-model-is-secretly-a-reward-model.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2025-10-19-direct-preference-optimization--your-language-model-is-secretly-a-reward-model.md",
+  "pr_url": null,
+  "warnings": [
+    "Tag 'Reward-Free-Preference-Learning' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'Bradley-Terry-Reparameterization' (or its acronym) does not appear in the paper; check it fits.",
+    "Tag 'KL-Constrained-Policy-Optimization' (or its acronym) does not appear in the paper; check it fits.",
+    "Section '보상 모델 적합과 PPO 미세조정으로 이어지는 복잡하고 불안정한 RLHF 파이프라인': check 4 sentence(s) the evidence may not support: 표준 RLHF는 세 단계를 차례로 거쳐야 하고, 그중 마지막 강화학습 단계가 비용과 불안정성의 대부분을 만듭니다 [[E1, E9]]. (unsupported: The paper says RLHF as a whole is complex and unstable. It never attributes most of the cost and instability to the final RL stage.) | 문제는 이 마지막 단계에 몰려 있습니다. (unsupported: The paper does not single out the last stage as the place where the problems are concentrated.) | 앞의 요약 쌍이라면 정책과 참조 정책의 로그비율 차이 $$\\beta\\bigl[\\log\\frac{\\pi_{\\theta}(y_w\\mid x)}{\\pi_{\\text{ref}}(y_w\\mid x)}-\\log\\frac{\\pi (unsupported: The DPO loss formula is not given in the cited evidence or the source sections. Also, as written the step is phrased as minimizing a logsigmoid, but the loss is the negative logsigmoid, so the sign is wrong.) | 이 과정에는 보상 모델도, 학습 중 샘플링도 들어가지 않습니다 [[E1, E3]]. (unsupported: The evidence describes DPO as fitting an implicit reward model, so 'no reward model at all' overstates it. 'No sampling during training' comes from the abstract, not from the cited items.)",
+    "Section 'KL 제약 문제의 최적 정책을 닫힌 형태로 구하기': check 4 sentence(s) the evidence may not support: DPO는 이 관계를 이용해 보상에 대한 손실을 정책에 대한 손실로 옮기며, 이때 $$Z(x)$$는 프롬프트에만 의존하는 항으로 남습니다 [[E10, E33]]. (unsupported: The paper says Z(x) cancels in the Bradley-Terry difference. It does not just stay behind as a prompt-only term, and E33 is about the optimum derivation, not the loss.) | 논문에 없는, 설명을 위해 임의로 정한 값으로 참조 정책인 SFT 모델이 장황한 쪽을 조금 더 자주 낸다고 보고 $$\\pi_{\\text{ref}}(y_w\\mid x)=0.4$$, $$\\pi_{\\text{ref}}(y (numbers not in its evidence) | 이 가상 값에서 지수 가중치는 각각 $$\\exp(2)\\approx 7.39$$와 $$\\exp(0)=1$$입니다. (numbers not in its evidence) | 같은 가상 예에서 정규화 전 값은 $$0.4\\times7.39\\approx2.96$$과 $$0.6$$이고, 분배 함수는 $$Z(x)\\approx3.56$$입니다. (numbers not in its evidence)",
+    "Section 'KL 제약 문제의 최적 정책을 닫힌 형태로 구하기' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 보상 $$r$$이 고정되어 있으면 앞서 본 KL 제약 보상 최대화 문제의 해는 참조 정책에 보상의 지수 가중치를 곱하고 다시 정규화한 분포로 정확히 정해집니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: $$\\beta$$는 앞서 본 KL 제약의 세기로, 참조 정책에서 벗어나는 정도를 정합니다 . | numbers ['0.4', '0.6', '0.5'] without evidence: 논문에 없는, 설명을 위해 임의로 정한 값으로 참조 정책인 SFT 모델이 장황한 쪽을 조금 더 자주 낸다고 보고 $$\\pi_{\\text{ref}}(y_w\\mid x)=0.4$$, $$\\pi_{\\text{ref}}(y_l\\mid x)=0.6$$, 보상 $$r(x,y_w)=1$$, $$r( | numbers ['7.39'] without evidence: 이 가상 값에서 지수 가중치는 각각 $$\\exp(2)\\approx 7.39$$와 $$\\exp(0)=1$$입니다. | numbers ['0.4', '0.6'] without evidence: 같은 가상 예에서 정규화 전 값은 $$0.4\\times7.39\\approx2.96$$과 $$0.6$$이고, 분배 함수는 $$Z(x)\\approx3.56$$입니다.",
+    "Section '암묵적 보상이 틀릴수록 커지는 예제별 가중치': check 4 sentence(s) the evidence may not support: 앞선 손실 예시에서는 순서를 맞게 매긴 쌍과 틀리게 매긴 쌍의 기울기 크기 차이가 작았는데, 암묵적 보상의 격차가 작았기 때문입니다. (unsupported: Refers to a prior loss example and its gradient sizes, neither of which appears in the evidence.) | 비교 대상은 같은 방향 항만 남기고 가중치를 지운 목적함수, 곧 $$\\log\\pi(y_w\\mid x)-\\log\\pi(y_l\\mid x)$$를 그대로 키우는 단순 확률비 최적화입니다. (unsupported: The paper never spells out what the naive objective is, so this exact form is not given.) | 가중치가 없으면 이미 순서가 맞는 쌍도 끝없이 같은 힘으로 밀립니다. (unsupported: This explanation of the cause is the post's own reasoning; the paper does not state it.) | 앞서 본 재매개변수화로 브래들리-테리 손실을 그대로 가져왔기 때문에, 보상 모델 학습이 가진 \"맞힌 예제는 덜 배운다\"는 성질이 정책 학습에도 그대로 옮겨옵니다. (unsupported: The paper does not claim that a 'learns less from correct examples' property carries over from reward model training.)",
+    "Section '암묵적 보상이 틀릴수록 커지는 예제별 가중치' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 재매개변수화로 브래들리-테리 손실을 그대로 가져왔기 때문에, 보상 모델 학습이 가진 \"맞힌 예제는 덜 배운다\"는 성질이 정책 학습에도 그대로 옮겨옵니다. | a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '보상 동치류로 보장되는 표현력과 기준선이 필요 없는 안정성': check 2 sentence(s) the evidence may not support: log-sum-exp는 최댓값을 부드럽게 만든 소프트 최댓값이므로, 이 항은 $$\\pi_{\\text{ref}}$$ 아래에서 프롬프트 $$x$$가 기대할 수 있는 보상 수준을 나타내는 가치 함수 역할을 합니다. (unsupported: The paper calls this term the soft value function but never explains it through log-sum-exp as a soft maximum or as an expected reward level.) | 표현력을 잃지 않는 이유와 분산이 억제되는 이유는 같은 선택에서 나옵니다. (unsupported: The paper does not say that the preserved expressiveness and the reduced variance come from the same choice. This is the post's own interpretation.)",
+    "Section '몇 줄의 PyTorch 코드와 거의 튜닝하지 않은 하이퍼파라미터': check 2 sentence(s) the evidence may not support: 저자들은 TL;DR 요약에서만 $$\\beta$$를 바꾸고 나머지 하이퍼파라미터는 모든 과제에서 고정했습니다 [[E41]]. (unsupported: The paper says these are defaults applied 'unless noted otherwise'. It does not claim every other hyperparameter was held fixed across all tasks.) | 시그모이드 안의 값은 $$\\beta\\times(0.2-0.3)=-0.1\\beta$$로 음수이고, 손실 $$-\\log\\sigma(-0.1\\beta)$$는 차이가 0일 때의 값 $$\\log 2\\approx0.69$$보다 (numbers not in its evidence)",
+    "Section '몇 줄의 PyTorch 코드와 거의 튜닝하지 않은 하이퍼파라미터' still has: numbers ['0.2', '0.3', '0.1'] without evidence: 시그모이드 안의 값은 $$\\beta\\times(0.2-0.3)=-0.1\\beta$$로 음수이고, 손실 $$-\\log\\sigma(-0.1\\beta)$$는 차이가 0일 때의 값 $$\\log 2\\approx0.69$$보다 큽니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 기울기 가중치는 $$\\beta$$를 곱한 로그비율 차이, 곧 암묵적 보상 차이의 시그모이드 $$\\sigma(\\hat{r}_{\\theta}(x,y_{l})-\\hat{r}_{\\theta}(x,y_{w}))$$이므로 이 쌍에서는 $$\\sigma(0.1\\beta)$$로 0.5를 넘고, | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 과제별로 바꾼 값은 앞서 본 TL;DR 요약의 $$\\beta$$ 하나이고, 나머지 설정은 같습니다 .",
+    "Section 'IMDb 감성 과제에서 PPO를 엄격히 지배하는 보상-KL 프런티어': check 8 sentence(s) the evidence may not support: 따라서 PPO가 뒤처진 원인을 보상 모델의 오차만으로 설명할 수는 없습니다. (unsupported: 이 원인 추론은 저자가 아니라 글쓴이의 해석이며, 해석이라는 표시도 없습니다.) | 차이의 상당 부분은 최적화 과정 자체에서 나온 것으로 보입니다. (unsupported: 논문에는 PPO가 뒤처진 원인을 최적화 과정으로 돌리는 서술이 없습니다.) | PPO는 목표 KL을 $$\\{3,6,9,12\\}$$로, DPO는 $$\\beta$$를 $$\\{0.05,0.1,1,5\\}$$로, Unlikelihood는 $$\\alpha$$를 $$\\{0.05,0.1,0.5,1\\}$$로  (numbers not in its evidence) | 전체 스윕은 22회 실행입니다. (numbers not in its evidence) | 학습 중에는 수렴할 때까지 100스텝마다 테스트 프롬프트에서 정답 보상(감성 분류기)의 평균과 참조 정책 대비 시퀀스 수준 KL을 측정했습니다. (numbers not in its evidence)",
+    "Section 'IMDb 감성 과제에서 PPO를 엄격히 지배하는 보상-KL 프런티어' still has: numbers ['12', '0.05', '0.1', '0.5'] without evidence: PPO는 목표 KL을 $$\\{3,6,9,12\\}$$로, DPO는 $$\\beta$$를 $$\\{0.05,0.1,1,5\\}$$로, Unlikelihood는 $$\\alpha$$를 $$\\{0.05,0.1,0.5,1\\}$$로 바꿨고, Preferred-FT는 랜덤 시드만 바꿨습니다. | ['0.1', '0.5'] already stated in '몇 줄의 PyTorch 코드와 거의 튜닝하지 않은 하이퍼파라미터': refer back without repeating: PPO는 목표 KL을 $$\\{3,6,9,12\\}$$로, DPO는 $$\\beta$$를 $$\\{0.05,0.1,1,5\\}$$로, Unlikelihood는 $$\\alpha$$를 $$\\{0.05,0.1,0.5,1\\}$$로 바꿨고, Preferred-FT는 랜덤 시드만 바꿨습니다. | numbers ['22'] without evidence: 전체 스윕은 22회 실행입니다. | numbers ['100'] without evidence: 학습 중에는 수렴할 때까지 100스텝마다 테스트 프롬프트에서 정답 보상(감성 분류기)의 평균과 참조 정책 대비 시퀀스 수준 KL을 측정했습니다. | numbers ['2.5', '0.95', '20', '0.98'] without evidence: 그림을 근사적으로 읽으면 DPO는 KL이 약 2.5일 때 이미 보상 0.95 안팎에 이르고, KL 5~20 구간에서는 0.98~1.0 근처에 머뭅니다.",
+    "Section 'Anthropic HH 대화에서 데이터셋 선호 응답을 넘는 유일한 효율적 방법': check 12 sentence(s) the evidence may not support: 따라서 승률이 50%를 넘으면 사람이 고른 응답보다 GPT-4가 더 좋게 본 셈이 되므로, 요약 과제보다 기준이 높습니다. (unsupported: The paper does not compare evaluation difficulty between the summarization and dialogue tasks.) | 이 과제에는 표준 SFT 모델이 없어서 저자들은 사전학습된 Pythia-2.8B를 선택된 응답으로 Preferred-FT 학습해 참조 모델을 만들었습니다. (numbers not in its evidence) | 첫째는 Preferred-FT 응답 128개 가운데 가장 좋은 것을 고르는 Best of 128이고, 둘째는 2-shot 프롬프트를 준 Pythia-2.8B 기반 모델입니다. (numbers not in its evidence) | 셋째는 공개된 출처에서 가져온, Anthropic HH로 PPO 학습을 한 RLHF 모델(Pythia-6B)입니다. (numbers not in its evidence) | 저자들은 이 PPO 모델에서 기반 Pythia-2.8B보다 나은 결과를 내는 프롬프트나 샘플링 온도를 찾지 못했습니다. (numbers not in its evidence)",
+    "Section 'Anthropic HH 대화에서 데이터셋 선호 응답을 넘는 유일한 효율적 방법' still has: numbers ['50'] without evidence: 따라서 승률이 50%를 넘으면 사람이 고른 응답보다 GPT-4가 더 좋게 본 셈이 되므로, 요약 과제보다 기준이 높습니다. | numbers ['2.8B'] without evidence: 이 과제에는 표준 SFT 모델이 없어서 저자들은 사전학습된 Pythia-2.8B를 선택된 응답으로 Preferred-FT 학습해 참조 모델을 만들었습니다. | evidence ['E23'] was already referred back to once; do not restate it again: DPO는 이 참조 모델에서 학습을 시작했습니다 . | numbers ['128', '2.8B'] without evidence: 첫째는 Preferred-FT 응답 128개 가운데 가장 좋은 것을 고르는 Best of 128이고, 둘째는 2-shot 프롬프트를 준 Pythia-2.8B 기반 모델입니다. | numbers ['6B'] without evidence: 셋째는 공개된 출처에서 가져온, Anthropic HH로 PPO 학습을 한 RLHF 모델(Pythia-6B)입니다.",
+    "Section '사람 사이의 일치도에 견줄 만한 GPT-4 판정의 신뢰도' still has: evidence ['E19'] was already referred back to once; do not restate it again: 요약과 대화 결과는 모두 GPT-4 승률에 기대고 있으므로, GPT-4 판정은 따로 검증해야 합니다 . | ['0.25'] already stated in 'TL;DR 요약에서 더 높고 온도에 강건한 승률': refer back without repeating: 온도 0.25의 DPO와 SFT, 그리고 온도 1.0의 PPO를 각각 탐욕적으로 샘플링한 PPO(온도 0)와 비교합니다 . | ['150', '100'] already stated in '몇 줄의 PyTorch 코드와 거의 튜닝하지 않은 하이퍼파라미터': refer back without repeating: DPO 대 PPO-0 비교 150건과 PPO-1 대 PPO-0 비교 100건을 무작위로 뽑아 건마다 두 사람을 배정했습니다 .",
+    "Section '간결하고 의도를 정확히 짚는 DPO 출력의 정성 사례': check 2 sentence(s) the evidence may not support: 앞서 든 가상의 예에서 사람이 간결한 $$y_w$$를 반복적인 $$y_l$$보다 선호했는데, 이 예시가 실제로 그런 차이를 보여 줍니다. (unsupported: Refers to a hypothetical example given earlier in the post. The sources here don't contain it.) | 첫 번째 요약 예시는 대학 진학을 앞둔 17살이 부모에게 보답할 방법을 묻는 Reddit 글입니다. (numbers not in its evidence)",
+    "Section '간결하고 의도를 정확히 짚는 DPO 출력의 정성 사례' still has: numbers ['17'] without evidence: 첫 번째 요약 예시는 대학 진학을 앞둔 17살이 부모에게 보답할 방법을 묻는 Reddit 글입니다.",
+    "Section '한계와 시사점': check 6 sentence(s) the evidence may not support: 학습 중 생성이 필요 없고, 메모리에 올릴 모델은 정책과 참조 정책 두 개뿐입니다. (unsupported: The evidence says nothing about memory or about needing only two models.) | 하이퍼파라미터도 거의 조정하지 않았습니다 [[E26, E41]]. (unsupported: The evidence says β was barely tuned. It does not say this about hyperparameters in general.) | 정책이 새로 만든 응답에 대해 피드백을 다시 모으는 온라인 설정에서 DPO가 PPO보다 나은지는 이 논문이 실험하지 않았습니다. (unsupported: The paper does not state this limitation.) | 데이터셋의 응답이 현재 정책의 출력과 멀어질 때 어떤 일이 생기는지도 확인되지 않았습니다. (unsupported: The paper does not state this limitation.) | 앞서 본 인간 연구는 GPT-4와 사람의 일치율이 사람끼리의 일치율과 비슷하다고 보여 주지만 표본이 작습니다 [[E29, E50]]. (unsupported: The evidence gives the sample sizes, but the paper never calls the sample small.)",
+    "Section '한계와 시사점' still has: evidence ['E9'] was already referred back to once; do not restate it again: 간결한 $$y_w$$와 장황한 $$y_l$$의 쌍이 있으면 RLHF는 이 쌍으로 보상 모델을 먼저 학습하고, PPO 단계에서 다시 정책 샘플링을 돌립니다 . | evidence ['E7', 'E15'] was already referred back to once; do not restate it again: 모델이 쌍의 순서를 잘못 매기고 있을수록 그 쌍이 큰 가중치를 받습니다 . | evidence ['E41'] was already referred back to once; do not restate it again: 하이퍼파라미터도 거의 조정하지 않았습니다 . | evidence ['E14'] was already referred back to once; do not restate it again: 참고로 참조 정책은 SFT 모델이 있으면 그 모델로, 없으면 선호 응답의 우도를 최대화해 초기화합니다 . | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 다만 이 논문이 입증한 범위는 오프라인 데이터, 앞서 본 실험 규모의 모델, GPT-4가 판정하는 승률까지입니다."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 1507.5,
+  "input_tokens": 2007854,
+  "output_tokens": 197059,
+  "estimated_cost_usd": 8.183,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 158,
+      "failed_calls": 0,
+      "input_tokens": 396040,
+      "output_tokens": 197059,
+      "cache_read_tokens": 907230,
+      "cache_write_tokens": 704584,
+      "cost_usd": 8.182982
+    },
+    "by_stage": {
+      "figures": {
+        "calls": 8,
+        "failed_calls": 0,
+        "input_tokens": 29097,
+        "output_tokens": 7828,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.006824
+      },
+      "extract_attributes": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 48954,
+        "output_tokens": 236,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005013
+      },
+      "extract_citations": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 50430,
+        "output_tokens": 2859,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.12945
+      },
+      "read": {
+        "calls": 43,
+        "failed_calls": 0,
+        "input_tokens": 104,
+        "output_tokens": 33481,
+        "cache_read_tokens": 309758,
+        "cache_write_tokens": 96044,
+        "cost_usd": 0.63708
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 4883,
+        "cache_read_tokens": 848,
+        "cache_write_tokens": 6529,
+        "cost_usd": 0.13066
+      },
+      "verify": {
+        "calls": 43,
+        "failed_calls": 0,
+        "input_tokens": 181605,
+        "output_tokens": 22664,
+        "cache_read_tokens": 342656,
+        "cache_write_tokens": 166561,
+        "cost_usd": 2.149563
+      },
+      "draft": {
+        "calls": 16,
+        "failed_calls": 0,
+        "input_tokens": 64,
+        "output_tokens": 37263,
+        "cache_read_tokens": 46400,
+        "cache_write_tokens": 253333,
+        "cost_usd": 2.030741
+      },
+      "review": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 8063,
+        "cache_read_tokens": 18368,
+        "cache_write_tokens": 31935,
+        "cost_usd": 0.328509
+      },
+      "fix": {
+        "calls": 29,
+        "failed_calls": 0,
+        "input_tokens": 85718,
+        "output_tokens": 79023,
+        "cache_read_tokens": 187922,
+        "cache_write_tokens": 146151,
+        "cost_usd": 2.729263
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 759,
+        "cache_read_tokens": 1278,
+        "cache_write_tokens": 4031,
+        "cost_usd": 0.035879
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 9,
+        "failed_calls": 0,
+        "input_tokens": 78051,
+        "output_tokens": 8064,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.011837
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 44,
+        "failed_calls": 0,
+        "input_tokens": 50534,
+        "output_tokens": 36340,
+        "cache_read_tokens": 309758,
+        "cache_write_tokens": 96044,
+        "cost_usd": 0.76653
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 105,
+        "failed_calls": 0,
+        "input_tokens": 267455,
+        "output_tokens": 152655,
+        "cache_read_tokens": 597472,
+        "cache_write_tokens": 608540,
+        "cost_usd": 7.404615
+      }
+    }
+  }
+}

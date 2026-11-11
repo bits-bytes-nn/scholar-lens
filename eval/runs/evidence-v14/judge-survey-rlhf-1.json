@@ -1,0 +1,284 @@
+{
+  "item": "survey-rlhf",
+  "post": "/tmp/eval-evidence/survey-rlhf-v14.md",
+  "judge_run": 1,
+  "sampling": "paragraphs numbered from the first body paragraph (prose blocks, list items and table rows; headings, images, captions, display-only math and the reference list skipped; 240 total); run 1 samples paragraphs 1, 4, 7, ...; sources checked against arXiv PDF full text (pdftotext)",
+  "scores": {
+    "A": 6.5,
+    "B": 7.5,
+    "C": 6.5,
+    "D": 8.0,
+    "E": 7.0,
+    "F": 6.5
+  },
+  "type_scores": {
+    "S1": 7.0
+  },
+  "score_evidence": {
+    "A": [
+      "No body H1, no skipped levels, no da-form headings, two-level categories, use_math true, description 144 characters; no leaked process text.",
+      "L264 `\\beta_{\\text{bo$n$}}`: single $ inside a $$ block (unchanged since v11).",
+      "Bare | for conditionals and lengths: L115 `\\rho(y|x)`, L524/L530 `(y|x)`, L564/L570 `|y|`, `|y_{w}|` (L567 uses \\lvert\\rvert), L702 `|o_{i}|`; KL written `\\mid\\mid` at L351 and `||` at L405 (rubric: \\| or \\Vert).",
+      "One-paragraph H3s: L751 '### 정적 피드백의 실패에서 나온 첫 교훈', L755, L759, L775, L785; the synthesis H2s are split into thin H3s."
+    ],
+    "B": [
+      "No register break: every table cell is a noun phrase (v13's 한다체 cells are gone), so no cap at 7.",
+      "Self-reference openers x11: '이 글의 판단으로는' L289, L341, L483, L585, L682; '이 글의 관점에서' L745, L793, L840; '이 글은' L769, L850; '이 글 전체의' L15.",
+      "Figure-intro and noun frames: L391 '왼쪽 프런티어에서 확인할 것은 모든 KL 값에서 DPO의 기대 보상이 가장 높다는 사실이고' -> '왼쪽 프런티어에서는 모든 KL 값에서 DPO의 기대 보상이 가장 높고'; L680 '구현도에서 따라갈 지점은 이력 데이터셋이 자라는 방식입니다'; L696 '비교도에서 짚을 지점은 ... 것입니다'; L303 '... 보면 됩니다'; L743 '... 읽으면 됩니다'; L515 '...별도의 선호 최적화 단계가 필요 없다는 것이 ORPO의 설계입니다' -> 'ORPO는 SFT 단계에서 거절 응답에 약한 벌점을 주어 별도 선호 최적화 단계를 없앱니다'.",
+      "English labels: table L798 'fine-tune', 'vs', L812 'side-by-side', L813 'Iter3', L814 'Iterative DPO ... vanilla DPO'; prose L658 'soft value', L670 'ablation', L846 '그룹 baseline'; heading L721 '### online RFT보다 나은 이유'.",
+      "L664 '상승폭은 논문이 퍼센트로 보고한 값으로 ... 7.69, ... 2.10, ... 1.64입니다' is a clumsy unit hedge -> 'LC 승률은 1회차에 7.69%p, 2회차에 2.10%p, 3회차에 1.64%p 올랐습니다'."
+    ],
+    "C": [
+      "Wrong cross-reference: L17 '글 끝의 연표는' but the timeline is directly below (L21-44); L17 also has AI feedback branching off 'from 2023' while its own table puts Constitutional AI at 2022 (L29).",
+      "Facts retold instead of pointed back: Ziegler's 'online collection mattered for summarization, not style tasks' at L753 and again at L848; Online IPO = Nash equilibrium at L761, L769, L824, L848; RL raises Maj@K not Pass@K at L733, L745, L791, L836; RLHF Workflow best/worst pairs at L680 and L787; SPPO diminishing gains at L664 and L787; L13 states Stiennon's objective mismatch twice in one paragraph.",
+      "Running TL;DR example threads the lineages (L15, L144, L391, L575, L595, L658) and hand-offs are explicit (L255, L345, L471, L629, L737)."
+    ],
+    "D": [
+      "Worked examples are correct and placed at hard steps: BT 2.0 vs 1.0 -> 0.73, loss 0.31/1.31 (L78); K=4 -> 6 comparisons (L192); BoN d*=2, KL 4, R=1 (L273); soft label 0.7 (L309); clamp 0.95->0.60 (L317); DPO margin 0.3 -> 0.574, loss 0.555, flipped 0.855 (L379); log 99 ~ 4.6 (L409); odds ratio 2.25 vs probability ratio 2 (L547); SimPO -0.8 vs -1.0 (L575); intransitive A>B>C>A (L595); SPPO targets 0.3/0/-0.3 (L658); GRPO +-1 and +0.58/-1.73 (L719). All arithmetic checked.",
+      "Caption narration that adds no result: L64, L86, L94, L132, L150, L229, L497, L627 ('정확도 곡선도 함께 제시됩니다').",
+      "L541/L547 call the odds ratio a softer penalty, then show it widens faster than the probability ratio, without reconciling the two (the paper's point: the wider log-OR spread reaches the margin with a less extreme probability contrast, 2403.07691 L518-556)."
+    ],
+    "E": [
+      "Timeline table (L21-44) and one comparison table (L795-816); display math placed where discussed; no source figure numbering.",
+      "Comparison-table cells: L801 HH-RLHF result cell is a setup '52B 반복 온라인 vs 기본 데이터 통제 실험 (PM 비교 약 44k)' (the outcome, crowdworkers prefer the online-mixture policy, 2204.05862 L1193-1199, is missing) and its limitation cell '온라인 PM 정확도 74/70/67%' is a finding; L807 'IPO 최적 정책 π*(y1)=σ(0.5/τ)' is a closed-form toy optimum, not a measured result; L813 '총 향상 15.85%' drops the metric (AlpacaEval 2.0 LC win rate, 2405.00675 L937-939); L803 '90% 초과' is pretrained LMs on the original 221 HHH comparisons (2212.08073 L388-390), not the 438-question set of L317.",
+      "49 source figures; several only narrated (L94, L100, L136, L229, L627).",
+      "The table covers 20 of 22 papers (Llama 2 and GRPO Dynamics have no row); acceptable."
+    ],
+    "F": [
+      "L765 '정답 검증으로 보상을 주는 점만 다를 뿐, 구조는 온라인 쌍대 선호 학습과 가깝습니다': DeepSeekMath's GRPO trains against a learned reward model (2402.03300 L733-735 'We train our initial reward model based on the DeepSeekMath-Base 7B'; iterative RL updates it, L1025-1027); verifiable binary reward is Mroueh's analysis assumption (-1).",
+      "L848 '따라서 손실의 겉모양이 달라도 두 요소가 같으면 같은 해에 도달하며 ... 이 결과가 보여 줍니다' (and L761 '손실의 형태보다 샘플이 어느 정책에서 오느냐가 해의 성격을 더 크게 좌우했습니다'): the cited Online IPO paper finds online DPO's stationary point is the RLHF solution, not the Nash equilibrium ('apart from the trivial uniform-preference case, online DPO and online IPO are different objectives', 2403.08635 L304-318), so the generalisation contradicts its source (-1.5).",
+      "L17 'AI 피드백 ... 2023년부터 ... 갈라져 나옵니다': Constitutional AI is December 2022 (2212.08073; the post's own L29) (-0.5).",
+      "L803 cell gives '90% 초과 정확도' without saying it is pretrained LMs on the original 221 comparisons (-0.5).",
+      "Fixed since v13: L743 states Theorem 3's 0<p_ref<1 condition and the boundary cases (2503.06639 L362-367); L637-640 describe SPPO's update as exponential weighting; the 'offline DPO/IPO' SPPO claim is gone; L686 credits the binary-reward assumption to the follow-up analysis."
+    ],
+    "S1": [
+      "Limitations are the papers' own (L797 Qbert = 1706.03741 L428-429; L798 copy heuristic = 1909.08593 L47; L811 = ORPO Limitations L640-646; L816 = 2406.02900 L762-764; L815 = SimPO); no input-based false limitation.",
+      "Cells are noun phrases with no blank, '-' or sentence cells, but one setup cell (L801), one formula cell (L807), a finding in a limitation cell (L801 '74/70/67%'), and English label words (L798 'fine-tune', 'vs'; L812 'side-by-side'; L814 'vanilla DPO').",
+      "Synthesis sections re-explain cards: L777 restates L429/L654/L711; L781 restates L690/L705; L787 restates L680/L664; L824 restates L761/L737."
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "met",
+      "evidence": "Noun-phrase claim headings throughout (L50 '### 보상 함수 대신 궤적 구간 비교로 학습한 보상 추정기', L469 '### 보상 모델 없이도 한 에폭 안에서 시작되는 과최적화'); no heading ends in 다."
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Reddit TL;DR pair introduced at L15 and reused (L144, L391, L575, L595, L658, L753); the GRPO lineage switches to a math 0/1 group (L719) without saying the TL;DR example does not fit."
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Full chain for Christiano (L66-78), DPO (L349-379), IPO (L401-419), ORPO (L515-549), SimPO (L555-575), SPPO (L637-658), GRPO (L690-719); KTO (L437-441) and RLHF Workflow (L680) have no numbered example."
+    },
+    "facts_said_once": {
+      "status": "not met",
+      "evidence": "L753/L848 Ziegler online collection; Online IPO equivalence at L761, L769, L824, L848; Maj@K/Pass@K at L733, L745, L791, L836; L787 retells L680 and L664."
+    },
+    "numbers_with_scope": {
+      "status": "partly met",
+      "evidence": "Most body numbers carry model and setting (L783 'Mistral-Base 7B ... AlpacaEval 2 LC ... 21.5%'); L813 '총 향상 15.85%' and L664 'Llama-3-8B가 70.29' drop the metric or iteration; L803 '90% 초과' drops the comparison subset."
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Hypothetical numbers are labelled '가상의' (L78, L192, L273, L309, L317, L379, L409, L547, L575, L595, L658, L719); L765 gives GRPO an answer-verification reward; L848 generalises Online IPO's equivalence to any loss with the same two elements."
+    },
+    "own_assessment_at_end": {
+      "status": "met",
+      "evidence": "L840 and L850: compare methods by data distribution and equal-KL measurement, and measure reasoning with Pass@K, not by loss name."
+    },
+    "length_fitted": {
+      "status": "partly met",
+      "evidence": "About 142 KB and 49 figures; hard steps get worked examples, but caption narration and the retold synthesis sections (L747-850) pad it."
+    },
+    "type_specific_shape": {
+      "status": "partly met",
+      "evidence": "One comparison table (L795), but headline numbers also live only in the body (SPPO 7.69/2.10/1.64 L664, SimPO ablation L783, d-RLAIF 1-10 L339, Llama 2 β L243, HH 74/70/67 L221) and one cell is a setup (L801)."
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "입니다 register in prose and table; eleven '이 글…' openers, figure-intro frames (L303, L391, L680, L696, L743) and English labels (L798, L812, L814, L721)."
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 12,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "whole_post_wrong_outside_sample": [
+      "L765 GRPO given an answer-verification reward (DeepSeekMath used a learned reward model, 2402.03300 L733-735)",
+      "L848 (and L761) generalises Online IPO's Nash equivalence to any loss sharing KL regularisation and current-policy data; 2403.08635 L304-318 shows online DPO differs",
+      "L17 dates AI feedback to 2023 (CAI is 2022) and calls the timeline '글 끝의 연표' though it is at L21",
+      "L803 '90% 초과' drops that it is pretrained LMs on the original 221 comparisons (2212.08073 L388-390)"
+    ],
+    "examples": [
+      {
+        "para": 1,
+        "line": 13,
+        "claim": "RLHF-trained helpful/harmless assistant improved almost all NLP evaluations and was compatible with training specialized skills like python coding and summarization",
+        "verdict": "supported",
+        "source": "2204.05862 L27 'alignment training improves performance on almost all NLP evaluations, and is fully compatible with training for specialized skills such as python coding and summarization'"
+      },
+      {
+        "para": 34,
+        "line": 66,
+        "claim": "Humans gave comparisons more consistently than absolute scores; on continuous control predicting comparisons worked much better than predicting scores; longer clips more informative per clip",
+        "verdict": "supported",
+        "source": "1706.03741 L498-513 'much easier for humans to provide consistent comparisons'; 'predicting comparisons worked much better than predicting scores'; 'compare longer clips was significantly more helpful per clip'"
+      },
+      {
+        "para": 37,
+        "line": 80,
+        "claim": "Queries chosen by ensemble predictive variance, which the authors call a crude approximation that impaired performance on some tasks in ablations",
+        "verdict": "supported",
+        "source": "1706.03741 L314-318 'select those trajectories for which the predictions have the highest variance ... This is a crude approximation and the ablation experiments ... show that in some tasks it actually impairs performance'"
+      },
+      {
+        "para": 49,
+        "line": 134,
+        "claim": "Offline fine-tuned vs zero-shot comparison reports the share preferred by a majority of 3 labelers",
+        "verdict": "supported",
+        "source": "1909.08593 Fig. 4 'We report how often the fine-tuned model is preferred by a majority of 3 labelers'"
+      },
+      {
+        "para": 70,
+        "line": 243,
+        "claim": "Llama 2 KL coefficient β = 0.01 for 7B and 13B, 0.005 for 34B and 70B",
+        "verdict": "supported",
+        "source": "2307.09288 L822-823 'For the 7B and 13B models, we set β = 0.01 (KL penalty), and for the 34B and 70B models, we set β = 0.005'"
+      },
+      {
+        "para": 106,
+        "line": 385,
+        "claim": "IMDb sentiment sweep of 22 runs; DPO's reward/KL frontier strictly dominates PPO and beats PPO-GT",
+        "verdict": "supported",
+        "source": "2305.18290 L507 'This sweep includes 22 runs in total'; L518-519 'DPO's reward/KL tradeoff strictly dominates PPO ... even when PPO can access ground truth rewards (PPO-GT)'"
+      },
+      {
+        "para": 121,
+        "line": 447,
+        "claim": "HALO vs non-HALO difference significant (p<0.05) only at 13B+; only HALO-aligned Llama-13B/30B match the baseline",
+        "verdict": "supported",
+        "source": "2402.01306 L220-221 'only significant (p < 0.05) at 13B+ parameters, and only the HALO-aligned Llama-{13B, 30B} models are able to match the baseline'"
+      },
+      {
+        "para": 124,
+        "line": 465,
+        "claim": "KTO Llama-7B still beats DPO at a 1:10 desirable:undesirable ratio and with up to 90% of desirable data discarded",
+        "verdict": "supported",
+        "source": "2402.01306 L511-518 'discard 90% of the desirable data ... goes from 1:1 to 1:10'; 'up to 90% of the desirable data can in fact be discarded while still outperforming DPO'"
+      },
+      {
+        "para": 151,
+        "line": 577,
+        "claim": "Spearman ρ between average log-likelihood and length on a held-out set: SimPO w/o LN 0.82, DPO 0.59, SimPO 0.34",
+        "verdict": "supported",
+        "source": "2405.14734 L651 'ρ 0.82 0.59 0.34'; L539 'held-out set'"
+      },
+      {
+        "para": 157,
+        "line": 597,
+        "claim": "NLHF three-action example: RLHF picks y1 deterministically; Nash equilibrium gives y1, y2 probability 1/3+ε/2 and y3 1/3−ε",
+        "verdict": "supported",
+        "source": "2312.00886 L215-232 'optimizing the expected reward (the RLHF solution) will produce a deterministic policy choosing exclusively y1'; 'selecting y1 and y2 with probability 1/3 + ϵ/2 each, and y3 with probability 1/3 − ϵ'"
+      },
+      {
+        "para": 163,
+        "line": 621,
+        "claim": "Preference models of 110M, 3B and 11B: bigger is more accurate, small gain from 3B to 11B",
+        "verdict": "supported",
+        "source": "2312.00886 L1435-1436 'T5X-small (110M), T5X-XL (3B) and T5X-XXL (11B) ... relatively small gains going from 3B to 11B'"
+      },
+      {
+        "para": 190,
+        "line": 733,
+        "claim": "DeepSeekMath 7B SFT vs RL on GSM8K and MATH at temperature 0.7: RL raises Maj@K but not Pass@K",
+        "verdict": "supported",
+        "source": "2402.03300 L1049-1050 'The Maj@K and Pass@K of SFT and RL DeepSeekMath 7B on GSM8K and MATH (temperature 0.7). It was noted that RL enhances Maj@K but not Pass@K'"
+      },
+      {
+        "para": 211,
+        "line": 800,
+        "claim": "175B InstructGPT preferred to GPT-3 85±3%; RM accuracy on held-out labelers 69.6%",
+        "verdict": "supported",
+        "source": "2203.02155 L127 'preferred to 175B GPT-3 outputs 85 ± 3% of the time'; L707 'RMs have an accuracy of 69.6 ± 0.9% on predicting the preferences of labelers in the held-out group'"
+      },
+      {
+        "para": 217,
+        "line": 806,
+        "claim": "RLAIF TL;DR win rate over SFT 71% (RLHF 73%); RLAIF harmless rate 88%",
+        "verdict": "supported",
+        "source": "2309.00267 L127 'preferred by humans over a SFT baseline 71% and 73% of the time'; L432 'harmless rate of 88%'"
+      },
+      {
+        "para": 226,
+        "line": 815,
+        "claim": "Llama-3-Instruct SimPO AlpacaEval 2 LC 44.7%; SimPO cuts run time ~20% and GPU memory ~10%",
+        "verdict": "supported",
+        "source": "2405.14734 L92 'Llama-3-8B-Instruct-SimPO 44.7'; L684-685 'SimPO cuts run time by roughly 20% and reduces GPU memory usage by about 10%'"
+      }
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 5,
+    "na": 1,
+    "repeated_ids": [],
+    "items": [
+      {
+        "id": "grpo-card-unverified-figure",
+        "result": "avoided",
+        "evidence": "L737-743 state 2503.06639's results in words (contrastive loss weighted by p(q), fixed point, p*>p_ref under 0<p_ref<1, boundary stability needs a condition on β) and quote no number or equation absent from the paper (Theorem 3 and its remark, 2503.06639 L362-367)."
+      },
+      {
+        "id": "copy-explains-preference",
+        "result": "avoided",
+        "evidence": "L140 '저자들은 라벨러가 단순한 휴리스틱에 기대는 습성을 모델이 악용했을 수 있다고 인정했습니다' carries no 96%/84% figure; the table row L798 lists the 96% result and the copy heuristic in separate columns without a causal link."
+      },
+      {
+        "id": "daa-no-quantification",
+        "result": "avoided",
+        "evidence": "L834 '이론적 근거를 제시했지만 해결책은 내놓지 않았고' matches 2406.02900 L763-764; no claim that the paper lacks numbers, and L477/L479/L816 cite its 25% and RMSE results."
+      },
+      {
+        "id": "grpo-row-reward",
+        "result": "n/a",
+        "evidence": "The comparison table (L795) has no reward column; the GRPO row is 'DeepSeekMath-RL 7B GSM8K 88.2% / MATH 51.7% | RL의 Maj@K 향상, Pass@K 불변'. The prose repeats the defect's substance at L765 ('정답 검증으로 보상을 주는 점만 다를 뿐')."
+      },
+      {
+        "id": "heading-da-form-offline",
+        "result": "avoided",
+        "evidence": "No heading ends in 다; the DAA heading is L469 '### 보상 모델 없이도 한 에폭 안에서 시작되는 과최적화'."
+      },
+      {
+        "id": "heading-da-form-judge",
+        "result": "avoided",
+        "evidence": "All ##/### lines checked: none is a 다-form sentence (judge heading is L789 '### 사람, GPT-4 판정, 정답 검증이라는 서로 다른 잣대')."
+      }
+    ]
+  },
+  "extras": {
+    "plan_papers_never_cited": [],
+    "thin_sections": [
+      "L751 '### 정적 피드백의 실패에서 나온 첫 교훈' (one paragraph)",
+      "L755 '### 보상 모델을 없애도 사라지지 않는 과최적화' (one paragraph)",
+      "L759 '### 오프라인 손실을 온라인화하면 도착하는 내시 균형' (one paragraph)",
+      "L775 '### 쌍, 이진, 그룹으로 갈리는 데이터 형태' (one paragraph)",
+      "L785 '### 오프라인 한 번과 온라인 여러 라운드' (one paragraph)"
+    ],
+    "venue_issues": [
+      "L866 IPO venue spelled out as 'International Conference on Artificial Intelligence and Statistics' while others are abbreviated (NeurIPS, ICML, EMNLP, ICLR, TMLR); not wrong",
+      "L868 KTO listed as arXiv (it follows the plan; the paper appeared at ICML 2024); not garbled"
+    ],
+    "table_cells_prose_empty_or_dash": [],
+    "table_cells_results_not_setups": "mostly: 18 of 20 result cells are results in the post's terms (e.g. L797 '1400개 진짜 보상 RL 상회', L800 '85±3%', L805 '61% vs 57%', L814 '31.3 (vanilla DPO 22.5)'); L801 HH-RLHF is a setup ('52B 반복 온라인 vs 기본 데이터 통제 실험 (PM 비교 약 44k)') and L807 IPO is a closed-form toy optimum (π*(y1)=σ(0.5/τ)). No blank, '-' or sentence cells; all cells are noun phrases in the 입니다-post register (no 한다체). English label words remain (L798, L812, L814).",
+    "leaked_process_text": [],
+    "leaked_process_text_note": "None found: no '반영하지 못한 요청' block, no [[E..]] markers, no evidence-scope phrases ('근거에는', '인용한 범위'). Closest trace: L664 '논문이 퍼센트로 보고한 값으로', a unit hedge that reads awkwardly but is not an edit note."
+  },
+  "top_issues": [
+    "Wrong method claims in the whole-post read: L765 gives DeepSeekMath's GRPO an answer-verification reward (it used a learned reward model, 2402.03300 L733-735); L848/L761 generalise Online IPO's Nash equivalence to 'any loss with the same two elements', which the cited paper contradicts for online DPO (2403.08635 L304-318); L17 dates AI feedback to 2023 and points to a timeline 'at the end' that sits at L21.",
+    "Comparison table: one setup cell (L801 HH-RLHF '통제 실험 (PM 비교 약 44k)') with a finding in its limitation cell, a closed-form toy formula as IPO's result (L807), scope-less numbers (L813 '15.85%' without metric, L803 '90% 초과' without the 221-comparison subset), English labels (L798, L812, L814); headline numbers still also live only in the body.",
+    "Repetition and markup: Online IPO equivalence (L761/L769/L824/L848), Maj@K/Pass@K (L733/L745/L791/L836) and Ziegler's online-collection point (L753/L848) are retold; five one-paragraph H3s in the synthesis; `\\text{bo$n$}` at L264, bare | for conditionals/lengths (L115, L524, L564, L702) and `\\mid\\mid` for KL (L351)."
+  ]
+}

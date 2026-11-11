@@ -1,0 +1,156 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/, https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+  "title": "Strands Agents SDK: The Agent Loop and Its Production Control Layer",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-strands-agents-sdk-the-agent-loop-and-its-production-control-layer/2026-11-04-strands-agents-sdk-the-agent-loop-and-its-production-control-layer.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-strands-agents-sdk-the-agent-loop-and-its-production-control-layer.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '추론·도구 실행·재호출을 반복하는 ReAct형 에이전트 루프': check 2 sentence(s) the evidence may not support: 루프가 아는 것은 이 공통 인터페이스뿐이므로, 도구 검증, 기록 누적, 오류 결과 반환은 어떤 LLM을 쓰든 똑같이 동작합니다. (unsupported: Evidence only says agent logic is independent of the LLM implementation; the claim that the loop knows only the common interface and that validation, history and error handling behave identically for every LLM is not stated.) | SDK가 모델 비종속적으로 설계된 이유도 여기에 있습니다 [[E191]]. (unsupported: E191 says only that the SDK is model-agnostic; it gives no reason or cause for that design.)",
+    "Section '수명주기 시점마다 발생하는 타입 안전한 훅 이벤트' still has: the section must start with its '## ' heading (수명주기 시점마다 발생하는 타입 안전한 훅 이벤트)",
+    "Section '거대한 프롬프트를 대체하는 모듈식 스티어링과 서버 관리형 정책' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 스티어링도 인터벤션 계층 위에서 돌기 때문에, 앞서 설명한 규칙이 그대로 적용됩니다. | English stem with a Korean ending 'deny하는': 후(post) 출력에서 SSN 패턴을 정규식으로 찾아 deny하는 정의가 있습니다 . | a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '설치부터 도구·MCP를 갖춘 첫 고객 지원 에이전트까지': check 2 sentence(s) the evidence may not support: Python 3.10 이상 환경에서 SDK를 설치하고 함수 몇 개를 `tools` 목록에 넣으면, 고객 문의를 바로 처리하는 에이전트가 만들어집니다 [[E210, E194]]. (unsupported: The Python 3.10+ requirement comes only from a third-party README; only official docs decide version support.) | Python SDK를 쓰려면 Python 3.10 이상이 필요합니다 [[E210]]. (unsupported: The Python 3.10+ requirement is given only by a non-official (third_party) README; version support needs an official source.)",
+    "Section '슬라이딩 윈도우·요약·사전 압축으로 유지하는 컨텍스트 예산': check 1 sentence(s) the evidence may not support: 축소가 일어나면 기본 비율 0.3에 따라 가장 오래된 메시지의 30%가 요약으로 바뀝니다. (numbers not in its evidence)",
+    "Section '슬라이딩 윈도우·요약·사전 압축으로 유지하는 컨텍스트 예산' still has: numbers ['0.3', '30'] without evidence: 축소가 일어나면 기본 비율 0.3에 따라 가장 오래된 메시지의 30%가 요약으로 바뀝니다. | English stem with a Korean ending 'clamp됩니다': 체할 가장 오래된 메시지의 비율이며, 0.1~0.8로 clamp됩니다 | | English stem with a Korean ending 'clamp됩니다': 지 않습니다. 비율을 0.8보다 크게 주어도 0.8로 clamp됩니다 . `summarization_agent`를 주지 않",
+    "Section '스키마를 도구로 바꿔 검증된 객체를 돌려받는 구조화된 출력' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 이 방식은 앞서 설명한 에이전트 루프와 그대로 맞물립니다.",
+    "Section '턴·토큰 한도, 중단 사유, 취소와 동시 호출 가드로 묶는 호출 수명주기': check 1 sentence(s) the evidence may not support: 그 턴에서 누적 사용량이 10,000을 넘더라도 턴은 끝까지 진행되고, 다음 턴이 시작되기 전 검사에서 호출이 멈춥니다. (numbers not in its evidence)",
+    "Section '턴·토큰 한도, 중단 사유, 취소와 동시 호출 가드로 묶는 호출 수명주기' still has: numbers ['10,000'] without evidence: 그 턴에서 누적 사용량이 10,000을 넘더라도 턴은 끝까지 진행되고, 다음 턴이 시작되기 전 검사에서 호출이 멈춥니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 다룬 요약 관리자를 쓰는 고객 지원 에이전트라면 요약 비용은 별도로 모니터링해야 합니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 그래서 위험 도구는 앞서 설명한 승인 게이트와 순차 실행을 함께 고려해야 합니다.",
+    "Section '모델 주도 유연성과 결정적 제어 사이의 선택 기준' still has: says what a paper does not state or report; that is rarely evidence (the reader saw only part of it): leave it out or state what the paper does say: 이 비교 글은 Strands를 다루지 않습니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 궤적 평가에서 `refund`가 `lookup_order`보다 먼저 불려 걸린 회귀는 사후에 잡은 것이고, 실행 시점에 막은 것은 아닙니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 다룬 한도, 재시도, 인터벤션(intervention), 궤적 평가로 모델 주도 루프를 충분히 감쌀 수 있습니다.",
+    "English stem with a Korean ending 'deny하는': 후(post) 출력에서 SSN 패턴을 정규식으로 찾아 deny하는 정의가 있습니다.",
+    "English stem with a Korean ending 'clamp됩니다': 체할 가장 오래된 메시지의 비율이며, 0.1~0.8로 clamp됩니다 |",
+    "English stem with a Korean ending 'clamp됩니다': 지 않습니다. 비율을 0.8보다 크게 주어도 0.8로 clamp됩니다. `summarization_agent`를 주지 않으"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3441.8,
+  "input_tokens": 3166826,
+  "output_tokens": 482743,
+  "estimated_cost_usd": 17.2315,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 224,
+      "failed_calls": 0,
+      "input_tokens": 21833,
+      "output_tokens": 482743,
+      "cache_read_tokens": 1340876,
+      "cache_write_tokens": 1804117,
+      "cost_usd": 17.231459
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2686,
+        "output_tokens": 184,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000361
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2855,
+        "output_tokens": 622,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000597
+      },
+      "read": {
+        "calls": 117,
+        "failed_calls": 0,
+        "input_tokens": 282,
+        "output_tokens": 117402,
+        "cache_read_tokens": 787027,
+        "cache_write_tokens": 240656,
+        "cost_usd": 1.933628
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 8305,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 29613,
+        "cost_usd": 0.314181
+      },
+      "verify": {
+        "calls": 48,
+        "failed_calls": 0,
+        "input_tokens": 192,
+        "output_tokens": 111291,
+        "cache_read_tokens": 452215,
+        "cache_write_tokens": 877634,
+        "cost_usd": 6.795632
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 66401,
+        "cache_read_tokens": 43888,
+        "cache_write_tokens": 251696,
+        "cost_usd": 2.604274
+      },
+      "review": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 32452,
+        "cache_read_tokens": 22594,
+        "cache_write_tokens": 60142,
+        "cost_usd": 0.959009
+      },
+      "fix": {
+        "calls": 27,
+        "failed_calls": 0,
+        "input_tokens": 108,
+        "output_tokens": 144246,
+        "cache_read_tokens": 35152,
+        "cache_write_tokens": 344376,
+        "cost_usd": 4.621298
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 15594,
+        "output_tokens": 1840,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002479
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 21135,
+        "output_tokens": 2646,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003437
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 117,
+        "failed_calls": 0,
+        "input_tokens": 282,
+        "output_tokens": 117402,
+        "cache_read_tokens": 787027,
+        "cache_write_tokens": 240656,
+        "cost_usd": 1.933628
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 104,
+        "failed_calls": 0,
+        "input_tokens": 416,
+        "output_tokens": 362695,
+        "cache_read_tokens": 553849,
+        "cache_write_tokens": 1563461,
+        "cost_usd": 15.294394
+      }
+    }
+  }
+}

@@ -1,0 +1,134 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/eval-guide/guide-vllm-v3.md",
+  "judge_run": 2,
+  "scores": {"A": 6.0, "B": 7.5, "C": 7.0, "D": 8.0, "E": 7.0, "F": 4.0, "T1": 6.0, "T2": 7.0, "T3": 7.5},
+  "score_evidence": {
+    "A": [
+      "L299-302: empty H2 '## 하드웨어 백엔드별 설치: CUDA, ROCm, TPU, Apple Silicon, CPU' directly followed by another H2 '## 하드웨어 백엔드마다 다른 설치 경로와 따로 받는 커널'",
+      "L610-613: empty H2 '## vLLM 선택 기준: ...' directly followed by '## 동시 요청이 많을수록 커지는 vLLM의 이점과 그 한계'",
+      "L661/L679 and L667/L680: duplicate Sources entries (Quickstart .../quickstart/ and quickstart.html; vLLM blog on vllm.ai and blog.vllm.ai)",
+      "Front matter, $$ math, fences (40, balanced) and tables otherwise render correctly; description is 131 chars"
+    ],
+    "B": [
+      "Same formulaic sentence opening repeated: L83 '숫자로 따라가 보면 이렇습니다.', L133 '최악의 경우를 계산해 보면 크기를 짐작할 수 있습니다.', L172 '숫자를 넣어 보면 절감 규모를 가늠할 수 있습니다.', L268 '구체적인 숫자로 따라가 보면 동작이 잘 보입니다.'",
+      "L211 noun frame '이 그림에서 볼 곳은 제어가 한 점에 모인다는 부분입니다' -> '이 그림에서는 제어가 한 곳에 모인다는 점을 보면 됩니다'",
+      "L81 formulaic '식을 읽는 요령은 단순합니다.'",
+      "'서드파티'/'제3자' hedges 7 times (L51, L65, L109, L137, L139, L293), which makes the internals sections read as a citation list",
+      "L465 '서버는 설치 절의 Docker 실행에서 열어 둔 것과 같은 기본 포트로 localhost에서 요청을 받고' is a contorted way to avoid saying 8000"
+    ],
+    "C": [
+      "L268 '토큰 상한을 앞서 든 예시값으로 두고' refers to an example value never given earlier (2,048 appears only inside the L271 diagram)",
+      "L262-266: symbol B reused for the token budget although L49 defined B as the block size",
+      "Facts restated: OS analogy '블록은 페이지, 토큰은 바이트, 시퀀스는 프로세스' at L49 and L103; block size 16 at L65 (Introl) and L152 (paper); prefix caching defined at L195-199 and again at L297; engine args reused for vllm serve at L445, L467 and L490; generation_config at L451 and L469"
+    ],
+    "D": [
+      "Strong worked examples: block-table trace L119-127, copy-on-write trace L172-181, chunked-prefill trace L268-276, preemption 640-token example L291",
+      "L133 promises a worst-case calculation but gives no number; a padding paragraph"
+    ],
+    "E": [
+      "L632-634: caption '요청당 출력 1개일 때 A100과 A10G에서 ...' but the image is perf_a100_n3_light.png (A100, three parallel outputs per the blog)",
+      "L500: v0.6.4 default cell is '—' though the v0.6.4 page says 'Default: 0.9'",
+      "No client-request code for the running server although the H2 at L453 promises an OpenAI client"
+    ],
+    "F": [
+      "Wrong figure/caption pairing at L634 (n3 graph captioned as one output on two GPUs)",
+      "L540-541 and the L551-555 script use 'vllm:gpu_cache_usage_perc' and 'vllm:time_per_output_token_seconds_bucket'; the current vLLM source (main b43366f, vllm/v1/metrics/loggers.py) and docs/design/metrics.md expose 'vllm:kv_cache_usage_perc', 'vllm:request_time_per_output_token_seconds' and 'vllm:inter_token_latency_seconds' instead; the names come from forum/issue sources",
+      "L499 table cell '기존 50%가 다른 vLLM 인스턴스의 몫이면 ... 이 인스턴스의 한도는 GPU 메모리의 90%' is presented under '현재 문서' but the current docstring gives no such example (writer's inference)",
+      "L15 TL;DR presents swap and recompute as current recovery paths; current SchedulerConfig/EngineArgs have no preemption-mode option, and L293 itself only cites v0.6.4/v0.7.3 docs"
+    ],
+    "T1": [
+      "Correct and pasteable: uv install L321-326, pip cu129 L332-335, Python-only build L381-386, full build L394-398, GPU and CPU docker run L361-368 and L406-414, vllm serve with tuning flags L508-513, offline LLM script L426-439",
+      "No curl or OpenAI client call to the running server anywhere in the post",
+      "Config-file section L482-486 never shows a YAML file or the '--config' flag",
+      "CPU source build L353-357 skips the documented 'uv pip install -r requirements/build/cpu.txt ... -r requirements/cpu.txt' step; with --no-build-isolation it fails on a fresh clone",
+      "L598-608 'advanced:' snippet is shown top-level; the KEDA doc nests it under 'keda:'",
+      "Offline script prints nothing (output loop from the quickstart dropped)"
+    ],
+    "T2": [
+      "Covers PagedAttention, block manager, CoW, prefix caching, scheduler, chunked prefill, preemption, install, offline/online, tuning, metrics, KEDA in a sensible order",
+      "Developer build paths (L373-416: Python-only build, ccache, docker build-args) and v0.6.4/v0.7.3-only notes (CPU offload L527, FP8 scaling JSON L504) pad a serving guide",
+      "Chat Completions endpoint and chat template behaviour of the server are missing"
+    ],
+    "T3": [
+      "Internals and design reasons are explained before configuration (L43-297), with trade-offs (block size table L147-152, recompute vs swap L284-291), system placement (L205-240), observability (L529-567), scaling (L569-608), failure modes and when to choose (L640-654)",
+      "Some mechanisms rest on old-docs pages only: preemption mode L293, distributed executor backend L240, FP8 scaling L504, CPU offload L527",
+      "L293 uses a self-declared AI-generated page (LLM Learning) as a source and leaves the current default unresolved"
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Most headings are claim noun phrases (L21 '토큰 하나에 800 KB인 KV 캐시', L278 '전부 아니면 전무로 비우는 선점'), but L299 and L610 are empty duplicate H2s"},
+    "running_example": {"status": "partly met", "evidence": "Qwen/Qwen2.5-1.5B-Instruct chat server threads through L172, L193, L217, L250, L344, L437, L462, L509, L557, but the server is never queried by a client"},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "PagedAttention: problem L31-35 -> design L45-65 -> formula L75-81 -> numeric walk L83; block table L113-127; CoW L166-183; chunked prefill L258-276"},
+    "facts_said_once": {"status": "not met", "evidence": "OS analogy L49/L103; block size 16 L65/L152; 60-80% L13/L35/L133; 24x L13/L39/L632; prefix caching L195-199/L297; engine args to serve L445/L467/L490; generation_config L451/L469"},
+    "numbers_with_scope": {"status": "mostly met", "evidence": "Benchmark table L621-630 carries condition and measuring party; L39 and L189 scope the author numbers; Introl 3-10x/2-5x L571 has no setup"},
+    "nothing_invented": {"status": "partly met", "evidence": "Illustrative diagrams are labelled (L51, L172, L217, L268); but the L634 caption is wrong, the L499 cell is inference shown as documentation, and the L265 formula is the writer's own without a label"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L646 '이 글의 판단으로는 다음 조건에서 vLLM이 맞습니다' plus counter-cases L652 and measurement advice L654"},
+    "length_fitted": {"status": "partly met", "evidence": "680 lines; hard parts get space, but developer build paths L373-416 and the number-free L133 paragraph pad"},
+    "type_shape": {"status": "mostly met", "evidence": "Opens with TL;DR and problem (L11-41); architecture first at L43 and system path at L205, installation only at L299; closes with selection and failure modes L610-654; empty H2s at L299/L610"},
+    "korean_style": {"status": "partly met", "evidence": "Consistent 입니다 register and Korean headings; repeated '숫자로 따라가 보면' openings (L83, L133, L172, L268) and heavy '서드파티' hedging"}
+  },
+  "sample": "Prose paragraphs, display formulas and tables after the front matter numbered 1..148; sampled #2, #5, #8, ... (every third from #2); 15 claims taken from sampled blocks #2, #5, #8, #20, #29, #38, #62, #74, #83, #92/#95, #110, #116, #134, #140 plus #68",
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 1,
+    "numeric_claims": 10,
+    "examples": [
+      {"line": 15, "claim": "Linux and Python 3.11-3.14", "verdict": "supported", "source": "quickstart.md: 'Python: 3.11 -- 3.14'"},
+      {"line": "26-29", "claim": "OPT-13B KV per token 2x5120x40x2 = 800 KB; 2,048 tokens ~1.6 GB", "verdict": "supported", "source": "arXiv 2309.06180 §3: 'the KV cache of a single token demands 800 KB ... up to 2048 tokens ... as much as 1.6 GB'"},
+      {"line": 35, "claim": "existing systems waste 60-80% of memory", "verdict": "supported", "source": "vLLM blog: 'existing systems waste 60% - 80% of memory due to fragmentation and over-reservation'"},
+      {"line": 90, "claim": "modified FasterTransformer attention kernel, one GPU warp per block for coalesced access", "verdict": "supported", "source": "paper §5.1: 'we assign a GPU warp to read each block'"},
+      {"line": 103, "claim": "block table entry holds the physical block and the number of filled positions", "verdict": "supported", "source": "paper §4.2: 'Each block table entry records the corresponding physical blocks of a logical block and the number of filled positions'"},
+      {"line": 152, "claim": "default block size 16 at paper time", "verdict": "supported", "source": "paper §7.2: 'vLLM sets its default block size as 16'"},
+      {"line": 240, "claim": "mp if PP x TP <= GPUs, else ray if installed, else fail; TPU/HPU Ray only (v0.6.4)", "verdict": "supported", "source": "v0.6.4 engine_args --distributed-executor-backend text"},
+      {"line": 260, "claim": "chunked prefill splits prefill by the remaining max_num_batched_tokens", "verdict": "supported", "source": "vllm/config/scheduler.py enable_chunked_prefill docstring (Sarathi-Serve attribution not in official docs, not counted)"},
+      {"line": 289, "claim": "swapped-out blocks never exceed GPU physical blocks, so CPU swap space is bounded by GPU KV cache", "verdict": "supported", "source": "paper §4.5"},
+      {"line": 319, "claim": "--torch-backend=auto inspects the CUDA driver; UV_TORCH_BACKEND=auto equivalent", "verdict": "supported", "source": "quickstart.md tip"},
+      {"line": "388-392", "claim": "searches up to 20 commits back, stops if csrc/ etc. changed; full build needs GCC/G++ >= 13", "verdict": "supported", "source": "installation/gpu.cuda.inc.md"},
+      {"line": 473, "claim": "multiple --api-key values, any accepted, useful for rotation", "verdict": "supported", "source": "quickstart.md Online Serving"},
+      {"line": "496-500", "claim": "gpu-memory-utilization table: current default 1.0 extensible / 0.92 otherwise; '기존 50% ... 이 인스턴스의 한도는 90%' under 현재 문서; v0.6.4 default '—'", "verdict": "unsupported", "source": "cache.py docstring supports the defaults and per-instance scope but has no 50%/90% example; v0.6.4 page gives 'Default: 0.9' (cell left '—')"},
+      {"line": 575, "claim": "example KEDA config: scale up above 5 waiting, check every 15 s, wait 360 s before scaling down", "verdict": "supported", "source": "production-stack Autoscaling with KEDA page"},
+      {"line": "632-634", "claim": "graph shows one output per request on A100 and A10G", "verdict": "wrong", "source": "image is perf_a100_n3_light.png; blog pairs n3 with 'three parallel output completions' and shows A100 and A10G as separate figures"}
+    ],
+    "extra_out_of_sample": [
+      {"line": "540-541, 551-555", "claim": "metric names vllm:gpu_cache_usage_perc and vllm:time_per_output_token_seconds_bucket", "verdict": "wrong for current vLLM", "source": "main b43366f vllm/v1/metrics/loggers.py defines vllm:kv_cache_usage_perc and vllm:request_time_per_output_token_seconds; the old names are absent from source and docs"}
+    ]
+  },
+  "checklist": {
+    "repeated": 2,
+    "avoided": 4,
+    "na": 0,
+    "repeated_ids": ["dangling-cross-reference", "stale-third-party-names"],
+    "items": [
+      {"id": "dangling-cross-reference", "status": "repeated", "evidence": "L268 '토큰 상한을 앞서 든 예시값으로' points to an example never given; no numbered chapter references otherwise"},
+      {"id": "tag-remnant", "status": "avoided", "evidence": "no '</path>' or other closing-tag remnants"},
+      {"id": "entity-leak", "status": "avoided", "evidence": "only '&#124;' in Sources link text (L667-680), which kramdown renders as '|'"},
+      {"id": "unclosed-code-fence", "status": "avoided", "evidence": "40 fence markers, all paired; both Python blocks parse"},
+      {"id": "stale-third-party-names", "status": "repeated", "evidence": "L540-541 and L554 use metric names from the forum/GuideLLM issue that current vLLM no longer exports"},
+      {"id": "install-usage-centric", "status": "avoided", "evidence": "L43-297 cover kernel, block manager, CoW, prefix caching, process layout, scheduler before installation at L299"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 43,
+    "system_architecture_line": 205,
+    "installation_first_line": 299,
+    "sources_total": 21,
+    "sources_unique": 19,
+    "official_docs_share": "11/21 docs.vllm.ai pages, 4 of them pinned to old versions (v0.6.4, v0.7.3, v0.24.0, v0.31.0)",
+    "non_official_share": "7/21 (Introl, Runpod, DZone, Varun Kruthiventi, LLM Learning, GuideLLM issue, vLLM forum) = 33%; plus paper and vLLM blog as explanatory sources",
+    "opens_with_problem": true,
+    "closes_with_choice_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "mostly runs as pasted; the server path is incomplete",
+    "ok": ["uv/pip CUDA install L321-335", "Python-only and full builds L381-398", "GPU docker run L406-414 (matches gpu.cuda.inc.md)", "CPU docker run L361-368", "vllm serve variants L344, L462, L476-477, L508-513 (flags exist in current EngineArgs/ModelConfig/CacheConfig)", "offline LLM script L426-439 imports and calls are valid (parses; prints nothing)", "metrics script L548-563 is valid stdlib Python"],
+    "fails_or_misleads": ["CPU source build L353-357 lacks the requirements install step before --no-build-isolation", "metrics script watches vllm:gpu_cache_usage_perc, which current servers do not export, so it silently prints only two metrics", "KEDA 'advanced:' snippet L598-608 mis-nested (belongs under keda:)", "keepalive trigger L587-594 is a bare list item without its keda.triggers parent", "no client request (curl or OpenAI SDK) and no --config example"]
+  },
+  "top_issues": [
+    "Wrong graph caption at L634 and metric names (L540-541, L554) that current vLLM no longer exports, used in the runnable monitoring script",
+    "Running-example server is never queried: no curl/OpenAI client call, no --config YAML, CPU source build skips the dependency install",
+    "Two empty duplicate H2 headings (L299, L610) plus repeated facts and formulaic '숫자로 따라가 보면' openings"
+  ]
+}

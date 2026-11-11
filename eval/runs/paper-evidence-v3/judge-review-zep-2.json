@@ -1,0 +1,111 @@
+{
+  "item": "review-zep",
+  "post": "/tmp/eval-paper/review-zep-v3.md",
+  "judge_run": 2,
+  "source": "https://arxiv.org/html/2501.13956 (v1)",
+  "sampling": "Body prose paragraphs and bullet items (headings, tables, display math, code excluded), numbered from line 14; paragraph 2 and every third after it (2, 5, 8, ..., 92): 31 paragraphs; 15 claims drawn from them.",
+  "scores": {"A": 7.0, "B": 7.0, "C": 6.5, "D": 8.0, "E": 8.5, "F": 6.0},
+  "type_scores": {"R1": 7.5, "R2": 8.0, "R3": 6.5, "G": 9.0, "X1": 7.0},
+  "score_evidence": {
+    "A": [
+      "L46 and L78-82: the graph definition G=(N,E,phi) is given twice, the second time as display math in a different section with a contradictory gloss.",
+      "L305 '이 지연 수치에서 무엇이 측정되었는지는 구분해서 읽어야 합니다.' is an orphan paragraph; nothing follows it before the next heading (the network-latency caveat is back at L257).",
+      "L125 is a lone one-sentence paragraph ('\"2주 전에 새 직장을 시작했어요\"라는 말은 ...') between subsections.",
+      "Front matter, $$-only math, single header rows and heading levels are fine."
+    ],
+    "B": [
+      "L29 '이 수치가 상대 하락인지 %p 하락인지, 기준값과 결과값은 이 근거에 제시되어 있지 않습니다.' is pipeline language leaking into the TL;DR (rewrite: drop the sentence; L326 gives 94.6% -> 80.4%).",
+      "L82 '$$\\phi$$가 무엇을 나타내는지는 여기서 인용한 근거에 정의되어 있지 않습니다.' is the same evidence-ledger leak.",
+      "L146 'Graphiti는 Zep의 지식 그래프 엔진입니다.' is dropped mid-paragraph between two invalidation sentences (rewrite: move to first mention or fold in: 'Zep의 그래프 엔진인 Graphiti는 ...').",
+      "L364 '여기에 이 글의 관점에서 몇 가지를 덧붙입니다. ... 마지막으로' gives two points and a '마지막으로' with no first/second.",
+      "Otherwise consistent 입니다 register and natural engineer prose."
+    ],
+    "C": [
+      "L263 '앞서 소개한 대로, 여러 세션으로 이루어진 다중 세션 대화로 구성됩니다' and L278 '앞서 본 세션 구성을 모두 합쳐도' point back to a DMR composition (500 conversations, 5 sessions, up to 12 messages) the post never states.",
+      "L251 says both experiments use the top 20 items, then L263 says DMR used the top 10; the post notes it but does not reconcile (the paper itself is inconsistent).",
+      "The Seoul->Busan example is retold at L38, L156-167, L235-247, L280, L299, L336; the DMR-section retelling (L280) does not connect to the DMR argument."
+    ],
+    "D": [
+      "Good: bi-temporal walk-through table (L162-165), label-propagation neighbour count (L183-193), same-entity-pair dedup example (L113).",
+      "Over-padding: repeated re-explanations of edge invalidation in results sections (L299, L336) instead of pointing back."
+    ],
+    "E": [
+      "DMR (L265-274), LongMemEval (L286-291) and question-type (L317-330) tables match the paper's cells.",
+      "L187-191 neighbour table restates the sentence before and after it (mildly redundant).",
+      "No visual for the three-tier graph / retrieval pipeline where one would help (the layer table L66-70 partly covers it)."
+    ],
+    "F": [
+      "L29 (TL;DR): claims the paper gives neither the baseline/result values nor whether the single-session-assistant drop is relative; the paper's Table 3 gives 94.6%->80.4% (gpt-4o) and 81.8%->75.0% (gpt-4o-mini) and the post's own table at L320/L326 shows them. Wrong (-2).",
+      "L82: says phi is not defined in the cited evidence; the paper defines it ('phi: E -> N x N represents a formal incidence function') and the post itself does at L48. Wrong (-2).",
+      "Hypothetical examples are labelled as such (L38, L185, L235); all table cells checked match."
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Most H2s are claims (L74, L117, L259, L282, L313); topic headings remain: L121 '두 개의 타임라인 T와 T'', L199 '요약과 검색용 이름', L346 '한계와 시사점'."},
+    "running_example": {"status": "met", "evidence": "Seoul->Busan move runs from L38 through extraction, invalidation, retrieval and results; overused (see facts_once)."},
+    "mechanism_choice_formula_example": {"status": "met", "evidence": "Label propagation: choice vs Leiden and reason (L173-177), mechanism (L181), worked count (L183-193), cost (L195). Bi-temporal: L123 -> timestamp table L135-140 -> walk-through L156-165."},
+    "facts_once": {"status": "not met", "evidence": "Graph definition twice (L46, L79); single-session-assistant drop three times (L29, L340, L362); edge invalidation re-explained at L247, L280, L299, L336; 115k tokens at L17, L255, L284."},
+    "numbers_with_scope": {"status": "partly met", "evidence": "Model and setting attached to almost every number; but the L293 heading '상대 향상 15.2%와 18.5%' is the only place 15.2% appears and it is never tied to gpt-4o-mini in the body."},
+    "nothing_invented": {"status": "partly met", "evidence": "Examples labelled hypothetical; but two false statements about the source (L29, L82)."},
+    "writer_assessment_at_end": {"status": "partly met", "evidence": "L352-354 and L364 are the writer's judgement (when to adopt, verify contradiction accuracy); L360-362 restate the paper's conclusion/future work (benchmarks, fine-tuned models, ontologies)."},
+    "length_fitted": {"status": "partly met", "evidence": "~370 lines for a moderate systems paper; length comes from repeated running-example retellings rather than from omitted hard parts (model choice, DMR composition)."},
+    "type_specific_shape": {"status": "met", "evidence": "Four-question TL;DR (L14-30), method sections, two result sections, limitations (L346)."},
+    "korean_style": {"status": "partly met", "evidence": "Natural 입니다 prose overall; evidence-ledger leaks (L29, L82), inserted definition (L146), dangling '마지막으로' (L364)."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 1,
+    "unverifiable": 0,
+    "numbers": 8,
+    "examples": [
+      {"line": 20, "claim": "Episodic/semantic split builds on AriGraph; community layer on GraphRAG", "verdict": "supported", "source": "§2: 'distinct episodic and semantic subgraphs draws from similar approaches in AriGraph [9]'; 'community nodes ... builds upon work from GraphRAG [4]'"},
+      {"line": 25, "claim": "Retrieval = cosine, BM25 and BFS search; RRF, MMR, cross-encoder rerankers; constructor to text (three steps)", "verdict": "supported", "source": "§3: 'f(α)=χ(ρ(φ(α)))=β'; §3.1 'φcos, φbm25, φbfs'; §3.2 RRF, MMR, cross-encoders"},
+      {"line": 30, "claim": "DMR gpt-4-turbo: Zep 94.8% vs full-conversation 94.4%", "verdict": "supported", "number": true, "source": "Table 1: Full-conversation gpt-4-turbo 94.4%; Zep gpt-4-turbo 94.8%"},
+      {"line": 82, "claim": "What phi denotes is not defined in the cited evidence", "verdict": "wrong", "source": "§2: 'ϕ:ℰ→𝒩×𝒩 represents a formal incidence function' (post L48 also defines it)"},
+      {"line": 90, "claim": "A reflexion-inspired reflection step reduces hallucination and widens coverage; entity summaries are extracted for resolution/retrieval", "verdict": "supported", "source": "§2.2.1: 'reflection technique inspired by reflexion[12] to minimize hallucinations and enhance extraction coverage'"},
+      {"line": 111, "claim": "Edge dedup hybrid search is restricted to edges between the same entity pair; prevents wrong merges and cuts compute", "verdict": "supported", "source": "§2.2.2: 'constrained to edges existing between the same entity pairs ... not only prevents erroneous combinations ... but also significantly reduces the computational complexity'"},
+      {"line": 129, "claim": "t_ref resolves relative dates; absolute example 'Alan Turing was born on June 23, 1912'", "verdict": "supported", "number": true, "source": "§2.1 / §2.2.3: '\"next Thursday,\" \"in two weeks,\" or \"last summer\"'; '\"Alan Turing was born on June 23, 1912\"'"},
+      {"line": 146, "claim": "Contradicted edge gets t_invalid = new edge's t_valid; Graphiti prioritises new information along T'", "verdict": "supported", "source": "§2.2.3: 'setting their tinvalid to the tvalid of the invalidating edge. Following the transactional timeline T′, Graphiti consistently prioritizes new information'"},
+      {"line": 195, "claim": "Incremental communities drift from a full run, so periodic refreshes are needed; heuristic cuts latency and LLM inference cost", "verdict": "supported", "source": "§2.3: 'gradually diverge ... periodic community refreshes remain necessary ... significantly reduces latency and LLM inference costs'"},
+      {"line": 253, "claim": "Top 20 most relevant edges (facts) and entity nodes (summaries) are retrieved and formatted like Zep's memory API", "verdict": "supported", "number": true, "source": "§4: 'retrieve the 20 most relevant edges (facts) and entity nodes (entity summaries) ... matching the functionality provided by Zep's memory APIs'"},
+      {"line": 278, "claim": "Each DMR conversation has only 60 messages; questions are single-turn fact retrieval", "verdict": "supported", "number": true, "source": "§4.2: 'each conversation contains only 60 messages'; 'relies exclusively on single-turn, fact-retrieval questions'"},
+      {"line": 295, "claim": "LongMemEval accuracy gpt-4o 60.2% -> 71.2%; gpt-4o-mini 55.4% -> 63.8%", "verdict": "supported", "number": true, "source": "Table 2: Full-context 55.4%/60.2%; Zep 63.8%/71.2%"},
+      {"line": 295, "claim": "11.0 points / 60.2 ≈ 18.3%; 18.5% is the authors' stated figure", "verdict": "supported", "number": true, "source": "§4.3.2: 'gpt-4o showed an 18.5% improvement'; 11.0/60.2 = 0.1827"},
+      {"line": 303, "claim": "Latency 28.9 s -> 2.58 s (gpt-4o), 31.3 s -> 3.20 s (gpt-4o-mini), ~90% cut; gpt-4o IQR 6.01 s -> 0.684 s", "verdict": "supported", "number": true, "source": "Table 2 cells; §4.3.2 'reducing response times by approximately 90%'"},
+      {"line": 362, "claim": "single-session-assistant drops 17.7% (gpt-4o) and 9.06% (gpt-4o-mini)", "verdict": "supported", "number": true, "source": "§4.3.2: 'The decrease in performance for single-session-assistant questions—17.7% for gpt-4o and 9.06% for gpt-4o-mini'"}
+    ],
+    "outside_sample": [
+      {"line": 29, "claim": "Base and result values and relative/absolute nature of the single-session-assistant drop are not given", "verdict": "wrong", "source": "Table 3: 94.6%->80.4% 17.7%↓ (gpt-4o), 81.8%->75.0% 9.06%↓ (gpt-4o-mini)"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "items": {
+      "inline-math-delimiters": {"status": "avoided", "evidence": "No \\( \\) or \\[ \\] in the file; inline math is $$...$$ (e.g. L48 '$$\\mathcal{N}$$')."},
+      "longmemeval-tldr-relative": {"status": "avoided", "evidence": "L28 gives absolute accuracies '60.2%보다 높습니다', '55.4%에서 63.8%로'; no '%포인트'. The relative 15.2%/18.5% are not in the TL;DR at all."},
+      "longmemeval-results-relative": {"status": "avoided", "evidence": "L295 states 60.2->71.2 and 55.4->63.8 with '이 수치는 퍼센트포인트 차이가 아니라 기준선 대비 상대 향상률입니다'; '%포인트' is used only to name what it is not and for the 11.0%p difference."},
+      "longmemeval-baseline-misattributed": {"status": "avoided", "evidence": "L28 'gpt-4o 기준 Zep의 정확도는 71.2%로, 전체 컨텍스트 방식의 60.2%보다'; models are the answering models, baseline is full context."},
+      "longmemeval-185-arithmetic": {"status": "avoided", "evidence": "L295 '이를 60.2%로 나누면 약 18.3%가 나옵니다 ... 초록의 \"최대 18.5% 향상\"은 저자들이 보고한 값입니다.'"},
+      "missing-description": {"status": "avoided", "evidence": "L8 description starts with 'Zep은', 125 characters, numbers (60.2, 71.2, 28.9, 2.58) all in the TL;DR."}
+    }
+  },
+  "extras": {
+    "omissions": [
+      "Model choices (BGE-m3 for embedding and reranking; gpt-4o-mini-2024-07-18 for graph construction; gpt-4o-2024-11-20 answering) never stated (§4.1).",
+      "DMR composition (500 conversations, 5 sessions, up to 12 messages) never stated though L263/L278 refer back to it.",
+      "Bidirectional episode-edge indices for citation (§2.1) absent."
+    ],
+    "blog_markup_G": "description 125 chars, opens with 'Zep', TL;DR numbers only; use_math true with $$ present; no Liquid; passes on inspection (lint not run).",
+    "taxonomy_X1": "7 tags; 'Agentic-AI' appears in the paper only in a reference title; 'Knowledge-Graph' overlaps 'Temporal-Knowledge-Graph'."
+  },
+  "top_issues": [
+    "Evidence-ledger leaks state false things about the paper: L29 (TL;DR) says the single-session-assistant baselines and relative/absolute nature are not given, contradicting Table 3 and the post's own L320/L326; L82 says phi is undefined though L48 defines it.",
+    "Repetition and dangling references: graph definition twice (L46, L79), running example retold six times, orphan L305, and L263/L278 point back to a DMR session composition never introduced.",
+    "Missing setup facts: no model choices (BGE-m3, gpt-4o-mini for construction) and no DMR size; 15.2% appears only in the L293 heading without the gpt-4o-mini attribution."
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/eval-guide/guide-strands-v1.md",
+  "judge_run": 1,
+  "scores": {"A": 7.0, "B": 7.5, "C": 8.0, "D": 8.0, "E": 8.0, "F": 6.0, "T1": 7.0, "T2": 8.5, "T3": 8.5},
+  "score_notes": {
+    "A": "A leftover generator note sits in the body: L486 '참고: 요청하신 `LLMSteeringHandler` import 줄은 넣지 않았습니다. 정확한 경로를 담은 코드 근거가 확보되면 코드 블록 맨 위에 한 줄로 추가하면 됩니다.', after a stray rule at L484 '---' in the middle of the post. The section arc is otherwise coherent: TL;DR, problem, loop, tools, hooks/middleware, interventions, steering, structured output, context, HITL, retry, limits, deployment, choice. Front matter is valid: two-level categories, use_math with $$ at L95-97, a 124-character description.",
+    "B": "The formula '이 글의 판단으로는' / '이 가이드의 판단으로는' repeats nine times (L99, 400, 482, 588, 672, 744, 790, 1000, 1031). L400 '...가운데에서 장애 시 고객 응대를 멈출지 여부를 기준으로 고르는 편이 이 글의 판단입니다' is a noun frame; rewrite as '...멈출지를 기준으로 고르는 편이 낫다고 봅니다.' L519 '원래 예시는 마감일이 오늘 이후인지 `field_validator`로 검사합니다' is input talk about a source example the reader never sees. The rest reads as natural 입니다-register Korean.",
+    "C": "The running example is inconsistent: the tool is defined as `refund_order` (L134-145) but used as `refund` from L356 onward. Several facts come back in full: 'Python과 TypeScript용 오픈소스 SDK' at L13, L21 and L27; no hosted control plane at L13, L15 and L27; the unbounded after_model_call Guide at L390 and L478; ConcurrencyException at L873 and L1027; retry stacking at L815 and L1028; soft limits at L836 and L1024. Transitions and back-references are otherwise accurate.",
+    "D": "Hard parts get worked examples where they appear: the decision-composition table L371-377, the token-budget walk L840-847, the steering cost table L471-476 and the hook order nesting L209. Easy parts are padded: the message-count formula 'N = 1 + 2k + 1' (L95-97) and the per_turn call-count table (L608-612).",
+    "E": "Tables and ASCII diagrams carry comparisons and flows well (hooks vs middleware L308, stop reasons L918, HITL ask modes L678). L96 is a decorative equation. The doc's own loop diagram is not used; the post substitutes a text diagram. The illustrative tables are labelled as the writer's examples.",
+    "F": "Two of the 15 sampled claims are unsupported: steering is described as built on intervention handlers (L15, also L404) although the docs say Python steering handlers are plugins, and the post's own code uses plugins=[handler] at L453; the latencyMs=0 limitation (L956) loses its 'Strands 1.47.0' scope. The generator's own warnings flagged both, and both shipped. L849 'prompt-cache reads and writes are counted' drops the docs' provider scope (Bedrock, Anthropic, OpenAI, Gemini). The L486 meta note admits a missing import.",
+    "T1": "There is no install step (no `pip install strands-agents`). Most snippets omit their imports: InterventionHandler/Deny/Proceed (L342), HumanInTheLoop (L688), DockerSandbox/make_shell (L962-984), LLMSteeringHandler (L486 admits this) and HookProvider (L189). `refund` is never defined. Flags, defaults and stop reasons are concrete and correct (limits, per_turn, retry_strategy, on_error).",
+    "T2": "Covers the important topics of the seed pages (agent loop, hooks) and the linked official pages in a sensible order: loop, tools, extension points, then production controls. The extra sections (sandbox, A2A/AG-UI) are sourced.",
+    "T3": "Strong on internals and design reasons: hooks sit outside the middleware chain (L297-306), typed decisions with precedence instead of last-write-wins (L322-326), a fresh stateless inner steering agent (L459), limit checks at iteration boundaries (L836), cooperative cancellation (L857-867). Covers system fit through deployment forms, OTEL spans and A2A, and limitations at L1020-1029. Design advice is marked as the writer's judgment."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "e.g. L817 '## 반복 경계에서만 검사되는 예산과 협조적 취소', L316 '## 타입이 있는 결정과 고정 우선순위로 합성되는 개입 계층'; a few H3 are topic names (L328 '### 다섯 가지 결정')."},
+    "running_example": {"status": "met", "evidence": "The order-processing support agent (L23) runs through to L1031; there is one naming slip, refund_order vs refund."},
+    "mechanism_design_code_example": {"status": "met", "evidence": "Interventions: problem with hooks (L322), typed decisions (L332), code (L342), worked composition table (L371)."},
+    "facts_said_once": {"status": "partly met", "evidence": "SDK identity at L13/L21/L27; ConcurrencyException at L873/L1027; Guide retry cap at L390/L478; retry stacking at L815/L1028."},
+    "numbers_with_scope": {"status": "partly met", "evidence": "L956 latencyMs=0 without its 1.47.0 version; L849 cache counting without the provider list; L632 omits the 0.7 default threshold."},
+    "nothing_invented": {"status": "partly met", "evidence": "The writer's examples are labelled (L83, L119, L427, L518), but L486 is a generator meta note and L15/L404 overstate steering as an intervention for Python."},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L1031-1037: fit for the order agent, required gates, and a when-to-choose table."},
+    "length_fitted": {"status": "partly met", "evidence": "About 1,000 body lines; the hard parts are justified, but repeated facts and trivial tables (L95, L608) pad it."},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR L11, problem L17, architecture layering L29-41 before config detail, ends with choice and failure modes L1002-1037."},
+    "korean_style": {"status": "partly met", "evidence": "'이 글의 판단으로는' appears nine times; L400 noun frame; L519 input talk."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 13,
+    "unsupported": 2,
+    "wrong": 0,
+    "unverifiable": 0,
+    "sample_rule": "body prose paragraphs (front matter, headings, code, tables excluded), paragraph 1 then every third (1,4,7,...)",
+    "examples": [
+      {"line": 13, "claim": "No hosted control plane; the SDK runs in the application process", "verdict": "supported", "source": "github.com/strands-agents/harness-sdk README: 'it runs in your process with no hosted control plane'"},
+      {"line": 15, "claim": "Steering is modular prompting that runs on intervention handlers", "verdict": "unsupported", "source": "steering page: 'in Python, steering handlers are plugins; in TypeScript, they build on the interventions framework'. The post's Python code (L453) uses plugins=[handler]."},
+      {"line": 56, "claim": "Stop reason tool_use means the loop executes the tools, appends the results and re-invokes the model", "verdict": "supported", "source": "agent-loop: 'Tool use (tool_use): ... executes the requested tools, appends the results to the conversation history, and invokes the model again.'"},
+      {"line": 150, "claim": "v1.25.0 preserves null semantics for required Optional params; before, LLMs passed the string \"null\"", "verdict": "supported", "source": "changelog python-v1.25.0, PR#1584: 'T | None without a default ... LLMs to fall back to passing \"null\" as a string'"},
+      {"line": 209, "claim": "Within one order group, Before events keep registration order and After events reverse it", "verdict": "supported", "source": "hooks: 'Within the same order group, Before events preserve registration order and After events reverse it.'"},
+      {"line": 390, "claim": "Guide on after_model_call triggers a model retry with no framework cap", "verdict": "supported", "source": "interventions: 'The framework imposes no retry cap on guide-triggered retries.'"},
+      {"line": 400, "claim": "on_error default is 'throw'", "verdict": "supported", "source": "interventions: \"'throw' Rethrow the error (default). The invocation fails.\""},
+      {"line": 425, "claim": "The tool ledger records name, input, start/end timestamps, status pending/success/error, and the result or error", "verdict": "supported", "source": "steering: 'records each tool call's name and input arguments, start and end timestamps, execution status (pending, success, error)'"},
+      {"line": 598, "claim": "should_truncate_results=True is the default; the oldest tool-result message is truncated first", "verdict": "supported", "source": "conversation-management: 'When enabled (the default; should_truncate_results=True), the oldest message with tool results is truncated first'"},
+      {"line": 606, "claim": "per_turn: False (default) after loop, True before every model call, int N every N calls; not in TypeScript", "verdict": "supported", "source": "conversation-management: per_turn accepts False (default) / True / integer N > 0; '// Not supported in TypeScript'"},
+      {"line": 836, "claim": "Limits are checked only at the start of each iteration; one turn can overshoot; the previous turn's tools always finish; stops with limit_turns, no exception", "verdict": "supported", "source": "agent-loop / lifecycle-controls: 'Limits are checked at the top of each loop iteration, not mid-call ... tools requested by the previous turn always finish first'"},
+      {"line": 849, "claim": "Priority turns > total tokens > output tokens > structured-output attempts; fresh counters per call; cache reads/writes count", "verdict": "supported", "source": "lifecycle-controls: 'priority order: turns, then total tokens, then output tokens, then structured output attempts'; agent-loop: 'On Amazon Bedrock, Anthropic, OpenAI, and Google Gemini, that total counts prompt-cache reads and writes in full' (the post drops the provider scope)"},
+      {"line": 873, "claim": "concurrent_invocation_mode is THROW (default) or UNSAFE_REENTRANT; overlapping calls raise ConcurrencyException", "verdict": "supported", "source": "lifecycle-controls: 'ConcurrentInvocationMode of either THROW (the default) or UNSAFE_REENTRANT'"},
+      {"line": 956, "claim": "Flight-booking demo accumulated_usage: input 2520, output 209, total 2729", "verdict": "supported", "source": "builder.aws.com Observability for AI Agents with OpenTelemetry: '\"accumulated_usage\": {\"inputTokens\": 2520, \"outputTokens\": 209, \"totalTokens\": 2729}'"},
+      {"line": 956, "claim": "With some LLM providers accumulated_metrics.latencyMs reads 0 (stated generally)", "verdict": "unsupported", "source": "builder.aws.com (third-party): 'in Strands 1.47.0, accumulated_metrics.latencyMs reads 0 for some LLM providers'. The version scope is dropped."}
+    ]
+  },
+  "checklist": {
+    "repeated": 2,
+    "avoided": 2,
+    "na": 1,
+    "repeated_ids": ["shared-agent-throw-scope", "shared-agent-history-leak"],
+    "items": {
+      "loop-diagram-remote": {"status": "avoided", "evidence": "No image links at all; the loop is drawn as a text diagram (L60-77)."},
+      "shared-agent-throw-scope": {"status": "repeated", "evidence": "L1027 '호출이 겹치면 `ConcurrencyException`이 납니다. 그래서 요청마다 새 에이전트를 만드는 패턴이 필요합니다.' L873 is unqualified too; there is no tie to invoke_async and nothing says sync agent(...) in an async handler blocks or serializes instead of raising."},
+      "shared-agent-history-leak": {"status": "repeated", "evidence": "The per-request agent advice (L889) is justified only by the concurrency guard; the post never says a shared agent carries one request's conversation into the next, and it never recommends invoke_async in async handlers."},
+      "result-fields-incomplete": {"status": "avoided", "evidence": "L953 'print(result.metrics.get_summary())' with cycles/tokens/per-tool usage (L949); stop_reason at L714 and L903."},
+      "multi-agent-subject": {"status": "n/a", "evidence": "The sentence about the smallest execution unit does not appear."}
+    }
+  },
+  "extras": {
+    "architecture_first_line": 29,
+    "architecture_note": "L29-41 layering diagram (loop as the execution primitive under conversation management, hooks, multi-agent and evals); loop internals from L43",
+    "sources_total": 24,
+    "official_docs_sources": 16,
+    "official_org_repo": 1,
+    "non_official_sources": 7,
+    "non_official_share": 0.29,
+    "third_party_non_aws_share": 0.125,
+    "non_official_list": ["AWS ML blog deep dive", "AWS OSS blog intro", "AWS OSS blog open protocols", "AWS DevOps blog self-extending CLI", "AWS Builder Center OTEL post", "Langfuse comparison", "Medium Posoldova comparison"],
+    "opens_with_problem": true,
+    "opens_with_problem_evidence": "TL;DR then L17 '## 직접 만든 에이전트 루프가 프로덕션에서 무너지는 지점'",
+    "closes_with_when_to_choose": true,
+    "closes_with_failure_modes": true,
+    "closing_evidence": "L1002-1037: model- vs workflow-driven, production limits list L1022-1029, choice table L1033-1037"
+  },
+  "top_issues": [
+    "A generator meta note leaked into the body (L484-486: '참고: 요청하신 LLMSteeringHandler import 줄은 넣지 않았습니다...').",
+    "Scope drops the generator itself flagged still shipped: Python steering is described as an intervention handler (L15, L404) when it is a plugin, and latencyMs=0 (L956) loses its Strands 1.47.0 scope.",
+    "Shared-agent guidance repeats the human-fixed defects: ConcurrencyException is not tied to invoke_async, there is no warning that sync calls in async handlers block, and history leaking across requests is never mentioned. Snippets also lack imports and an install step, and use `refund` vs `refund_order` inconsistently."
+  ]
+}

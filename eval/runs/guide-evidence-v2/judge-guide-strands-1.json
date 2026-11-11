@@ -1,0 +1,100 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/eval-guide/guide-strands-v2.md",
+  "judge_run": 1,
+  "scores": {"A": 7, "B": 7, "C": 8, "D": 7.5, "E": 7.5, "F": 6, "T1": 5, "T2": 8, "T3": 8},
+  "score_evidence": {
+    "A": "Duplicate H2 with an empty section: L123 and L126 are both '## 수명주기 시점마다 발생하는 타입 안전한 훅 이벤트' (L123 has no body). Front matter and math are otherwise valid (use_math true, $$ only).",
+    "B": "Repeated hedge formula '쓰는 SDK 버전에서 확인해야 합니다' / '모듈 경로는 설치한 SDK 버전에서 확인' about ten times (L104, L119, L121, L172, L195, L212, L252, L283-284, L328, L355). Awkward meta sentences: L48 '이 목록은 서드파티 페이지의 설명입니다' (rewrite: drop it, the attribution is already in the sentence); L313 '여기서 확정하지 않았습니다' (writer-process leak); L77 '...변화라고 부릅니다' has no subject (rewrite: 'Strands 블로그는 이를 ...라고 부릅니다'); L471 '주목하십시오' register jump.",
+    "C": "Running example (customer-support agent, lookup_order/send_email/delete_file) threads through all sections. L1156 '이 비교 글은 Strands를 다루지 않습니다' refers to a vendor-SDK comparison never identified or linked in Sources. L313 leaves the wrap-nesting order open although the middleware page's diagram defines phase order.",
+    "D": "Good worked examples (retry schedule table L740-747, limits overshoot L985, grader table L1139-1142). Padding on trivia: L92-94 formula N_model = N_tool + 1 and $$4 = 3 + 1$$; L309-311 summation 2^0+2^1 = 3 s.",
+    "E": "Tables are real and well placed; ASCII flow diagrams at L64-75 and L136-152 help. Decorative math (L92, L94, L307-311, L317 '3N') adds little.",
+    "F": "Wrong: L199-210 table says 'field names are Python' but lists BeforeInvocationEvent.cancel and BeforeModelCallEvent.cancel, which the hook-events page lists only for TypeScript; the Python writable field on BeforeInvocationEvent is 'messages', which is omitted, so 'the table is practically all the levers' is also wrong. Wrong attribution: L48 calls github.com/strands-agents/harness-sdk a 'third-party GitHub page'; it is the official strands-agents org monorepo. Misleading non-facts: L195, L283-284, L328, L355 claim import paths are unconfirmed although the docs give them (from strands.hooks import HookOrder with SDK_FIRST=-100/SDK_LAST=100; from strands.middleware import InvokeModelStage, ExecuteToolStage, ModelStopReason, ToolResultEvent; from strands.types.exceptions import ModelThrottledException; agent_control.integrations.strands).",
+    "T1": "Running example does not run as pasted: 9 of 27 Python blocks fail (NameError for InvokeModelStage/ExecuteToolStage at L280/L324/L353; NameError InterventionHandler at L435/L500/L512; L500's two-line ToolGuard redefinition replaces the class so L533's ToolGuard(blocked_tools=...) raises TypeError; L620 agent_control import path omitted; L706 'from mcp.client.streamable_http import streamablehttp_client' raises ImportError with mcp 2.3.0, which pip install strands-agents resolves to (strands-agents 1.63.0 pins mcp<2.4,>=1.23.0)). With documented imports injected, every other block constructs correctly (make_support_agent, handle_request signatures accepted).",
+    "T2": "Covers loop, hooks, middleware, interventions, HITL, steering, Agent Control, retry, context, structured output, limits/cancel/concurrency, deploy/OTel/eval in a sensible order; all grounded in the listed sources.",
+    "T3": "Explains mechanisms and why (retry strategy outside middleware chain, hooks outside chain, deny-first precedence, limits checked at loop boundary), integration (AgentCore, ADOT, evals) and failure modes; HITL trust omits that enable_trust must be set (L528)."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "e.g. L54 '추론·도구 실행·재호출을 반복하는 ReAct형 에이전트 루프', L730 '스로틀링만 기본 재시도하는 지수 백오프 전략과 그 확장'; a few topic headings remain (L1152 'Strands가 맞는 조건', L1168 '상황별 선택')."},
+    "running_example": {"status": "met", "evidence": "Customer-support agent from L35 through L1180."},
+    "mechanism_choice_code_example": {"status": "met", "evidence": "Middleware L263-317: phases -> next-count table -> retry code -> 1 s/2 s worked example."},
+    "facts_said_once": {"status": "partly met", "evidence": "Loop description restated at L13, L48, L56, L128; 'hooks see one Before/After pair per middleware retry' at L387 and L805."},
+    "numbers_with_scope_unit": {"status": "met", "evidence": "L736 defaults with units and language; L749 TS defaults separated."},
+    "nothing_invented": {"status": "partly met", "evidence": "TS-only fields in the 'Python' table L203-204; official repo labelled third-party at L48."},
+    "own_assessment_at_end": {"status": "met", "evidence": "L1180 '이 글의 판단으로는 ...'"},
+    "length_fitted": {"status": "partly met", "evidence": "1,208 lines; trivial arithmetic in $$ (L92-94, L309-311) and repeated hedges pad it."},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR L11, problem L25, architecture/loop L54 before installation L655, non-official sources included, ends with when-to-choose and failure modes L1148-1180."},
+    "korean_style": {"status": "partly met", "evidence": "Mostly natural 입니다체; repeated hedge formula, L48 meta attribution, L471 '주목하십시오'."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 1,
+    "sampling": "body paragraphs (front matter and headings excluded) 1, 4, 7, ... ; claims taken from sampled paragraphs and the table/code block each one introduces",
+    "examples": [
+      {"line": 29, "claim": "Model-driven design came from AWS teams building Kiro, Amazon Q Developer and AWS Glue agents", "verdict": "supported", "source": "strandsagents.com/blog/strands-agents-model-driven-approach: 'teams building production agents for Kiro, Amazon Q Developer, and AWS Glue discovered that the orchestration frameworks built for earlier models were actually getting in the way'"},
+      {"line": 166, "claim": "After* callbacks run in reverse registration order", "verdict": "supported", "source": "hooks: 'By default, After event callbacks run in reverse registration order for cleanup symmetry.'"},
+      {"line": 199, "claim": "Writable-field table 'in Python names' includes BeforeInvocationEvent.cancel and BeforeModelCallEvent.cancel and is practically all the levers", "verdict": "wrong", "source": "hooks-events Event Properties: Python tab lists BeforeInvocationEvent 'messages - Mutable' and no BeforeModelCallEvent field; 'cancel' on BeforeInvocationEvent/BeforeModelCallEvent appears only in the TypeScript tab"},
+      {"line": 252, "claim": "end_turn result has stop_reason 'end_turn'; resuming an interrupted agent with a plain string raises TypeError", "verdict": "supported", "source": "hooks-events: 'The returned result has stop_reason=\"end_turn\"'; hooks: 'Passing a plain string raises a TypeError.'"},
+      {"line": 267, "claim": "Wrap calling next 0 / 1 / 2+ times = short-circuit / pass-through / retry", "verdict": "supported", "source": "middleware: 'Calling next zero times short-circuits the stage, once passes it through, and more than once retries it.'"},
+      {"line": 307, "claim": "retry_on_throttle tries at most 3 times, sleeping 1 s then 2 s", "verdict": "supported", "source": "middleware code: for attempt in range(3) ... if attempt == 2: raise ... await asyncio.sleep(2 ** attempt)"},
+      {"line": 317, "claim": "The retry strategy runs outside the middleware chain, so each strategy retry reruns middleware; disable one", "verdict": "supported", "source": "middleware: 'disable the strategy so the two don't stack: the strategy runs outside the middleware chain, so each of its retries runs your middleware again.'"},
+      {"line": 407, "claim": "Five hookable methods; after_tool_call accepts only Proceed and Transform; methods default to Proceed()", "verdict": "supported", "source": "interventions Lifecycle Methods table: after_tool_call 'Proceed, Transform'; 'All methods default to Proceed()'"},
+      {"line": 509, "claim": "Confirm only on before_tool_call; default evaluate accepts True, 'y', 'yes' case-insensitively; response given -> no pause", "verdict": "supported", "source": "interventions: 'The Confirm action is only supported on before_tool_call' ... 'The default accepts True, \"y\", or \"yes\" (case-insensitive).'"},
+      {"line": 583, "claim": "Tool ledger records name, args, start/end, status pending/success/error; TS ToolLedgerProvider name default 'strands:steering:toolLedger'", "verdict": "supported", "source": "steering: 'execution status (pending, success, error)'; ToolLedgerProvider options default 'strands:steering:toolLedger'"},
+      {"line": 736, "claim": "Python defaults max_attempts 6, initial_delay 4 s doubling, max_delay 128 s; TS ExponentialBackoff baseMs 4000, maxMs 240000", "verdict": "supported", "source": "retry-strategies parameter tables"},
+      {"line": 740, "claim": "Retry schedule 4/8/16/32/64 s, cumulative 124 s; max_delay cap not reached", "verdict": "supported", "source": "derived from retry-strategies: 'Seconds to wait before the first retry. Subsequent retries double this value.' and max_delay 128"},
+      {"line": 821, "claim": "proactive_compression=True uses default threshold 0.7; dict compression_threshold between 0 and 1", "verdict": "supported", "source": "conversation-management: 'Use True for the default 0.7 threshold, or pass a dict with a custom compression_threshold ratio between 0 and 1'"},
+      {"line": 852, "claim": "summary_ratio default 0.3 clamped to 0.1-0.8; preserve_recent_messages default 10", "verdict": "supported", "source": "conversation-management: 'summary_ratio (float, default: 0.3) ... (clamped between 0.1 and 0.8)', 'preserve_recent_messages (int, default: 10)'"},
+      {"line": 657, "claim": "Python SDK requires Python 3.10+", "verdict": "supported", "source": "github.com/strands-agents/harness-sdk README: 'Requires Python 3.10+: pip install strands-agents'"}
+    ],
+    "outside_sample_notes": [
+      "L48: harness-sdk README called a 'third-party GitHub page'; it is the official strands-agents org repo (wrong attribution).",
+      "L195: says HookOrder import path and reference point must be checked; hooks page gives 'from strands.hooks import ... HookOrder' and SDK_FIRST (-100) / DEFAULT (0) / SDK_LAST (100) relative to the SDK's own hooks.",
+      "L528: trust state described without noting it only applies when enable_trust is set (HITL page: 'It is only read while trust is enabled')."
+    ]
+  },
+  "checklist": {
+    "repeated": 3,
+    "avoided": 1,
+    "na": 1,
+    "repeated_ids": ["shared-agent-throw-scope", "shared-agent-history-leak", "result-fields-incomplete"],
+    "details": [
+      {"id": "loop-diagram-remote", "status": "avoided", "evidence": "No image links at all; the loop is an ASCII diagram (L64-75)."},
+      {"id": "shared-agent-throw-scope", "status": "repeated", "evidence": "L1042 '이미 실행 중인 에이전트를 다시 호출하면 ConcurrencyException' and L1054 '두 요청이 인스턴스를 공유하지 않으므로 동시성 가드에 걸릴 일이 없습니다' imply a shared instance raises, with no invoke_async scope or note that sync agent(...) in an async handler blocks/serializes instead."},
+      {"id": "shared-agent-history-leak", "status": "repeated", "evidence": "L1054 recommends per-request agents only for the concurrency guard and retry-strategy sharing; never says a shared module-level agent carries one request's conversation into the next; no invoke_async recommendation."},
+      {"id": "result-fields-incomplete", "status": "repeated", "evidence": "stop_reason is shown (L546, L1073) but result.metrics.get_summary() never appears."},
+      {"id": "multi-agent-subject", "status": "n/a", "evidence": "The post has no sentence about the smallest execution unit of multi-agent patterns."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 54,
+    "architecture_note": "In-process SDK placement at L46-48; loop architecture with diagram at L54-75, before installation (L655).",
+    "sources_total": 24,
+    "official_sources": 15,
+    "non_official_sources": 9,
+    "non_official_share": 0.375,
+    "source_classification_note": "Official = strandsagents.com docs/blog (14) + github.com/strands-agents/harness-sdk (1). Non-official = 4 AWS blog posts, AWS Builder Center, aws-samples repo, DeepWiki, Medium (Posoldova), pickaxe.co.",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "runnable_code": {
+      "verdict": "does not run as pasted",
+      "method": "Python blocks executed in order in one namespace with strands-agents 1.63.0 and mcp 2.3.0; Agent.__call__ stubbed so no model call was made",
+      "failing_blocks": [
+        "L280, L324: NameError InvokeModelStage (and ModelThrottledException) - import omitted, docs give strands.middleware / strands.types.exceptions",
+        "L353: NameError ExecuteToolStage",
+        "L435, L500, L512: NameError InterventionHandler (Proceed/Deny/Transform/Confirm, BeforeToolCallEvent not imported)",
+        "L533: TypeError ToolGuard() takes no arguments - the L500 fragment redefines ToolGuard without __init__; HumanInTheLoop import (strands.vended_interventions) omitted",
+        "L620: agent_control.integrations.strands import omitted; OpenAIModel import omitted",
+        "L706: ImportError streamablehttp_client from mcp.client.streamable_http under mcp 2.3.0 (renamed streamable_http_client)"
+      ],
+      "passing_with_documented_imports": "All other blocks construct; make_support_agent() and handle_request() accept the shown arguments (limits, cancel_signal, retry_strategy, SlidingWindowConversationManager pin_first/per_turn/proactive_compression)."
+    }
+  },
+  "top_issues": [
+    "Running example fails as pasted: missing imports the docs provide (middleware, interventions, HITL, agent_control), the ToolGuard redefinition breaks the HITL block, and streamablehttp_client is gone in the mcp version pip installs.",
+    "Python hook writable-field table mixes in TypeScript-only cancel fields and omits BeforeInvocationEvent.messages; official harness-sdk repo labelled third-party.",
+    "Duplicate empty H2 (L123/L126) and about ten 'check in your SDK version' hedges for facts the docs state."
+  ]
+}

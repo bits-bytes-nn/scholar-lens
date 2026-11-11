@@ -1,0 +1,86 @@
+{
+  "item": "summary-lora",
+  "post": "/tmp/eval-paper/summary-lora-v4.md",
+  "judge_run": 1,
+  "sampling": "Body blocks (prose paragraphs, list items, tables, display equations; headings and images excluded) numbered 1-26 from L16; took blocks 1,4,7,10,13,16,19,22,25, then wrapped to 2,5. Claims drawn from L16, L26, L34, L40, L48, L58, L69, L77-79, L81, L20, L30.",
+  "scores": {"A": 8.5, "B": 7.5, "C": 7.0, "D": 8.0, "E": 7.5, "F": 8.0},
+  "type_scores": {"U1": 7.0, "U2": 7.5},
+  "deductions": {
+    "A": ["Headings are topic names, not claims: L18 '## 연구 배경', L28 '## 제안 방법', L46 '## 구현 방식', L52 '## 실험 결과', L73 '## 의의와 한계' (fixed summary shape; front matter, math delimiters and blank lines around L32/L36 display math are correct)."],
+    "B": [
+      "L16 '학습 처리량은 전체 파인튜닝(fine-tuning)보다 약 25% 빨랐습니다' - throughput is not 'fast' -> '학습 속도는 전체 파인튜닝보다 약 25% 빨랐습니다'.",
+      "L38 two '그래서' sentences in one paragraph ('그래서 학습을 시작할 때 ...', '그래서 저자들은 ...') -> '... 0이므로 모델은 처음에 사전학습 모델과 똑같이 동작합니다', '... 거의 같아서 저자들은 ...'.",
+      "L26 formulaic '결국 추론 지연을 더하지 않으면서 ... 적응법이 필요했습니다' -> '추론 지연 없이 파라미터를 늘린 만큼 성능이 오르는 적응법이 필요했던 이유입니다' or drop '결국'.",
+      "Terminology mixing: L24 '$$\\text{Adapter}^{\\text{L}}$$' vs L71 'Adapter-L'; L42 '편향' vs L80 '바이어스'; L26 'MultiNLI-matched' vs L58 'MNLI-matched'; '(fine-tuning)' glossed twice (L16, L20)."
+    ],
+    "C": [
+      "Dangling back-reference L60 '저데이터 실험에는 앞서 소개한 MNLI 무작위 부분집합을 썼고' - no earlier paragraph introduces MNLI subsets.",
+      "L71 re-introduces Adapter-L ('Adapter-L은 Lin et al.의 어댑터 방식입니다') already defined at L24, and appends a GPT-3 hypothetical to a GPT-2 latency paragraph, so the results section reads stitched."
+    ],
+    "D": [
+      "Good: intrinsic dimension defined at first use (L30); alpha/r scaling explained with its reason (L38); a numeric parameter-count example (L40, 1,048,576 vs 8,192).",
+      "L40 uses a hypothetical d=k=1,024 instead of the paper's own scale (GPT-3 d_model 12,288, 10,000x fewer trainable parameters), so the reader never sees the real magnitude."
+    ],
+    "E": [
+      "No table for the headline GPT-3 175B comparison (FT 73.8/89.5/52.0-28.0-44.5 vs LoRA 73.4-74.0/91.6-91.7/53.4-53.8...); rank results L48 and latency L71 are dense prose numbers that a small table would carry better.",
+      "Figures (L22, L56) are described in words, not by paper numbering; the low-data table L62-67 copies all 16 cells verbatim."
+    ],
+    "F": [
+      "L30 defines intrinsic dimension as '무작위로 고른 저차원 부분공간에서만 파라미터를 움직여도 전체 성능에 가깝게 도달하는 데 필요한 최소 차원' - the LoRA paper gives no definition; it is roughly Aghajanyan et al.'s (90% of full performance) but unsourced here."
+    ],
+    "U1": ["Motivation, method and implementation are covered well, but results omit the main GPT-3 Table 4 numbers (LoRA vs FT on WikiSQL/MNLI/SAMSum), all RoBERTa/DeBERTa/GPT-2 benchmarks, and the 10,000x parameter / 3x memory / 350GB->35MB checkpoint reductions."],
+    "U2": ["TL;DR (L16) is three sentences of plain prose without math; grounded limitations L79-81. Weight merging / no added latency is restated at L16, L44, L71 and L75, and the task-swap example at L44 and L75, which costs concision."]
+  },
+  "principles": {
+    "claim_headings": {"status": "not met", "evidence": "L18, L28, L46, L52, L73 are topic names."},
+    "running_example": {"status": "partly met", "evidence": "GPT-3 WikiSQL->MNLI swap at L44, L71, L75, but it is a hypothetical deployment scenario, not tied to the results."},
+    "mechanism_order": {"status": "met", "evidence": "L30 assumption -> L32/L36 formula -> L38 init/scaling reason -> L40 numeric example -> L44 deployment."},
+    "facts_once": {"status": "not met", "evidence": "Merge/no latency L16, L44, L71, L75; Adapter-L defined L24 and L71."},
+    "numbers_with_scope": {"status": "partly met", "evidence": "L48 and L60 name model, task and metric; L16 '약 25% 빨랐습니다' does not say training speed vs throughput."},
+    "nothing_invented": {"status": "met", "evidence": "Writer's examples are labelled ('가상의 예로' L40, '가상의 상황이라면' L44, '가상의 설정으로' L71)."},
+    "own_assessment": {"status": "met", "evidence": "L83 '이 글의 판단으로는 ... r은 과제마다 직접 정해야 하는 하이퍼파라미터로 다루는 편이 안전합니다.'"},
+    "length_fit": {"status": "met", "evidence": "About 5,500 body characters, a five-minute read."},
+    "type_shape": {"status": "partly met", "evidence": "TL;DR + fixed five sections; the distilled table is the low-data one, not the main results."},
+    "korean_style": {"status": "partly met", "evidence": "'입니다' register held; L38 double '그래서', L26 '결국', term mixing."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 1,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 16, "claim": "GPT-3 175B training about 25% faster than full fine-tuning", "verdict": "supported", "source": "Sec 4.2: 'We also observe a 25% speedup during training on GPT-3 175B compared to full fine-tuning'"},
+      {"line": 26, "claim": "accuracy drops beyond 256 prefix-embedding / 32 prefix-layer special tokens", "verdict": "supported", "source": "Sec 5.5: 'significant performance drop when we use more than 256 special tokens for prefix-embedding tuning or more than 32 special tokens for prefix-layer tuning'"},
+      {"line": 26, "claim": "authors suspect more special tokens shift the input distribution away from pre-training", "verdict": "supported", "source": "Sec 5.5: 'we suspect that having more special tokens causes the input distribution to shift further away from the pre-training data distribution'"},
+      {"line": 34, "claim": "W0 frozen, only A and B trainable, outputs summed coordinate-wise", "verdict": "supported", "source": "Sec 4.1"},
+      {"line": 40, "claim": "d=k=1,024, r=4: 1,048,576 vs 2x4x1,024=8,192 parameters, 1/128", "verdict": "supported", "source": "Arithmetic, labelled hypothetical; consistent with Sec 4.1 shapes"},
+      {"line": 48, "claim": "WikiSQL, Wq+Wv at r=1: 73.4%", "verdict": "supported", "source": "Table 6 row Wq,Wv r=1 73.4"},
+      {"line": 48, "claim": "Wq only: 68.8% at r=1, 70.5% at r=4", "verdict": "supported", "source": "Table 6 row Wq: 68.8 / 69.6 / 70.5"},
+      {"line": 58, "claim": "LoRA WikiSQL 73.3-74.1% across settings; FT 73.8%", "verdict": "supported", "source": "Table 15 LoRA rows 73.3-74.1; Fine-Tune 73.8"},
+      {"line": 58, "claim": "PrefixEmbed WikiSQL rises to 63.1% then falls to 55.9%", "verdict": "supported", "source": "Table 15: lp=256 63.1, lp=512 55.9"},
+      {"line": 69, "claim": "PrefixEmbed 37.6% on MNLI-100 vs 33.3% random", "verdict": "supported", "source": "F.3: 'only slightly better than random chance (37.6% vs. 33.3%)'"},
+      {"line": 69, "claim": "LoRA beats FT on 100 and full; comparable on 1k/10k given ±0.3 seed variance", "verdict": "supported", "source": "F.3"},
+      {"line": 79, "claim": "merged weights make batching tasks with different A,B in one forward pass hard; unmerged dynamic selection possible", "verdict": "supported", "source": "Sec 4.2 Practical Benefits and Limitations"},
+      {"line": 81, "claim": "small r not expected to work for every task; different-language task may favour full retraining", "verdict": "supported", "source": "Footnote 6 and Sec 7.2 thought experiment"},
+      {"line": 20, "claim": "adapters are added sequentially, add computation and latency", "verdict": "supported", "source": "Appendix B: 'Adapter layers are external modules added to a pre-trained model in a sequential manner ... inevitably introducing additional latency'"},
+      {"line": 30, "claim": "definition of intrinsic dimension (minimum dimension of a random subspace reaching near-full performance)", "verdict": "unsupported", "source": "Sec 4.1 only says models 'have a low instrisic dimension and can still learn efficiently despite a random projection to a smaller subspace'; the definition is not in the paper"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 0,
+    "na": 0,
+    "repeated_ids": [],
+    "note": "human_fixes.yaml has fixes: [] for summary-lora. The notes' generic defect (HTML entity leak '&amp;') does not occur in the post."
+  },
+  "extras": {
+    "description_chars": 123,
+    "taxonomy_X1": "Tags 'Frozen-Pre-trained-Weights', 'Rank-Decomposition-Matrices', 'Adapter-Inference-Latency' restate the abstract rather than short reusable tags."
+  },
+  "top_issues": [
+    "Results under-cover the paper: no GPT-3 Table 4 numbers, no RoBERTa/DeBERTa/GPT-2 results, no 10,000x / 3x memory reductions.",
+    "Flow: dangling L60 '앞서 소개한 MNLI 무작위 부분집합'; Adapter-L re-defined L71; merge/no-latency and task-swap restated L16/L44/L71/L75.",
+    "Korean: '처리량이 빨랐습니다' (L16), double '그래서' (L38), term mixing Adapter^L/Adapter-L, 편향/바이어스."
+  ]
+}

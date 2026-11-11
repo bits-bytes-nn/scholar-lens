@@ -1,0 +1,300 @@
+{
+ "item": "guide-strands",
+ "post": "/tmp/eval-guide/guide-strands-v12.md",
+ "judge_run": 3,
+ "sdk_checked": "strands-agents 1.64.0 with [anthropic,cedar,otel] extras and strands-agents-tools in a temp venv (Python 3.14); docs from strandsagents.com index.md pages (agent-loop, hooks, state, structured-output, structured-output-behavior, interventions, retry-strategies, quickstart/python, model-providers, approve-before-acting, lifecycle-controls, session-management, API strands.agent.agent / strands.models.model / strands.middleware.types, changelog python-v1.25.0), harness-sdk README, and the non-official posts (AWS OSS blogs, AWS ML deep dive, DEV, aiagentskit; Medium blocked by a JS wall) fetched 2026-11-07; code blocks exercised in reading order with a scripted fake Model (no paid model calls, no AWS calls)",
+ "sampling": "256 blank-line paragraphs after front matter (fenced blocks kept whole, list runs as one paragraph); paragraphs 3,6,9,...; claims drawn from those paragraphs",
+ "scores": {
+  "A": 7.5,
+  "B": 7.0,
+  "C": 7.0,
+  "D": 8.0,
+  "E": 7.5,
+  "F": 4.5,
+  "T1": 7.5,
+  "T2": 8.0,
+  "T3": 8.5
+ },
+ "score_evidence": {
+  "A": "Claim-style headings, no skipped levels, real tables, fenced code, one $$ expression with use_math: true, description 131 characters, TL;DR about 890 non-space characters. Deductions: the section 'L558 호출마다 스키마를 넘겨 받는 검증된 티켓 분류 객체' re-covers the structured-output section (L229-L343) almost point for point; topic headings remain ('L477 설치와 Bedrock 인증', 'L1082 실제로 남아 있는 한계').",
+  "B": "Mostly natural '입니다' prose. Deductions: L5 description '...통제하는 방법을 티켓 분류 에이전트 예제로 운영 설정을 정리합니다' (double object; rewrite '...통제하는 운영 설정을 티켓 분류 에이전트 예제로 정리합니다'); L871 heading '스로틀링에만 걸린 기본 재시도' (rewrite '스로틀링만 재시도하는 기본 전략'); L589 circular definition '이것이 강제 재시도입니다. 모델이 도구를 부르지 않고 텍스트로 턴을 끝내면 이 도구를 필수로 지정해 다시 요청하는 동작으로,'; L808 noun frame '반환 경로를 처리하는 방법은 ... 바꾸는 것입니다'; L757-L763 checkpoint table left in English ('Agent stops before the next model invocation'); 수명주기 (L15, L29) vs 생명주기 (L725, L749); 12 '할 수 있습니다'.",
+  "C": "Accurate cross-references (L67 to the install section, L123 to the Q Developer case at L27, L514, L1012). Deductions: L583-L609 repeats L301-L343 (today's-date validator L301/L583, forced retry L313/L589, structured_output_prompt L313/L607, agent vs call schema L343/L585, request-wide attempt limit L315/L609); L753 says the first checkpoint 'sits inside model streaming' (Python) while the table right after (L759) starts with 'Top of each loop cycle' (TypeScript).",
+  "D": "Hard parts get worked examples where they appear: message growth 6 messages / 5-message third input (L104-L113), attempt counting (L319), 20,000-token overshoot (L737-L745), Deny vs Guide merge (L410-L415), 124 s retry vs 20 s deadline and the 6 s fix (L890, L911), two writers on one session (L1002). Over-explained: structured output is taught twice (L229-L343 and L558-L609).",
+  "E": "Tables where comparison helps: providers (L131), state lifetimes (L145), attempt counting (L319), Python/TS structured output (L329), allowed decisions (L385), Before/After effects (L395), on_error (L421), provider extras (L549), token overshoot (L737), stop reasons (L795), retry schedule (L879), CacheConfig fields (L1029), framework layers (L1068); text diagrams for the loop (L46), the structured-output flow (L245) and the span tree (L1014). Deductions: the checkpoint table (L757) is copied in English and from the wrong SDK; no real figure of the loop.",
+  "F": "Sample: 12 of 15 supported, 1 wrong (L755 five checkpoints for Python), 2 unsupported (L319 attempt table, L339 'only streaming' while the Python Model ABC has four abstract methods). Off-sample: L869 handler (wrong, -2), L583 fixed-value claim (wrong, -1), L487 README (wrong, -1), L1054 attribution (-0.5).",
+  "T1": "Exercised in reading order with a fake model: all blocks paste and run, but the culminating handle_triage_request (L810+L848) never returns a TicketTriage: a successful structured-output call ends with stop_reason 'tool_use', classify() maps it to Outcome.STOPPED and triage_result is None (L869 claims the opposite). The observability section (L1010-L1023) has no code although L484 installs [otel]; CacheConfig (L1040) is built but never passed to a model ('L1052 모델의 설정에 넣어야' without showing BedrockModel(cache_config=...)).",
+  "T2": "Covers what the sources cover in a sensible order (loop -> state -> structured output -> hooks/interventions/middleware -> quickstart -> structured output again -> HITL/Cedar/interrupts -> limits/cancel/stop reasons -> retry -> concurrency/sessions -> telemetry/cache/deployment -> choice). Deduction: the second structured-output section adds little; middleware now present (L469).",
+  "T3": "Explains mechanisms and why: schema-as-tool with validation errors fed back (L231, L287), intervention typed decisions vs hook last-write-wins (L375-L381), short-circuit vs Guide accumulation (L406), limits checked at iteration start (L733), cooperative cancellation and provider abort (L767-L769), no distributed lock and check-then-write session creation (L1002), Bedrock non-increasing TTLs (L1038), deployment shapes (L1058), layer comparison with LiteLLM/LangGraph (L1066-L1076). Failure modes at the end are three bullets (L1086-L1088)."
+ },
+ "principles": {
+  "claim_headings": {
+   "status": "met",
+   "evidence": "e.g. 'L141 대화 기록, 에이전트 상태, 호출 상태로 나뉜 세 가지 기억', 'L229 스키마를 도구로 바꿔 검증 오류를 모델에 돌려주는 구조화 출력', 'L729 반복 시작 시점에만 검사하는 호출당 예산'; topic headings remain at L477 '설치와 Bedrock 인증' and L1082 '실제로 남아 있는 한계'."
+  },
+  "running_example": {
+   "status": "met",
+   "evidence": "Ticket-triage agent (get_ticket, TicketTriage, close_ticket/delete_ticket, scan_ticket_history, handle_triage_request) runs from L25 through state (L153), structured output (L262), hooks/interventions (L355, L429), HITL/Cedar (L621, L650), limits (L735, L848), retry (L900, L921), sessions (L971), spans (L1014), cache (L1040) and the choice (L1076); ticket id T-1042 is consistent."
+  },
+  "mechanism_design_code_example": {
+   "status": "met",
+   "evidence": "Structured output: mechanism (L231) -> five steps (L235) -> code (L262, L289) -> attempt-count table (L319); limits: check-at-top rule (L733) -> 20,000-token example (L737-L745); retry: default schedule (L879) -> 124 s vs 20 s (L890) -> subclass with 2+4 = 6 s (L900-L911)."
+  },
+  "facts_said_once": {
+   "status": "not met",
+   "evidence": "L558-L609 restates L229-L343 (validator and today's date L301/L583, forced retry L313/L589, structured_output_prompt L313/L607, agent vs call schema L343/L585, request-wide limit L315/L609); positioning said at L13 and L19; install at L67 and L479-L485; the loop described at L13, L42 and L61."
+  },
+  "numbers_with_scope_unit": {
+   "status": "partly met",
+   "evidence": "Python/TypeScript scope kept for token limits (L747), retry backoff (L913), max_delay 128 vs 240 (L892); illustrative numbers labelled (L102, L745). But L755 '체크포인트는 다섯 곳' and the L757 table are the TypeScript list placed in a Python cancel_signal paragraph; Python has four checkpoints (model streaming, before tool execution, during MCP tool execution, after tool execution)."
+  },
+  "nothing_invented": {
+   "status": "not met",
+   "evidence": "L869 says handle_triage_request returns the triage object on normal completion, but its classify() never maps the structured-output stop reason 'tool_use' to COMPLETED; L487 describes a README example (strands-agents-tools + calculator) the current README does not have; L583 says category and priority accept only fixed values while the post's TicketTriage declares them as plain str; L1054 credits the 6,000-tool agent to 'Strands 팀' (source: 'one internal agent at AWS')."
+  },
+  "writer_assessment_at_end": {
+   "status": "met",
+   "evidence": "L1084 '이 글의 판단으로는 다음 세 가지를 먼저 따져 봐야 합니다' (classifier judgment, session concurrency, language support) and L1090's choice rule."
+  },
+  "length_fitted": {
+   "status": "partly met",
+   "evidence": "1,117 lines, about 38.6k non-space prose characters; depth on interventions, limits and sessions is warranted, but the second structured-output section (L558-L609, about 3k characters) repeats the first."
+  },
+  "type_specific_shape": {
+   "status": "met",
+   "evidence": "TL;DR (L11) and the hand-written-orchestration problem (L17-L38) open the post; loop architecture at L40, state, structured output, hooks/interventions/middleware before installation (L473); closes with model-driven vs graph choice and remaining limits (L1060-L1090)."
+  },
+  "korean_style": {
+   "status": "partly met",
+   "evidence": "Natural '입니다' prose overall; defects: L5 double object, L589 circular definition, L871 heading, English checkpoint table (L757), 수명주기/생명주기 mix, 12 '할 수 있습니다'."
+  }
+ },
+ "claims": {
+  "checked": 15,
+  "supported": 12,
+  "unsupported": 2,
+  "wrong": 1,
+  "unverifiable": 0,
+  "examples": [
+   {
+    "line": 15,
+    "claim": "Default retry covers only provider throttling; other exceptions propagate without retry",
+    "verdict": "supported",
+    "source": "Retry Strategies: 'Default retry strategies handle throttling errors ... Other exceptions propagate immediately without retry.'"
+   },
+   {
+    "line": 33,
+    "claim": "harness-py/harness-ts give an assembled agent via create_harness()/createHarness() with benchmarked defaults",
+    "verdict": "supported",
+    "source": "harness-sdk README table and 'benchmarked defaults' paragraph."
+   },
+   {
+    "line": 192,
+    "claim": "Four countermeasures for context overflow",
+    "verdict": "supported",
+    "source": "Agent Loop 'Context Window Exhaustion' list, four items."
+   },
+   {
+    "line": 209,
+    "claim": "context_manager='auto' truncates tool results and summarizes at 85%; any value but False ignores conversation_manager; v1.25.0 maps Databricks 'Input is too long' to ContextWindowOverflowException",
+    "verdict": "supported",
+    "source": "API strands.agent.agent context_manager; changelog v1.25.0 PR#1529."
+   },
+   {
+    "line": 319,
+    "claim": "With a limit of 3: get_ticket (0), two failed TicketTriage calls (1, 2), a failed forced retry (3), then a stop before a 5th model call",
+    "verdict": "unsupported",
+    "source": "A forced retry only follows a text-only turn; exercised with that sequence the run takes 5 model calls (get_ticket, bad, bad, text, forced) before limit_structured_output_attempts. The table omits the triggering text turn and puts 'no model call' at step 5."
+   },
+   {
+    "line": 339,
+    "claim": "A custom provider must implement only the streaming method of the Model interface",
+    "verdict": "unsupported",
+    "source": "Model Providers: 'the streaming method is required and the other capabilities depend on your implementation' (capabilities). In the Python source Model declares four abstract methods (update_config, get_config, structured_output, stream); a subclass with only stream cannot be instantiated."
+   },
+   {
+    "line": 385,
+    "claim": "Five overridable lifecycle methods",
+    "verdict": "supported",
+    "source": "Interventions lifecycle table."
+   },
+   {
+    "line": 421,
+    "claim": "on_error 'throw' (default), 'proceed' fail-open, 'deny' fail-closed",
+    "verdict": "supported",
+    "source": "Interventions error policies; exercised."
+   },
+   {
+    "line": 479,
+    "claim": "Python 3.10+ with an activated virtual environment",
+    "verdict": "supported",
+    "source": "Python quickstart."
+   },
+   {
+    "line": 607,
+    "claim": "structured_output_prompt was added in Python v1.25.0 because the hard-coded message could trip Bedrock Guardrails prompt-attack filters",
+    "verdict": "supported",
+    "source": "Changelog v1.25.0 PR#1627."
+   },
+   {
+    "line": 696,
+    "claim": "v1.25.0 propagates interrupts from nested Graph/Swarm/MultiAgentBase nodes; single-agent nodes since v1.24.0",
+    "verdict": "supported",
+    "source": "Changelog v1.25.0 PR#1606; nested-graph block exercised (INTERRUPTED then COMPLETED)."
+   },
+   {
+    "line": 749,
+    "claim": "Simultaneous caps report turns, then total tokens, then output tokens; lifecycle page adds structured output attempts",
+    "verdict": "supported",
+    "source": "Agent Loop and Production Lifecycle Controls; exercised (limit_turns wins)."
+   },
+   {
+    "line": 755,
+    "claim": "The agent checks cancellation at five checkpoints",
+    "verdict": "wrong",
+    "source": "Five is the TypeScript count; the Python SDK this paragraph configures has four (Agent Loop Python tab, Agent.cancel API)."
+   },
+   {
+    "line": 892,
+    "claim": "max_delay default is 128 s in the Retry Strategies table but 240 s in the Agent API reference",
+    "verdict": "supported",
+    "source": "Retry Strategies parameter table (128); API retry_strategy 'max_delay=240s'; installed signature max_delay=240."
+   },
+   {
+    "line": 967,
+    "claim": "SnapshotSessionManager is recommended for new single-agent sessions; File/S3SessionManager are the compatibility path for Graph, Swarm and existing format; default save_latest_on='invocation'",
+    "verdict": "supported",
+    "source": "Session management; installed signature save_latest_on='invocation'."
+   }
+  ],
+  "off_sample_findings": [
+   {
+    "line": 869,
+    "claim": "handle_triage_request returns the triage object only on normal completion",
+    "verdict": "wrong",
+    "source": "Exercised: success ends with stop_reason 'tool_use', classify() maps it to STOPPED, triage_result None."
+   },
+   {
+    "line": 583,
+    "claim": "category and priority accept only fixed values",
+    "verdict": "wrong",
+    "source": "Post's TicketTriage uses plain str; the docs' schema uses Literal."
+   },
+   {
+    "line": 487,
+    "claim": "README minimal example uses strands-agents-tools and calculator",
+    "verdict": "wrong",
+    "source": "Current README uses the vended http_request tool and only pip install strands-agents."
+   },
+   {
+    "line": 1054,
+    "claim": "The 6,000-tool agent is a Strands team agent",
+    "verdict": "unsupported",
+    "source": "Source says 'one internal agent at AWS'."
+   },
+   {
+    "line": 1066,
+    "claim": "LiteLLM only routes model calls at the client layer and leaves the loop to the user",
+    "verdict": "unsupported",
+    "source": "Not in the cited aiagentskit post (no LiteLLM mention) or any listed source."
+   },
+   {
+    "line": 556,
+    "claim": "The providers page example is OpenAIModel(client_args={'api_key': ''}, model_id='gpt-4o')",
+    "verdict": "unsupported",
+    "source": "Page shows client_args={'api_key': '<KEY>'}; minor misquote."
+   }
+  ]
+ },
+ "checklist": {
+  "repeated": 2,
+  "avoided": 2,
+  "na": 1,
+  "repeated_ids": [
+   "shared-agent-throw-scope",
+   "result-fields-incomplete"
+  ],
+  "items": [
+   {
+    "id": "loop-diagram-remote",
+    "status": "avoided",
+    "evidence": "No image links at all; the loop is a text diagram (L46-L57)."
+   },
+   {
+    "id": "shared-agent-throw-scope",
+    "status": "repeated",
+    "evidence": "L961 'Python에서는 ... 이미 실행 중인 에이전트를 다시 호출하면 ConcurrencyException이 발생합니다.' Not tied to invoke_async; nothing says a sync agent(...) inside an async handler blocks and serializes requests instead of raising."
+   },
+   {
+    "id": "shared-agent-history-leak",
+    "status": "avoided",
+    "evidence": "L570 '요청마다 새 에이전트를 만들어 티켓끼리 대화 기록을 공유하지 않게', L963 '요청마다 Agent를 새로 만들어 티켓끼리 기록이 섞이지 않게', L560 'invoke_async도 같은 인자를 받습니다', L642 trust persisting on a module-level agent."
+   },
+   {
+    "id": "result-fields-incomplete",
+    "status": "repeated",
+    "evidence": "result.stop_reason is used (L602, L864), but no example shows metrics.get_summary(); L1023 only says '요약 메서드로 꺼내 볼 수 있습니다' without naming it or showing its output."
+   },
+   {
+    "id": "multi-agent-subject",
+    "status": "n/a",
+    "evidence": "No sentence about the smallest execution unit of multi-agent patterns; Graph/Swarm appear only for interrupts (L696) and session managers (L967)."
+   }
+  ]
+ },
+ "extras": {
+  "architecture_first_line": 40,
+  "architecture_note": "Stack position (SDK vs harness) at L31-L38, then the loop cycle, tool execution and AgentResult (L40-L139), state (L141), structured output internals (L229), hooks/interventions/middleware (L345) before installation (L473).",
+  "sources_total": 23,
+  "sources_non_official": 6,
+  "non_official_share": 0.26,
+  "non_official_list": [
+   "AWS Open Source Blog model-driven approach",
+   "AWS Open Source Blog introduction",
+   "AWS ML blog technical deep dive",
+   "DEV Community OpenTelemetry observability",
+   "aiagentskit framework comparison",
+   "Medium four-framework comparison"
+  ],
+  "opens_with_problem": true,
+  "opens_note": "TL;DR (L11-L15) then '직접 짜는 오케스트레이션 대신 모델이 다음 단계를 고르는 방식' (L17-L38): state machines vs model-driven, and the cost of losing control (L29).",
+  "closes_with_when_to_choose_and_failure_modes": true,
+  "closes_note": "L1060-L1090: model-driven vs graph frameworks with a layer table, outdated third-party limits (L1080), three remaining limits (L1086-L1088) and the choice rule (L1090)."
+ },
+ "runnable_code": {
+  "verdict": "every block pastes and runs in reading order against SDK 1.64.0 with a fake model, but the culminating handle_triage_request silently never returns its TicketTriage; observability has no code and CacheConfig is never wired to a model",
+  "passed": [
+   "L69 get_ticket + Agent: with a scripted 1042 -> T-1042 run, 6 messages, 3 model calls, 3rd call input 5 messages (matches L104-L113)",
+   "L155 whoami with invocation_state ('Current user: u-1'); result.state is {} for top-level keys and the request_state value when given (L173)",
+   "L177 agent.state.set rejects a lambda with ValueError",
+   "L199 SlidingWindowConversationManager(window_size=10); L215 BedrockModel + aux_model + context_manager='auto' constructs (no call)",
+   "L262+L289 TicketTriage: past date fed back as 'Validation failed for TicketTriage ... must be after 2026-11-07', then valid object; structured-output tool removed after the call",
+   "L303 structured_output_attempts=3 -> limit_structured_output_attempts, no object",
+   "forced retry adds 'You must format the previous response as structured output.' then StructuredOutputException (L313-L315)",
+   "L357 SDK_FIRST/SDK_LAST hooks; HookOrder -100/0/50/100",
+   "L429 StrictAuth/BestEffortLogger: auth exception -> 'DENIED: Handler threw', logger exception -> proceeds; handler without on_error -> exception propagates; two Guide handlers merged into one message",
+   "L501 Agent() default model global.anthropic.claude-sonnet-4-6 in us-west-2 (constructed only)",
+   "L518 file_editor vended tool writes triage.txt; L534 AnthropicModel constructs with the [anthropic] extra",
+   "L564 triage (object; None on StructuredOutputException); L591 triage with structured_output_prompt (custom message seen by the model) and limit (None)",
+   "L621 HumanInTheLoop classifier: get_ticket runs, delete_ticket prompts once",
+   "L650 Cedar + HITL: alice prompted then deleted, bob denied without a prompt",
+   "L676 Confirm -> stop_reason 'interrupt'; resumed with interruptResponse 'YES' -> close_ticket runs",
+   "L698 nested GraphBuilder interrupt -> INTERRUPTED once, then COMPLETED",
+   "L771 scan_ticket_history; limits {'turns': 6, 'total_tokens': 20_000} with 4,000/6,000/8,000/7,000 tokens -> 4 model calls then limit_total_tokens; bad key/zero value -> TypeError; idle agent.cancel() cancels the next call",
+   "L900 TriageRetryStrategy: TimeoutError retried with sleeps 2, 4 over 3 attempts; default throttling sleeps 4, 8, 16, 32, 64 over 6 attempts; retry_strategy=None -> 1 attempt",
+   "L921 RetryOnToolError: failing get_ticket re-run once, final result success",
+   "L971 SnapshotSessionManager + LocalFileStorage + idempotency_token: session restored on a new agent; same token returns the same result, a different token raises ConcurrencyException",
+   "L1040 CacheConfig constructs"
+  ],
+  "failed": [
+   "L810+L848 handle_triage_request: a successful structured-output call ends with stop_reason 'tool_use' (event_loop.py yields EventLoopStopEvent(stop_reason, ...) when structured_output_context.stop_loop), classify() maps it to Outcome.STOPPED, so the handler returns TriageReply(outcome=STOPPED, triage_result=None) for every successful classification",
+   "L1040 CacheConfig is never passed to a model; the post does not show BedrockModel(cache_config=triage_cache), so pasting it changes nothing",
+   "L1010-L1023 no telemetry code (StrandsTelemetry is never named) although L484 installs [otel]"
+  ],
+  "notes": "Fake model streams Bedrock-shaped events and answers the HITL classifier's _RiskDecision tool; BedrockModel(model_id=MODEL_ID) in L848 was replaced by the fake model. No paid model or AWS call. The [cedar] extra the v11 post lacked is now in L484."
+ },
+ "top_issues": [
+  "The culminating handle_triage_request (L810+L848) never returns a TicketTriage: successful structured output ends with stop_reason 'tool_use', classify() maps it to STOPPED, triage_result is None; L869 claims the opposite (same defect as v11).",
+  "Cancellation checkpoints (L755-L763) are the TypeScript five-row table, in English, placed in a Python cancel_signal paragraph; Python has four checkpoints (incl. 'During MCP tool execution') and L753's own 'first checkpoint sits inside model streaming' contradicts the table's first row.",
+  "Structured output is taught twice (L229-L343 and L558-L609, facts-said-once not met) and the second pass imports a docs claim the post's schema breaks (L583 fixed-value fields vs plain str); plus stale/mis-attributed facts: L487 README example, L1054 6,000-tool agent; checklist: THROW not tied to invoke_async (L961), no metrics.get_summary() example."
+ ]
+}

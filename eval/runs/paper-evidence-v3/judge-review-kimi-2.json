@@ -1,0 +1,292 @@
+{
+ "item": "review-kimi",
+ "post": "/tmp/eval-paper/review-kimi-v3.md",
+ "source": "https://arxiv.org/html/2507.20534",
+ "sampling": "body blocks after front matter (blank-line separated; lone headings and '- - -' excluded; lists, tables, images and display math counted as blocks): 145 blocks, starting at #2 and every third: #2,5,8,...,143 (48 blocks); 15 claims drawn from these",
+ "scores": {
+  "A": 8.0,
+  "B": 7.0,
+  "C": 7.0,
+  "D": 8.0,
+  "E": 7.5,
+  "F": 5.0
+ },
+ "type_scores": {
+  "R1": 7.5,
+  "R2": 8.0,
+  "R3": 8.0
+ },
+ "deductions": {
+  "A": [
+   "L300: Liquid raw tags inside the display formula and '(y_{i}|x)' in the denominator while the numerator uses \\mid",
+   "L250: a QK-Clip/tau=100 paragraph sits at the end of the pre-training schedule section, restating L125-127 and L98 out of place",
+   "L392: table cell '72.5 (그림 1 표시값)' carries a source-figure reference inside a result cell"
+  ],
+  "B": [
+   "L217 '희소도 48만으로도 성능이 충분히 강하므로' reads as '480,000'; rewrite '희소도를 48로만 둬도 성능이 충분하므로'",
+   "L43 '규모도 그리 크지 않아도 드러납니다' is ungrammatical; rewrite '그리 크지 않은 규모에서도 드러납니다'",
+   "L31 '이 점수는 뒤에 나오는 다중 시도 설정의 수치와 별개의 설정에서 나온 값입니다' is pipeline-style meta in the TL;DR; rewrite '(단일 시도 기준)'",
+   "Figure-narration openers repeat: L153 '두 번째 요소는 다이어그램 하나로 정리됩니다.', L157 '도식에서 볼 부분은', L209 '그래프에서는 ... 비교하면 됩니다', L272 '이 흐름도에서는 ... 주목할 만합니다', L345 '구조도에서는 ... 보면 됩니다', L357 '일정표에서는'",
+   "'가상' appears 10 times (L54, L98, L286, L306, L327 ...), and L329 '논문이 밝힌 이유는 아니고 필자의 해석으로는,' is clumsy; rewrite '논문은 이유를 밝히지 않았지만, 높은 온도는 ...'",
+   "L227 '... 실험을 빠르게 반복할 수 있다는 것이 저자들의 설명입니다' noun frame; rewrite '저자들은 구성이 일정하면 ... 반복할 수 있다고 설명합니다'"
+  ],
+  "C": [
+   "Facts restated: mid-scale 9B/53B logits >1000 at L43 and L125; token efficiency defined at L41 and again L139; QK-Clip tau=100 behaviour at L125-127 and L250; judge keeps only rubric-passing trajectories at L284 and L290",
+   "L54 promises '이후 내용도 이 헤드 하나를 따라갑니다' but the head is dropped after L108",
+   "L396 cross-references '그림 1' (the paper's numbering) for the Opus single-attempt value"
+  ],
+  "D": [
+   "Good: gamma_h=0.5 walk-through (L54, L108), K=4 reward table for the K1.5 objective (L306-313), airline-change rubric example (L286)",
+   "Under-explained: L396 defines multi-attempt only as '여러 번 시도한 결과를 반영' (paper: best-of-N with an internal verifier); self-critique (L317-321) omits the core/prescriptive/human rubrics and the closed-loop critic refinement on verifiable signals"
+  ],
+  "E": [
+   "L406-415: Instruct table has only the K2 column while L417 claims it beats all baselines; units mix plain and % (53.7 vs 85.7%)",
+   "L433-443: Base table has only the K2 column while L431/L445 make comparative claims",
+   "L231: image narration describes what the figure does not contain ('속도 향상 수치는 담고 있지 않습니다')"
+  ],
+  "F": [
+   "L449 heading '다중 턴 점진적 공격에 가장 취약한' contradicts the post's own table (L455-459) and L461: Crescendo is K2's lowest in 2 of 5 plugins (Harmful, Criminal), Iterative Jailbreak in 3 (Misinformation 63.97, Privacy 76.67, Security 43.90)",
+   "L300: '(y_{i}|x)' uses | for a conditional in the denominator (rubric: \\mid for conditionals)",
+   "L467/L475/L480 (borderline): '저자들이 직접 밝힌 한계' lists a hardware-bound infra limitation; the paper notes the two-stage pipeline is bound by synchronous H2D copies (App. G) but does not present it as a limitation, and '다른 클러스터 ... 재현할 수 있다고 기대하기는 어렵습니다' is the writer's unmarked claim"
+  ]
+ },
+ "principles": {
+  "claim_headings": {
+   "status": "met",
+   "evidence": "H2s are claim noun phrases, e.g. L62 'MuonClip: 업데이트 뒤 헤드별로 query/key 가중치를 재스케일하는 QK-Clip', L333 '30초 미만 파라미터 갱신과 부분 롤아웃을 갖춘 RL 인프라' (L449's claim is wrong, see F)"
+  },
+  "running_example": {
+   "status": "partly met",
+   "evidence": "Hypothetical head (tau=100, logit 200) at L54 is reused at L98/L108 but not after; RL uses a separate 1,0,0,0 toy (L306) reused at L327"
+  },
+  "mechanism_choice_formula_example": {
+   "status": "met",
+   "evidence": "QK-Clip: problem L43, alternatives L49-50, formulas L80/L92, MLA split L102-108, worked numbers L54; RL objective L300 then K=4 table L308"
+  },
+  "facts_said_once": {
+   "status": "partly met",
+   "evidence": "Repeats at L43/L125, L41/L139, L125/L250, L284/L290"
+  },
+  "numbers_with_scope_unit": {
+   "status": "partly met",
+   "evidence": "Settings given at L31 (temperature 0.0, Avg@4), L379, L425 (date, votes); L406-415 mix % and bare scores; L392 '그림 1 표시값'"
+  },
+  "nothing_invented": {
+   "status": "partly met",
+   "evidence": "Hypotheticals are labelled '가상'; L480 reproduction claim and L431 '상당 부분 사전학습 단계에서 이미 갖춰진 것' are unmarked inferences"
+  },
+  "writer_assessment_at_end": {
+   "status": "met",
+   "evidence": "L469-484: what transfers (MuonClip, rephrasing), deployment advice L477, when to use L484"
+  },
+  "length_fitted": {
+   "status": "met",
+   "evidence": "Long sections on QK-Clip and infra, short on data/math rephrasing; ~490 lines for a dense technical report"
+  },
+  "type_specific_shape": {
+   "status": "met",
+   "evidence": "TL;DR with four questions L14-31, results sections, '한계와 시사점' L465, references L488"
+  },
+  "korean_style": {
+   "status": "partly met",
+   "evidence": "Repeated figure-narration openers, 10x '가상', L217 '48만', L43 broken sentence; register is consistently '입니다'"
+  }
+ },
+ "claims": {
+  "checked": 15,
+  "numbers": 12,
+  "supported": 14,
+  "unsupported": 1,
+  "wrong": 0,
+  "unverifiable": 0,
+  "examples": [
+   {
+    "line": 127,
+    "para": 35,
+    "claim": "QK-Clip active in the first 70000 steps; 12.7% of heads triggered it at least once; afterwards all heads below threshold",
+    "verdict": "supported",
+    "source": "App. D 'Initial 70000 steps: 12.7% of attention heads triggered QK-Clip for at least once ... Post-70000 steps: All heads ... reduced their Smax below 100'"
+   },
+   {
+    "line": 173,
+    "para": 50,
+    "claim": "SimpleQA 23.76 (raw x10 epochs) / 27.39 (1 rephrase x10) / 28.94 (10 rephrases x1); each corpus rephrased at most twice",
+    "verdict": "supported",
+    "source": "Table 1 cells 23.76/27.39/28.94; 'each corpora is rephrased at most twice'"
+   },
+   {
+    "line": 201,
+    "para": 56,
+    "claim": "vs DeepSeek-V3: experts +50%, heads -50%, total params +54%, activated -13%",
+    "verdict": "supported",
+    "source": "Table 2 Δ column: ↑54%, ↓13%, ↑50%, ↓50%"
+   },
+   {
+    "line": 217,
+    "para": 62,
+    "claim": "doubling heads improves validation loss only 0.5-1.2% (iso-token); sparsity 48 suffices, so 64 heads",
+    "verdict": "supported",
+    "source": "'doubling the attention heads yields only modest improvements in validation loss (ranging from 0.5% to 1.2%)'; 'Given that sparsity 48 already offers strong performance ... we choose to 64 attention heads'"
+   },
+   {
+    "line": 227,
+    "para": 65,
+    "claim": "any node count multiple of 32; 16-way PP with virtual stages, 16-way EP, ZeRO-1; ~6 TB over 256 GPUs; ~30 GB per GPU; offload to CPU at 32 nodes",
+    "verdict": "supported",
+    "source": "Sec. 2.4.2 text, all values verbatim"
+   },
+   {
+    "line": 235,
+    "para": 68,
+    "claim": "MoE up-projection and SwiGLU inputs stored as FP8-E4M3 in 1x128 tiles with FP32 scales; no FP8 in computation",
+    "verdict": "supported",
+    "source": "'compressed to FP8-E4M3 in 1× 128 tiles with FP32 scales ... we do not apply FP8 in computation'"
+   },
+   {
+    "line": 248,
+    "para": 71,
+    "claim": "weight decay 0.1 throughout, global batch 67M tokens, YaRN to 128k, 32k only for the last 60B tokens",
+    "verdict": "supported",
+    "source": "Sec. 2.4.4: 'Weight decay was set to 0.1 throughout ... 67M tokens'; '400 billion tokens with a 4k sequence length, followed by an additional 60 billion tokens with a 32k'; 'YaRN'"
+   },
+   {
+    "line": 274,
+    "para": 80,
+    "claim": "hierarchical domain evolution produces over 20,000 synthetic tools; MCP tools cluster by source category, synthetic by predefined domains (t-SNE)",
+    "verdict": "supported",
+    "source": "'This evolution process produces over 20,000 synthetic tools'; Figure 9 caption"
+   },
+   {
+    "line": 300,
+    "para": 89,
+    "claim": "RL objective: squared (r - mean r - tau log pi_theta/pi_old), K samples from pi_old, mean-reward baseline, K1.5 algorithm",
+    "verdict": "supported",
+    "source": "Sec. 3.2.3 formula and 'We adopt the policy optimization algorithm introduced in K1.5'"
+   },
+   {
+    "line": 345,
+    "para": 107,
+    "claim": "full-parameter broadcast sends several times more data but beats transfer-what-you-need; pipelined per-parameter update; full update < 30 s",
+    "verdict": "supported",
+    "source": "Sec. 3.3.2: 'transfers several times more data than a theoretically optimal approach'; 'parameter-by-parameter in a pipelined manner'; 'less than 30 seconds'"
+   },
+   {
+    "line": 383,
+    "para": 119,
+    "claim": "tau2-Bench micro Pass@1 66.1 vs DeepSeek-V3-0324 48.8 / Qwen3 37.3; ACEBench 76.5/72.7/70.5; temperature 0.0, Avg@4",
+    "verdict": "supported",
+    "source": "Sec. 4.2 'Kimi-K2-Instruct averages 66.1 micro Pass@1 across τ2 vs DeepSeek-V3-0324 48.8 / Qwen3-235B-A22B 37.3. On ACEBench Overall ... 76.5 vs DeepSeek 72.7 / Qwen 70.5'"
+   },
+   {
+    "line": 392,
+    "para": 122,
+    "claim": "SWE-bench Verified single 65.8 (Opus 72.5), multi 71.6 vs Sonnet 80.2; Multilingual 47.3 vs Sonnet 51.0",
+    "verdict": "supported",
+    "source": "Table 3: 65.8 / 72.7* (Sonnet) / 72.5* (Opus); 71.6 / 80.2* / 79.4*; 47.3 / 51.0"
+   },
+   {
+    "line": 421,
+    "para": 128,
+    "claim": "Arena-Hard-Auto v2.0 hard prompts 54.5%, creative writing 85.0%, best among open-source, rivals GPT-4.1/Claude Sonnet",
+    "verdict": "supported",
+    "source": "'state-of-the-art win-rate on both hard prompts (54.5%) and creative writing tasks (85.0%), outperforming all open-source models and rivaling ... GPT-4.1 and Claude Sonnet'"
+   },
+   {
+    "line": 455,
+    "para": 137,
+    "claim": "safety table: 25 cells (Kimi Basic/IJ/Crescendo, DeepSeek-V3 and Qwen3 Crescendo) for Harmful, Criminal, Misinformation, Privacy, Security",
+    "verdict": "supported",
+    "source": "Table 6: all 25 cells match (e.g. Criminal 100/57.57/56.06/31.81/59.09; Security 77.84/43.90/68.29/87.80/87.80)"
+   },
+   {
+    "line": 467,
+    "para": 140,
+    "claim": "the authors' own limitations span model behaviour, reward design, data fidelity and infrastructure (infra bullet at L480)",
+    "verdict": "unsupported",
+    "source": "Sec. 5 lists only excess tokens, unnecessary tool use and one-shot project building; App. F gives the rubric overconfidence and Sec. 3.1.1 the simulation-fidelity limit; App. G only notes the two-stage pipeline 'will be bound by multiple synchronous H2D copy operations', not as a limitation, and nothing about reproducing the update time on other clusters"
+   }
+  ]
+ },
+ "checklist": {
+  "repeated": 0,
+  "avoided": 14,
+  "na": 3,
+  "repeated_ids": [],
+  "details": {
+   "rl-section-duplicated": {
+    "status": "avoided",
+    "evidence": "one RL section L292 and one RL infra section L333; no '코로케이션 아키텍처'/'검증 가능한 보상' duplicate headings"
+   },
+   "rl-subheading-levels": {
+    "status": "avoided",
+    "evidence": "RL subsections L296, L317, L323 are H3 under the H2 RL heading L292"
+   },
+   "ppo-claim": {
+    "status": "avoided",
+    "evidence": "L294 'RL 알고리즘은 이전 모델 Kimi k1.5에서 도입한 정책 최적화 알고리즘을 바탕으로 합니다'; no PPO"
+   },
+   "invented-budget-formula": {
+    "status": "avoided",
+    "evidence": "L327 per-task max token budget, truncation and penalty in prose; no L_budget"
+   },
+   "invented-ptx-formula": {
+    "status": "n/a",
+    "evidence": "PTX loss not mentioned (L325 covers only two of the additions)"
+   },
+   "invented-temperature-formula": {
+    "status": "avoided",
+    "evidence": "L329 describes the decay schedule in prose; no T(t)"
+   },
+   "invented-env-code": {
+    "status": "avoided",
+    "evidence": "no code block; L367 'OpenAI Gym에서 영감을 받은 통합 인터페이스' in prose"
+   },
+   "invented-math-verifier": {
+    "status": "n/a",
+    "evidence": "math/STEM RL reward data not described"
+   },
+   "invented-logic-verifier": {
+    "status": "avoided",
+    "evidence": "no formal-logic verifier claim"
+   },
+   "invented-code-quality-eval": {
+    "status": "avoided",
+    "evidence": "L479 '실제 실행 샌드박스와 테스트 통과율'; no quality/efficiency/security grading"
+   },
+   "invented-safety-monitoring": {
+    "status": "n/a",
+    "evidence": "safety RL data pipeline not described; L449-463 covers red-team evaluation only, no real-time monitoring"
+   },
+   "invented-self-refine-loop": {
+    "status": "avoided",
+    "evidence": "L319 '모델이 자기 출력들을 쌍으로 비교해 판정하고, 그 판정이 선호 신호가 됩니다'; no generate-critique-revise loop"
+   },
+   "invented-human-rubric-content": {
+    "status": "avoided",
+    "evidence": "no human-annotated rubric content claimed (rubric types not described)"
+   },
+   "rubric-limitation-garbled": {
+    "status": "avoided",
+    "evidence": "L478 '비평 루브릭은 자기 단서 달기와 얼버무리는 표현을 감점하고 단정적인 답을 보상합니다. 그 결과 모호한 영역에서도 확신을 과장할 수 있습니다'"
+   },
+   "invented-infra-mechanisms": {
+    "status": "avoided",
+    "evidence": "L337-363 match the paper (full broadcast, three buffers, H800 two-stage); no progressive loading, hierarchical broadcast or real-time debugging"
+   },
+   "missing-description": {
+    "status": "avoided",
+    "evidence": "L8 description starts 'Kimi K2', 143 chars, numbers 15.5T/1.04T/66.1/65.8 all in the TL;DR"
+   },
+   "arxiv-https": {
+    "status": "avoided",
+    "evidence": "L489 https://arxiv.org/pdf/2507.20534v2"
+   }
+  }
+ },
+ "extras": {},
+ "top_issues": [
+  "Safety heading L449 '다중 턴 점진적 공격에 가장 취약한' contradicts the post's own table and L461: Iterative Jailbreak, not Crescendo, is K2's weakest attack in 3 of 5 plugins",
+  "Facts restated across sections (L43/L125, L41/L139, L125/L250, L284/L290) and a stray QK-Clip paragraph closing the schedule section (L250); the running head example is dropped after L108",
+  "Korean style and math markup: '희소도 48만으로도' (L217) reads as 480,000, broken sentence L43, repeated figure-narration openers and 10x '가상'; '(y_{i}|x)' with Liquid raw inside the formula L300; '저자들이 밝힌 한계' includes a writer-inferred infra limitation (L480)"
+ ]
+}

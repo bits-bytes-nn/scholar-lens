@@ -1,0 +1,104 @@
+{
+  "kind": "survey_write",
+  "status": "succeeded",
+  "input": "eval/sets/plans/survey-rlhf.json",
+  "title": "From RLHF to DPO and GRPO: Lineages of LLM Preference Optimization",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/survey-llm-rlhf-dpo-da36ac9a/2026-11-04-from-rlhf-to-dpo-and-grpo-lineages-of-llm-preference-optimization.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-from-rlhf-to-dpo-and-grpo-lineages-of-llm-preference-optimization.md",
+  "pr_url": null,
+  "warnings": [
+    "Section 'Atari 선호에서 InstructGPT까지 이어진 보상 모델과 KL 페널티 PPO의 3단계 파이프라인, 그리고 그 대리 지표의 한계' still has: papers ['1909.08593', '2009.01325'] belong to this section but no sentence cites their evidence: cover each",
+    "Section '보상 모델을 정책 안에 숨긴 닫힌 형태 재매개화와 그 일반화, 그리고 사라지지 않은 과최적화': check 1 sentence(s) the evidence may not support: \\pi^{*}(y_{1})=\\sigma(0.5\\tau^{-1}) (numbers not in its evidence)",
+    "Section '보상 모델을 정책 안에 숨긴 닫힌 형태 재매개화와 그 일반화, 그리고 사라지지 않은 과최적화' still has: numbers ['0.5'] without evidence: \\pi^{*}(y_{1})=\\sigma(0.5\\tau^{-1}) | papers ['2310.12036'] belong to this section but no sentence cites their evidence: cover each",
+    "Section '보상 모델 유무와 상관없이 되풀이되는 과최적화와 길이 편향' still has: a standard section needs at least 1 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '비교 한 건을 다루는 방식의 진화로 요약되는 정렬 연구' still has: evidence ['E139'] was already referred back to twice; do not restate it again: \"양자컴퓨팅을 초등학생에게 설명해줘\"라는 프롬프트에 대해 사람이 두 응답 중 하나를 고른 판단이 RLHF에서는 응답마다 점수 하나를 매기는 보상 모델의 학습 신호가 됩니다 . | evidence ['E171'] was already referred back to twice; do not restate it again: GRPO에서는 정답 검증기가 주는 0/1 보상을 같은 질문의 출력 그룹 안에서 정규화한 값이 됩니다 .",
+    "verification hedge (fix the claim from an official source or drop it): al 1.0/2.0) | 7B 초과 규모·다양한 비교 미검증 |"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3070.0,
+  "input_tokens": 1731814,
+  "output_tokens": 352616,
+  "estimated_cost_usd": 14.0083,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 84,
+      "failed_calls": 0,
+      "input_tokens": 14103,
+      "output_tokens": 352616,
+      "cache_read_tokens": 367165,
+      "cache_write_tokens": 1350546,
+      "cost_usd": 14.008319
+    },
+    "by_stage": {
+      "outline": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 8,
+        "output_tokens": 24600,
+        "cache_read_tokens": 4068,
+        "cache_write_tokens": 109904,
+        "cost_usd": 1.04318
+      },
+      "verify": {
+        "calls": 37,
+        "failed_calls": 0,
+        "input_tokens": 148,
+        "output_tokens": 57679,
+        "cache_read_tokens": 291650,
+        "cache_write_tokens": 615922,
+        "cost_usd": 4.350447
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 120539,
+        "cache_read_tokens": 36442,
+        "cache_write_tokens": 282718,
+        "cost_usd": 3.839168
+      },
+      "review": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 29777,
+        "cache_read_tokens": 14751,
+        "cache_write_tokens": 55832,
+        "cost_usd": 0.880772
+      },
+      "fix": {
+        "calls": 19,
+        "failed_calls": 0,
+        "input_tokens": 76,
+        "output_tokens": 119277,
+        "cache_read_tokens": 20254,
+        "cache_write_tokens": 286170,
+        "cost_usd": 3.824788
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 13771,
+        "output_tokens": 744,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.069964
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 84,
+        "failed_calls": 0,
+        "input_tokens": 14103,
+        "output_tokens": 352616,
+        "cache_read_tokens": 367165,
+        "cache_write_tokens": 1350546,
+        "cost_usd": 14.008319
+      }
+    }
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "item": "survey-security",
+  "post": "/tmp/eval-evidence/survey-security-v4.md",
+  "scores": {"A": 3, "B": 6, "C": 4, "D": 6, "E": 5, "F": 3},
+  "score_evidence": {
+    "A": "Sections cut off mid-word: L91 '개념도의 요점은 공격자와 LLM 사이에 직접 연' (Indirect PI card ends; HouYi and Adaptive IPI cards never appear), L111 '이 접미사를 다' (GCG card ends; SmoothLLM and PAIR cards never appear), L488 '- Prompt Hijacking: \"이' (Prompt Infection card ends). L402 starts with a leading space and an orphan fragment ' 유용성의 예외는 Travel 스위트입니다'. L418-462 is a run of figures with one-line captions; MCP Attack Vectors, ETDI, AiTM and ToolHijacker get no card. L530 opens with a leading-space fragment and no topic sentence. The SecAlign DPO loss appears twice (L365, L507).",
+    "B": "Mostly natural '입니다' prose, but: L105 '평가 프롬프트 전체의 96% 넘게에서 성공했습니다' (ungrammatical; '96% 이상에서'). L278 '약 10 더 올렸는데, 논문은 이 값이 %p인지 상대 증가인지 구분하지 않습니다' and L520 '저자들은 SecAlign도 이 공격을 막지 못했다고 보고하지만, 여기 옮긴 수치는 StruQ의 것입니다' read as pipeline notes, not prose. Formulaic '비서 에이전트에 대입하면 이렇습니다' and similar openers recur (L97, L117, L526, L538, L560, L604). Table cells mix in English: 'goal hijacking' (L573), 'tool filter' (L592), 'gradient-free' (L595).",
+    "C": "Refer-backs to things the post never said: L336 '앞서 본 대로 ... Completion-Real의 성공률은 ... 0%' (first mention), L338 '앞서 다룬 Llama-7B 결과에서' (first mention), L351 '앞서 탈옥 실험에서 다룬 OpenAI 대화 모델' (no such model was discussed; the paper uses GPT-3.5 Turbo), L382 '앞서 본 대로 대부분 뚫렸습니다' (89%/97% first appear at L514), L498 '앞서 RAG·메모리 오염에서 본 AUC 수치대로' (the post gives no AUC anywhere). L490-640 restate StruQ's optimization-attack limit (L338, L502, L550, L560, L616, L635), IH's 'still vulnerable' caveat (L358, L518, L558, L616, L635) and CaMeL's P-LLM/Q-LLM/tag design (L386, L564, L612, L637).",
+    "D": "Good: a running mailbox example, a worked PoisonedRAG black-box example (L141), AgentPoison loss terms explained (L173-177), InjecAgent sensitivity/conversion defined (L252). Missing: GCG's search, PAIR's attacker loop, HouYi's three components and adaptive IPI optimization never get explained, because those sections are truncated or absent. The repetition in L490-640 is padding.",
+    "E": "Equations are placed well (PoisonedRAG, AgentPoison, SecAlign) and there is one comparison table. But L450 '그림 7로 제시합니다', L458 '그림 1', L468 '그림 4', L474 '그림 6(a)', L480 '그림 7' use the papers' figure numbers. L418-484 is a figure dump with no discussion. L512-516 adds a second results table that repeats numbers stated at L382 and in the main table L586.",
+    "F": "Wrong: GCG table cell L576 gives 88% for 'Vicuna-7B/Llama-2-7B-Chat', but 88% for harmful strings is Vicuna-7B only (Llama-2-7B-Chat 57%). SmoothLLM cell L577 'PAIR ASR 29배 감소' holds only for GPT-3.5 (Vicuna and GPT-4 drop by about 2x). L278 says the paper does not say whether +1.9% is %p, but AgentDojo Table 2 gives 45.8% → 47.7% (+1.9), i.e. points. Unsupported: L534 'ToolHijacker는 PoisonedRAG의 분할 아이디어를 이어받되' (the paper contrasts itself with PoisonedRAG and never claims to inherit from it); L498 cites AUC numbers that do not exist in the post."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "Noun-phrase claim headings throughout, e.g. L57 '목표 탈취에서 원격 제어와 적응형 공격으로 커진 프롬프트 인젝션', L384 '모델이 속는다고 가정하는 CaMeL'."},
+    "running_example": {"status": "met", "evidence": "The attacker@example.com mailbox example opens at L15 and returns in every lineage (L117, L141, L236, L264, L392, L456, L635)."},
+    "mechanism_design_formula_example": {"status": "partly met", "evidence": "Full chain for PoisonedRAG (L127-141), AgentPoison (L163-190) and SecAlign (L362-369). Absent for GCG, PAIR, HouYi, adaptive IPI and MCP attacks (truncated or missing sections)."},
+    "facts_said_once": {"status": "not met", "evidence": "The SecAlign loss appears at L365 and L507. SecAlign 1%/8% appears at L382, L516 and L586. CaMeL's 0 vs 8 appears at L402, L564 and L591. StruQ's limits appear at L338, L502, L550, L560, L616 and L635."},
+    "numbers_with_scope": {"status": "partly met", "evidence": "Most prose numbers name the model and setting (L240, L302, L337). Table cells L576 and L577 lose the variant, and L409 drops 'under attack, Claude 3.5 Sonnet'."},
+    "nothing_invented": {"status": "not met", "evidence": "Invented refer-backs at L336, L338, L351, L382 and L498 (AUC). L534 claims an inheritance from PoisonedRAG that the paper does not state."},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L639: '먼저 모델은 언젠가 속는다고 가정하고 권한과 데이터 흐름을 설계합니다 ...'; judgments also at L218, L416, L618."},
+    "length_fitted_to_difficulty": {"status": "not met", "evidence": "Core cards are truncated (L91, L111, L488) while L490-640 restate earlier material at length."},
+    "type_specific_shape": {"status": "not met", "evidence": "The survey rule is that one comparison table carries the numbers. Instead, cards carry dense numbers (L79, L143, L192, L302), a second table sits at L512-516, and synthesis sections re-tell the cards (L542-568)."},
+    "korean_style": {"status": "partly met", "evidence": "'입니다' register holds. Repeated '비서 에이전트에 대입하면' openers, a heavy use of '앞서 본 대로', and L105 '96% 넘게에서'."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 11,
+    "unsupported": 1,
+    "wrong": 3,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 79, "claim": "Goal hijacking 58.6%±1.6, prompt leaking 23.6%±2.7; non-harmful rogue string 70.0%±3.7; no delimiter 43.6%±2.7", "verdict": "supported", "source": "2211.09527: 'success rate of 58.6\\%\\pm 1.6 for goal hijacking and 23.6\\%\\pm 2.7 for prompt leaking'; Table: 'No delimiter 43.6±2.7', 'Non-harmful string 70.0±3.7'"},
+      {"line": 95, "claim": "SmoothLLM cuts GCG ASR to below 1 point on AdvBench; PAIR ASR halved on Vicuna/GPT-4, cut 29x on GPT-3.5", "verdict": "supported", "source": "2310.03684 §: 'reduces the ASR of GCG to below one percentage point ... reduces the ASRs of the PAIR semantic attack on Vicuna and GPT-4 by factors of two, and reduces the ASR of GPT-3.5 by a factor of 29'"},
+      {"line": 105, "claim": "Jailbroken: >96% of prompts, 100% of curated red-team prompts; adaptive Bad Bot 0.96 (GPT-4) / 0.99 (Claude v1.3) on the synthetic set", "verdict": "supported", "source": "2307.02483 abstract/intro; Table 2 (synthetic) 'Adaptive attack 0.96 ... 0.99'"},
+      {"line": 192, "claim": "AgentPoison: retrieval 81.2%, benign drop 0.74%, 59.4% generate target action, 62.6% real target impact", "verdict": "supported", "source": "2407.12784: 'minimal impact on benign performance of average 0.74% ... retrieval success rate of 81.2% ... 59.4% generates target actions where 62.6% result in actual target impact'"},
+      {"line": 240, "claim": "InjecAgent: ReAct GPT-4 24% base / 47% enhanced (ASR-valid); fine-tuned GPT-4 base total 6.6%", "verdict": "supported", "source": "2403.02691 Table 3: prompted GPT-4 base total 23.6, enhanced 47.0; fine-tuned GPT-4 base total 6.6 (fine-tuned GPT-3.5 3.8). The paper's prose says '3.8% and 6.6% respectively' for GPT-4/GPT-3.5, which contradicts its own table; the post follows the table."},
+      {"line": 278, "claim": "AgentDojo: knowing the user and model names raises targeted ASR by 1.9%, 'and the paper does not say whether this is %p or relative'", "verdict": "wrong", "source": "2406.13352 Table 2: Baseline 45.8%, '+ both correct' 47.7% (+1.9%), so the gain is in absolute points"},
+      {"line": 302, "claim": "AgentHarm: Claude 3.5 Sonnet harm 13.5%→68.7%, refusals 85.2%→16.7%; GPT-4o 48.4%→72.7%, refusals 48.9%→13.6%", "verdict": "supported", "source": "2410.09024 §4: 'GPT-4o, increasing its harm score from 48.4% to 72.7% and decreasing refusal rate from 48.9% to 13.6%; Claude 3.5 Sonnet ... 13.5% to 68.7% ... 85.2% to 16.7%'"},
+      {"line": 337, "claim": "StruQ AlpacaEval 67.2→67.6 (Llama-7B), 80.0→78.7 (Mistral-7B); TAP 9%/GCG 58% on Llama, 36%/56% on Mistral", "verdict": "supported", "source": "2402.06363 Tables 2-3: 'Tree-of-Attack 97% 9% 100% 36%', 'Greedy Coordinate Gradient 97% 58% 99% 56%', 'Utility (AlpacaEval) 67.2% 67.6% 80.0% 78.7%'"},
+      {"line": 370, "claim": "SecAlign drives mean log-prob of y_l to -300 vs StruQ -140; strongest optimization attack ASR 89%/97% undefended, 27%/45% StruQ, 1%/8% SecAlign", "verdict": "supported", "source": "2410.05451: 'StruQ decreases the average log probabilities of y_l to only -140, but SecAlign ... to as low as -300'; 'undefended model is broken with 89% and 97% ASRs ... (27% and 45% ASRs ...) ... SecAlign decreases the ASRs ... to 1% and 8%'"},
+      {"line": 396, "claim": "CaMeL solves 77% of AgentDojo tasks vs 84% undefended; 0 successful attacks vs 8 for tool filter", "verdict": "supported", "source": "2503.18813 abstract: 'solving 77% of tasks with provable security (compared to 84% with an undefended system)'; §6.3: 'number of successful attacks with CaMeL is 0, while ... the next best defense (tool filter) is 8'"},
+      {"line": 534, "claim": "'ToolHijacker는 PoisonedRAG의 분할 아이디어를 이어받되, 생성 조건 자리에 ... 선택 조건을 넣고'", "verdict": "unsupported", "source": "ToolHijacker (arXiv 2504.19793) splits its description into R⊕S for retrieval and selection, and positions itself against PoisonedRAG ('PoisonedRAG ... focuses on generation ... This difference creates distinct challenges'). It never says it inherits PoisonedRAG's split."},
+      {"line": 576, "claim": "Table: GCG '유해 문자열 ASR 88% (GCG, 화이트박스, Vicuna-7B/Llama-2-7B-Chat, 유해 문자열 ASR)'", "verdict": "wrong", "source": "2307.15043 §3: 'For the challenging Harmful Strings setting, our approach is successful on 88% of strings for Vicuna-7B and 57% for Llama-2-7B-Chat'"},
+      {"line": 577, "claim": "Table: SmoothLLM 'PAIR ASR 29배 감소 (SmoothLLM, PAIR, JBB-Behaviors, ASR)'", "verdict": "wrong", "source": "2310.03684: the 29x cut holds only for GPT-3.5; 'on Vicuna and GPT-4 by factors of two'. The cell drops the model and overgeneralizes."},
+      {"line": 587, "claim": "Table: Prompt Infection 'Attack Ignored' 66% (GPT-4o) vs 9% (GPT-3.5); self-replicating +13.92% (GPT-4o), +209% (GPT-3.5) under global messaging", "verdict": "supported", "source": "2410.07283: 'GPT-4o ... ignoring 66% of self-replicating attacks ... GPT-3.5 only ignores 9%'; 'for GPT-4o, Self-Replicating infection achieves a 13.92% higher success rate, while for GPT-3.5, it is 209% more effective'"},
+      {"line": 594, "claim": "Table: ToolHijacker ToolBench AHR 96.1%/97.8%; without S the ASR drops to 5%", "verdict": "supported", "source": "2504.19793: 'on the ToolBench's tool library ... gradient-free attack achieves 96.1% AHR and our gradient-based attack achieves 97.8% AHR'; 'Without S, the ASR drops from 99% to 5%'"}
+    ]
+  },
+  "checklist": {
+    "repeated": 4,
+    "avoided": 7,
+    "na": 2,
+    "repeated_ids": ["multiagent-integrity-overgeneralized", "benchmark-conclusion-flip", "jailbroken-cell-duplicated", "toolhijacker-limitation-column"],
+    "details": {
+      "houyi-sentence-grammar": {"status": "n/a", "evidence": "No HouYi card; HouYi appears only in the timeline (L34), the table (L574) and the references."},
+      "heading-english-tool": {"status": "avoided", "evidence": "L418 '## 도구 설명과 에이전트 간 메시지로 번지는 공급망형 공격'"},
+      "etdi-translationese": {"status": "avoided", "evidence": "ETDI has only L450 and L637; no '실무에 바로 대응됩니다'."},
+      "multiagent-integrity-overgeneralized": {"status": "repeated", "evidence": "L627 '어떤 에이전트의 메시지를 어느 권한으로 다룰지 정하는 신뢰 모델은 아직 정립되지 않았습니다.'; L624 '... 공격에는 아직 구조적 해법이 없습니다.' Neither is scoped to the reviewed papers."},
+      "secalign-taskshield-repeated-verb": {"status": "n/a", "evidence": "Task Shield is not in the plan; no '옮겼습니다' sentence pair."},
+      "lightweight-defense-practice-claim": {"status": "avoided", "evidence": "No claim about what practitioners deploy first; L568 is framed as the writer's recommendation ('이 글은 다음 기준을 권합니다')."},
+      "injecagent-finetuned-variants": {"status": "avoided", "evidence": "L240 '파인튜닝된 GPT-4는 ... 기본 설정 총 ASR이 6.6%' matches the Table 3 row (fine-tuned GPT-4 base total 6.6); 3.8% is not assigned."},
+      "agentdojo-utility-restated": {"status": "avoided", "evidence": "69.00%/50.08% are not given; L266 gives '절대 유용성이 10~25%p 하락' once."},
+      "agentdojo-baseline-defenses": {"status": "avoided", "evidence": "L280 lists data delimiters, injection detection, prompt sandwich and tool filter; no dual-LLM."},
+      "benchmark-conclusion-flip": {"status": "repeated", "evidence": "L616 '같은 방어를 놓고 고정 공격 기준의 평가와 적응형 공격 기준의 평가가 정반대 결론을 낸 셈입니다.' L312 gives the comparability caveat without a quantified ASR spread."},
+      "jailbroken-cell-duplicated": {"status": "repeated", "evidence": "The Jailbroken cell itself is fine, but other cells repeat the method or metric in both the text and the parenthetical: L576 '유해 문자열 ASR 88% (GCG, ..., 유해 문자열 ASR)', L580 'ASR 약 90% (PoisonedRAG, ..., ASR)', L592 'DACC 97.4% 이상 (RAGForensics, ..., DACC/FPR/FNR)'."},
+      "toolhijacker-limitation-column": {"status": "repeated", "evidence": "L594 limitation cell '기존 방어 불충분' (a result, not the no-box scope or the lack of a new defense)."},
+      "prompt-infection-venue": {"status": "avoided", "evidence": "L659 gives no venue; not 'Lecture notes in computer science'."}
+    }
+  },
+  "extras": {
+    "uncited_plan_papers": ["2306.05499 HouYi", "2310.08419 PAIR", "2503.00061 Adaptive IPI Attacks"],
+    "uncited_note": "These three appear only in the timeline, the comparison table and the references, with no body citation. ETDI (L450, L637) and AiTM (L422, L627) get a single sentence each and no card.",
+    "thin_truncated_empty_sections": [
+      "L83-91 Indirect PI card truncated mid-word ('직접 연'); its parent section has no HouYi or Adaptive IPI cards",
+      "L109-111 GCG card truncated mid-word ('이 접미사를 다'); the jailbreak section has no SmoothLLM or PAIR cards",
+      "L418-462 supply-chain section: figures with one-line captions, no MCP Attack Vectors, ETDI, AiTM or ToolHijacker cards",
+      "L464-488 Prompt Infection card truncated mid-list ('- Prompt Hijacking: \"이')",
+      "L402 orphan sentence fragment with a leading space",
+      "L528-530 section opens with a leading-space fragment"
+    ],
+    "venue_issues": [
+      "L645 Greshake et al.: no venue (AISec '23)",
+      "L656 AgentDojo: no venue (NeurIPS 2024 Datasets and Benchmarks; the CaMeL paper's own reference list cites it so)",
+      "L659 Prompt Infection: no venue (acceptable; the plan's LNCS string was correctly dropped)",
+      "L651 StruQ listed as arXiv though it appeared at USENIX Security 2025 (not verified in this run)"
+    ],
+    "bad_table_cells": [
+      "L573 Indirect PI: '정량 수치 없음' / '정량적 성공률 부재' (an input-derived limitation, not the paper's)",
+      "L583 BadAgent limitation '-'",
+      "L586 SecAlign limitation '-'",
+      "L594 ToolHijacker limitation '기존 방어 불충분' (a result)",
+      "L580 PoisonedRAG limitation '100% ASR 미달' (not a limitation the paper states)",
+      "L574 HouYi limitation '일부 앱 저항' (a result)",
+      "L577 SmoothLLM 'GCG ASR 최고 수준 감소' (vague, no number)",
+      "L576 GCG 88% assigned to both models; L577 29x without its model"
+    ],
+    "S1_survey_cards_and_table": 4,
+    "second_results_table": "L512-516 (SecAlign/StruQ ASR) duplicates the main table and L382"
+  },
+  "top_issues": [
+    "Truncated and missing cards: Indirect PI (L91), GCG (L111) and Prompt Infection (L488) stop mid-word. HouYi, Adaptive IPI, SmoothLLM, PAIR, MCP Attack Vectors, ETDI, AiTM and ToolHijacker get no card, and the supply-chain section (L418-462) is a figure dump that uses the papers' figure numbers ('그림 7', '그림 1', '그림 4', '그림 6(a)').",
+    "Wrong comparison-table cells: GCG 88% assigned to Vicuna-7B and Llama-2-7B-Chat (L576; Llama-2 is 57%), and SmoothLLM 'PAIR ASR 29배 감소' without its GPT-3.5 scope (L577). The limitation column has '-' twice (L583, L586), input-derived limits (L573) and results posing as limitations (L574, L580, L594).",
+    "Invented refer-backs: '앞서 본 대로' points to results the post never gave (L336, L338, L351, L382) and to AUC numbers that do not exist (L498). L534 credits ToolHijacker with inheriting PoisonedRAG's split, which the paper does not say.",
+    "Heavy repetition breaks 'facts said once' and 'numbers in one table': the SecAlign loss appears twice (L365, L507), a second results table sits at L512-516, and StruQ, IH and CaMeL limits are restated 4-6 times across L490-640.",
+    "Unscoped gap and 'conclusion flip' statements repeat checklist defects (L616 '정반대 결론', L624/L627 '아직 ... 없습니다/정립되지 않았습니다'). L278 wrongly says AgentDojo does not specify whether +1.9% is in points."
+  ]
+}

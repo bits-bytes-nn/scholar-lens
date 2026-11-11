@@ -1,0 +1,90 @@
+{
+  "item": "guide-strands",
+  "post": "/tmp/eval-guide/guide-strands-v5.md",
+  "judge": "judge-guide-strands-2",
+  "sampling": "Prose paragraphs (headings, code, tables, lists, math excluded; 162 total) from paragraph 2, every third (2,5,...,161); claims taken from sampled paragraphs or the table/code they introduce.",
+  "scores": {"A": 8.0, "B": 8.0, "C": 6.5, "D": 7.0, "E": 8.0, "F": 7.5, "T1": 6.5, "T2": 8.5, "T3": 8.5},
+  "deductions": {
+    "A": ["L158 sentence-form heading '읽기 전용이 기본이고, 루프를 움직이는 필드는 일부입니다' (claim headings must be noun phrases); L1090 topic heading '고르는 기준'"],
+    "B": ["Repeated figure-intro sentence shape: L49 '루프의 재귀 구조를 상자와 화살표로 옮기면 아래 그림이 됩니다', L132 '순서를 상자와 화살표로 옮겨 그린 예시입니다', L240 '흐름을 상자로 그리면 다음 그림처럼 됩니다'", "L499 '예를 들어 다음 표는 ... 보여 줍니다' formulaic opener", "L1109 '영상 튜토리얼(W8) 저자' leaks an internal evidence id"],
+    "C": ["L653 '앞서 구조화 출력에서 다룬 환불 요청 \"Please refund order 4512\"' - no such request appears earlier (the post uses '주문 1234 환불해 줘')", "L685 '앞서 build_agent()에 넣은 턴·토큰 한도, 스로틀링 재시도, 슬라이딩 윈도 대화 관리자, 훅은 빠져 있습니다' - build_agent (L114, L544) never had limits, retries, a conversation manager or hooks; retries/hooks are added later (L774, L816)", "L750 '앞서 붙인 데드라인 취소' - the deadline is introduced only at L906/L997", "build_agent() is redefined four times (L114, L544, L816, L851) with diverging contents; the L816 version drops the L774 retry strategy and the L851 version drops the L823 hook"],
+    "D": ["Very long (1,140 lines) with re-explanations: Guide-without-cap discrepancy at L493 and again L618 and L1107; Deny short-circuit at L471, L497, L608, L683; forced retry at L414 and L1027; aux_model at L17, L95, L671"],
+    "E": ["Good tables (retry schedule L741, attempt counting L430, intervention pipeline L501), but L493/L618 duplicate the same doc-discrepancy analysis"],
+    "F": ["L653 invented earlier request 'Please refund order 4512'", "L685 false statement about what build_agent() contained", "All 15 sampled source claims supported"],
+    "T1": ["OrderIdSteering (L627) omits the abstract `name` property of InterventionHandler -> TypeError \"Can't instantiate abstract class OrderIdSteering without an implementation for abstract method 'name'\" when build_interventions()/build_guarded_agent() runs; breaks L687 and the final handler L988", "L690 `strands.vended_interventions.cedar` needs `pip install strands-agents[cedar]` (cedarpy); the post gives no install command at all", "L331 snippet is a standalone Agent(...) without model, although the text says it goes inside build_agent()"]
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Most H2/H3 are claim noun phrases (L21, L41, L126, L733); L158 is sentence-form, L1090 is a topic name"},
+    "running_example": {"status": "met", "evidence": "Order-support agent with lookup_order/send_email from L37 through L1092; weakened by four divergent build_agent() redefinitions"},
+    "mechanism_design_code_example": {"status": "met", "evidence": "Retry: default -> table L741 -> is_retryable code L758 -> middleware double-retry warning L864; compression formula L347 with worked 0.75 example L351"},
+    "facts_said_once": {"status": "not met", "evidence": "Guide-no-cap L493/L618/L1107; Deny short-circuit L471/L497/L608/L683; per-request agent L39/L944/L1111"},
+    "numbers_with_scope_unit": {"status": "met", "evidence": "L739-L752 retries with seconds and Python/TS scope; L351 tokens; L752 notes which page says 128 vs 240"},
+    "nothing_invented": {"status": "partly met", "evidence": "L653 'Please refund order 4512' never appears earlier; L685 misdescribes build_agent; L1059 marks its trace sketch as conceptual"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L1113 '이 글의 판단으로는 ...' with when-to-choose and failure modes L1105-L1111"},
+    "length_fitted": {"status": "not met", "evidence": "1,140 lines / ~125 KB for an SDK control-surface guide; much repetition"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR L11, problem L21-L35, loop internals L41 before configuration, closes with choice and failure modes L1086-L1111"},
+    "korean_style": {"status": "partly met", "evidence": "Natural 입니다 register overall; repeated figure-intro pattern L49/L132/L240; '(W8)' leak L1109"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numeric": 9,
+    "examples": [
+      {"line": 154, "claim": "HookOrder.SDK_FIRST -100, DEFAULT 0, SDK_LAST 100; not enforced bounds, SDK_FIRST - 1", "verdict": "supported", "source": "hooks: 'HookOrder.SDK_FIRST (-100) ... DEFAULT (0) ... SDK_LAST (100) ... These are not enforced bounds'"},
+      {"line": 154, "claim": "Python API reference also lists MODEL_ROUTING (50)", "verdict": "supported", "source": "strands.agent.agent add_hook: 'SDK_FIRST (-100), DEFAULT (0), MODEL_ROUTING (50), or SDK_LAST (100)'"},
+      {"line": 752, "claim": "Retry guide Python table gives max_delay 128", "verdict": "supported", "source": "retry-strategies: max_delay float 128"},
+      {"line": 752, "claim": "Agent.__init__ API reference gives max_delay 240", "verdict": "supported", "source": "strands.agent.agent: 'Defaults to ModelRetryStrategy with max_attempts=6, initial_delay=4s, max_delay=240s'"},
+      {"line": 739, "claim": "Default retries throttling 5 times (6 attempts), first wait 4s doubling (table 4/8/16/32/64)", "verdict": "supported", "source": "retry-strategies: 'retry throttling errors up to 5 times (6 total attempts) ... starting at 4 seconds'; attempt list"},
+      {"line": 752, "claim": "Disable retries with max_attempts=1 or retry_strategy=None", "verdict": "supported", "source": "retry-strategies: 'Set to 1 to disable retries'; 'To disable automatic retries entirely: retry_strategy=None'"},
+      {"line": 776, "claim": "TS ExponentialBackoff jitter default 'full'", "verdict": "supported", "source": "retry-strategies: 'Default is 'full' jitter'"},
+      {"line": 345, "claim": "Proactive compression fires when projectedInputTokens/contextWindowLimit >= threshold, before every model call; True gives default threshold, dict ratio 0-1", "verdict": "supported", "source": "conversation-management: 'if projectedInputTokens / contextWindowLimit >= compressionThreshold'; 'Use True for the default 0.7 threshold ... ratio between 0 and 1'"},
+      {"line": 430, "claim": "Attempt counting table: invalid tool call and failed forced retry each count; with a limit, failed forced retry retried instead of raising; stop before next model call with limit_structured_output_attempts", "verdict": "supported", "source": "structured-output-behavior 'Limit attempts' section"},
+      {"line": 323, "claim": "Tool-result truncation on by default; text head/tail with <truncated chars=\"N\"/>; typed placeholder for media; status and error preserved", "verdict": "supported", "source": "conversation-management: 'When enabled (the default ...) ... <truncated chars=\"N\"/> marker ... original status and error fields are preserved'"},
+      {"line": 379, "claim": "TS structured-output tool fixed name strands_structured_output; Python tool named after class", "verdict": "supported", "source": "structured-output-behavior: 'The tool is named strands_structured_output'"},
+      {"line": 258, "claim": "Python Wrap is an async generator; result is ModelStopReason (model) / ToolResultEvent (tool)", "verdict": "supported", "source": "middleware: 'An async generator cannot return a value ... a ModelStopReason for a model call, a ToolResultEvent for a tool call'"},
+      {"line": 301, "claim": "Python add_middleware handlers cannot be removed; TS registration returns a cleanup function", "verdict": "supported", "source": "API ref: 'Handlers cannot be removed once registered'; middleware: 'Registration returns a cleanup function'"},
+      {"line": 902, "claim": "max_tokens raises MaxTokensReachedException; Python adds partial message to history; TS MaxTokensError.partialMessage not added", "verdict": "supported", "source": "lifecycle-controls: 'The SDK adds the recovered partial message to conversation history before raising' / 'partialMessage, but the SDK does not add it'"},
+      {"line": 669, "claim": "Bedrock/Anthropic/OpenAI/Google both SDKs; Nova, LiteLLM, Ollama, SageMaker, Writer, MistralAI Python-only; Vercel TS-only", "verdict": "supported", "source": "model-providers Supported Providers table (list is non-exhaustive: Cohere, llama.cpp, LlamaAPI also Python-only)"}
+    ],
+    "also_noted_outside_sample": ["L886 stop-reason priority difference between agent-loop and lifecycle pages: supported", "L679 classifier failure asks a person: supported (approve-before-acting)"]
+  },
+  "checklist": {
+    "repeated": 3,
+    "avoided": 1,
+    "na": 1,
+    "repeated_ids": ["shared-agent-throw-scope", "shared-agent-history-leak", "result-fields-incomplete"],
+    "details": {
+      "loop-diagram-remote": {"status": "avoided", "evidence": "No images; loop diagram is a local ```text block at L51-L61"},
+      "shared-agent-throw-scope": {"status": "repeated", "evidence": "L938 '한 인스턴스에 호출이 겹치면 ... THROW는 겹친 호출에 ConcurrencyException' with no invoke_async scoping and no note that sync agent(...) in an async handler blocks/serializes instead of raising"},
+      "shared-agent-history-leak": {"status": "repeated", "evidence": "L944 recommends per-request agents but never says a shared agent carries the previous request's conversation into the next, and never mentions invoke_async"},
+      "result-fields-incomplete": {"status": "repeated", "evidence": "L726 prints result.stop_reason and result.structured_output; no result.metrics.get_summary() anywhere"},
+      "multi-agent-subject": {"status": "n/a", "evidence": "The 최소 실행 단위 sentence does not appear"}
+    }
+  },
+  "extras": {
+    "architecture_internals_first_line": 43,
+    "sources_total": 23,
+    "official_docs_or_repo": 15,
+    "non_official_share": "8/23 (35%) counting AWS blogs; 6/23 (26%) strictly third-party (dev.to, RockB, LinkedIn, two Medium, Builder Center)",
+    "opens_with_problem": true,
+    "closes_with_choice_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "does not run as pasted (one blocking bug)",
+    "method": "strands-agents 1.64.0 in a temp venv; all 17 Python blocks executed in order with a scripted fake Model (no paid calls)",
+    "results": [
+      "Imports and names in all blocks resolve; Agent accepts aux_model, interventions, retry_strategy, hooks; __call__ accepts invocation_state, structured_output_model, limits, cancel_signal",
+      "L187 hook limiter, L264 middleware, L444 handle_refund, L560 Confirm interrupt/resume (stop_reason interrupt, 1 interrupt, resume list shape accepted) all ran",
+      "L622 OrderIdSteering lacks the abstract `name` -> TypeError at instantiation; L687 build_guarded_agent and L988 serve() fail. With `name` added, the chain ran end to end",
+      "L690 Cedar import fails without the strands-agents[cedar] extra (cedarpy); no install command in the post"
+    ]
+  },
+  "top_issues": [
+    "OrderIdSteering (L627) omits InterventionHandler's abstract `name`, so build_guarded_agent() and the final serve() handler raise TypeError; Cedar also needs strands-agents[cedar], and the post has no install step",
+    "Broken cross-references: L653 cites an earlier request 'Please refund order 4512' that never appears; L685 says build_agent() already had limits/retries/conversation manager/hooks; L750 refers back to a deadline introduced at L997; build_agent() is redefined four times with diverging contents",
+    "Overlong and repetitive (1,140 lines; Guide-no-cap at L493/L618/L1107, Deny short-circuit four times), an internal evidence id '(W8)' leaks at L1109, and three human-fix items (shared-agent THROW scope, history leak + invoke_async, metrics.get_summary()) are still missing"
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "item": "summary-lora",
+  "post": "/tmp/eval-paper/summary-lora-v4.md",
+  "judge_run": 2,
+  "sampling": "Body blocks (prose paragraphs, list items, tables, display equations; headings and images excluded) numbered 1-26 from L16; took blocks 2,5,8,11,14,17,20,23,26, then wrapped to 3 and 18 (table). Claims drawn from L20, L30, L36, L42, L50, L60, L71, L79, L83, L24, L64, L67.",
+  "scores": {"A": 8.5, "B": 7.0, "C": 6.5, "D": 8.0, "E": 7.5, "F": 7.0},
+  "type_scores": {"U1": 7.0, "U2": 7.5},
+  "deductions": {
+    "A": ["Topic-name headings L18, L28, L46, L52, L73; otherwise correct front matter (subtitle, paper_author, paper_doi, two-level categories, use_math) and math markup."],
+    "B": [
+      "L50 '학습 처리량이 전체 파인튜닝보다 25% 높습니다' sits next to 32.5 vs 43.1 tokens/s, so the sentence is internally inconsistent (see F) -> '학습이 약 25% 빨라집니다(처리량 32.5 -> 43.1토큰/초)'.",
+      "L71 formulaic '예를 들어 가상의 설정으로, ... 모델을 생각해 볼 수 있습니다' -> '가령 WikiSQL용으로 ... r=4 행렬을 붙여 학습한 모델도 합친 뒤에는 ...'.",
+      "L38 double '그래서'; L26 '결국 ...'; term mixing 'Adapter-L' (L71) vs '$$\\text{Adapter}^{\\text{L}}$$' (L24), '편향' (L42) vs '바이어스' (L80).",
+      "L54 '데이터가 적을 때도 잘 버티며' is vague -> '학습 예제가 100개뿐일 때도 파인튜닝보다 높으며'."
+    ],
+    "C": [
+      "L60 '앞서 소개한 MNLI 무작위 부분집합' refers to something never introduced.",
+      "L71 '앞서 본 배치 크기 1, 짧은 시퀀스의 온라인 설정' - L24 said only '배치가 작은 온라인·짧은 시퀀스 환경'; batch 1 / seq 128 first appears here. The paragraph also re-defines Adapter-L and switches from GPT-2 latency to a GPT-3 hypothetical.",
+      "L75 repeats L44's task-swap example almost verbatim."
+    ],
+    "D": [
+      "Good: L38 explains why alpha is not tuned; L40 numeric parameter count; L42 relates LoRA's limit to full fine-tuning.",
+      "L48 rank evidence is a list of numbers without saying what 'intrinsic rank' means for the reader beyond the label."
+    ],
+    "E": [
+      "Main GPT-3 175B comparison (Table 4) and rank sweep (Table 6) have no table; L48 and L71 carry 7 numbers in prose.",
+      "L62-67 table is verbatim, one header row, equal cell counts."
+    ],
+    "F": [
+      "L50 '학습 처리량이 전체 파인튜닝보다 25% 높습니다' - the paper reports a '25% speedup'; its own throughput numbers (32.5 -> 43.1 tokens/s per V100, quoted in the next sentence) are +32.6% throughput, i.e. ~25% less time. The quantity changed definition.",
+      "L83 '낮은 내재 랭크를 확인한 실험이 GPT-3에서 영어 과제 두 개를 다룬 데 그치므로' - the paper repeats the rank experiment on GPT-2 (Sec H.2, E2E NLG), so the premise of the writer's assessment is inaccurate.",
+      "L30 intrinsic-dimension definition is not in the paper (unsourced external gloss)."
+    ],
+    "U1": ["Results stop at the prefix-scaling, low-data and latency analyses; the paper's main benchmarks (GPT-3 Table 4, RoBERTa/DeBERTa GLUE, GPT-2 E2E) and the 10,000x / 3x reductions are missing."],
+    "U2": ["Plain-prose TL;DR with no math; limitations grounded (L79-81). Repetition of merging/no-latency (L16, L44, L71, L75) and the swap example (L44, L75)."]
+  },
+  "principles": {
+    "claim_headings": {"status": "not met", "evidence": "L18 '연구 배경' ... L73 '의의와 한계'."},
+    "running_example": {"status": "partly met", "evidence": "WikiSQL->MNLI swap (L44, L71, L75) is a labelled hypothetical, used three times."},
+    "mechanism_order": {"status": "met", "evidence": "L30 -> L32/L36 -> L38 -> L40 -> L44."},
+    "facts_once": {"status": "not met", "evidence": "Merge/no latency four times; Adapter-L defined twice (L24, L71)."},
+    "numbers_with_scope": {"status": "partly met", "evidence": "L50 conflates speedup with throughput; L71 gives batch/latency with model."},
+    "nothing_invented": {"status": "partly met", "evidence": "Hypotheticals labelled, but L83's 'GPT-3 영어 과제 두 개에 그치므로' misstates the evidence base."},
+    "own_assessment": {"status": "met", "evidence": "L83 gives a practical r-selection recommendation."},
+    "length_fit": {"status": "met", "evidence": "About a five-minute read."},
+    "type_shape": {"status": "partly met", "evidence": "Fixed five sections, but no main-results table."},
+    "korean_style": {"status": "partly met", "evidence": "L71 '생각해 볼 수 있습니다', L38 '그래서' x2, term mixing."}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 12,
+    "unsupported": 2,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 20, "claim": "adapter layers inserted sequentially add computation and latency", "verdict": "supported", "source": "Appendix B"},
+      {"line": 30, "claim": "intrinsic dimension = minimum random-subspace dimension reaching near-full performance", "verdict": "unsupported", "source": "Not defined in the paper; Sec 4.1 only cites Aghajanyan et al."},
+      {"line": 36, "claim": "h = W0x + ΔWx = W0x + BAx", "verdict": "supported", "source": "Eq. 3"},
+      {"line": 50, "claim": "training throughput 25% higher than full fine-tuning", "verdict": "wrong", "source": "Sec 4.2: '25% speedup'; footnote 5 gives 32.5 vs 43.1 tokens/s, i.e. +32.6% throughput"},
+      {"line": 50, "claim": "32.5 (FT) vs 43.1 (LoRA) tokens/s per V100 with the same number of model-parallel shards", "verdict": "supported", "source": "Footnote 5"},
+      {"line": 60, "claim": "low-data MNLI uses random subsets, evaluated on the full validation set", "verdict": "supported", "source": "F.3 and Table 16 caption"},
+      {"line": 64, "claim": "Fine-Tune row 60.2 / 85.8 / 88.9 / 89.5", "verdict": "supported", "source": "Table 16"},
+      {"line": 67, "claim": "LoRA row 63.8 / 85.6 / 89.2 / 91.7", "verdict": "supported", "source": "Table 16"},
+      {"line": 71, "claim": "batch 1, short sequence: Fine-Tune/LoRA 19.8 ms", "verdict": "supported", "source": "Table 1: 19.8±2.7 (batch 1, seq 128)"},
+      {"line": 71, "claim": "AdapterL 23.9 ms, +20.7%", "verdict": "supported", "source": "Table 1: 23.9±2.1 (+20.7%)"},
+      {"line": 71, "claim": "AdapterL: one adapter layer per block with an additional LayerNorm", "verdict": "supported", "source": "Sec 3: 'only one per block but with an additional LayerNorm'"},
+      {"line": 79, "claim": "merged weights hinder batching tasks with different A,B; unmerged dynamic selection when latency is not critical", "verdict": "supported", "source": "Sec 4.2"},
+      {"line": 83, "claim": "low-intrinsic-rank evidence limited to two English tasks on GPT-3", "verdict": "unsupported", "source": "Table 6 note: 'We conduct a similar experiment on GPT-2 in Section H.2'"},
+      {"line": 24, "claim": "GPT-2 medium single forward pass, NVIDIA Quadro RTX8000, averaged over 100 trials", "verdict": "supported", "source": "Appendix B"},
+      {"line": 24, "claim": "slow-down can exceed 30% in online, short-sequence settings", "verdict": "supported", "source": "Figure 5 caption: 'as high as over 30%'"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 0,
+    "na": 0,
+    "repeated_ids": [],
+    "note": "human_fixes.yaml has fixes: [] for summary-lora; no '&amp;' entity leak in the post."
+  },
+  "extras": {
+    "description_chars": 123,
+    "description_note": "Description repeats the '처리량이 ... 약 25% 빨랐습니다' wording.",
+    "taxonomy_X1": "Several tags restate the abstract ('Frozen-Pre-trained-Weights', 'Rank-Decomposition-Matrices')."
+  },
+  "top_issues": [
+    "L50 states throughput +25% while quoting 32.5 -> 43.1 tokens/s (+32.6%); the paper's 25% is a speedup.",
+    "Main benchmark results (GPT-3 Table 4, RoBERTa/DeBERTa/GPT-2) and the 10,000x / 3x reductions are absent.",
+    "Flow and repetition: dangling L60 '앞서 소개한', L71 '앞서 본 배치 크기 1', swap example and no-latency claim repeated L44/L71/L75."
+  ]
+}

@@ -1,0 +1,147 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/, https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+  "title": "Strands Agents: Controlling the Model-Driven Agent Loop",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-strands-agents-controlling-the-model-driven-agent-loop/2026-11-04-strands-agents-controlling-the-model-driven-agent-loop.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-strands-agents-controlling-the-model-driven-agent-loop.md",
+  "pr_url": null,
+  "warnings": [
+    "Evidence that misstates its quote was left out: E194 (The quote says only that the package is not part of the core SDK and is tested against Strands releases. It does not say)",
+    "Section '한 번의 agent() 호출 안에 숨은 무한 반복의 위험' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 언급한 훅도 이런 장치에 속합니다.",
+    "Section '모델 호출과 도구 실행을 최종 응답까지 반복하는 추론-행동 사이클': check 1 sentence(s) the evidence may not support: `@tool`로 데코레이트한 함수는 `DecoratedFunctionTool` 객체가 되고, 루프는 이 객체의 `stream` 메서드를 불러 도구를 실행합니다. (unsupported: Evidence describes DecoratedFunctionTool.stream but does not state that the agent loop executes tools by calling this method, nor explicitly that @tool produces this object.)",
+    "Section '타입이 있는 결정을 우선순위대로 적용하는 개입과 스티어링 계층' still has: ['100'] already stated in '수명주기 지점마다 발생하는 타입 안전한 훅 이벤트와 변경 가능한 필드': refer back without repeating: TypeScript `ToolLedgerProvider`는 `maxEntries` 기본값인 100개까지 도구 호출을 보관하고, 이를 넘으면 가장 오래된 항목부터 버립니다 ."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3066.8,
+  "input_tokens": 3069550,
+  "output_tokens": 442051,
+  "estimated_cost_usd": 16.0733,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 217,
+      "failed_calls": 0,
+      "input_tokens": 17978,
+      "output_tokens": 442051,
+      "cache_read_tokens": 1313305,
+      "cache_write_tokens": 1738267,
+      "cost_usd": 16.073253
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2686,
+        "output_tokens": 190,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000364
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2855,
+        "output_tokens": 645,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000608
+      },
+      "read": {
+        "calls": 113,
+        "failed_calls": 0,
+        "input_tokens": 272,
+        "output_tokens": 119391,
+        "cache_read_tokens": 793052,
+        "cache_write_tokens": 236428,
+        "cost_usd": 1.944137
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 6686,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 26670,
+        "cost_usd": 0.267086
+      },
+      "verify": {
+        "calls": 49,
+        "failed_calls": 0,
+        "input_tokens": 196,
+        "output_tokens": 110335,
+        "cache_read_tokens": 416443,
+        "cache_write_tokens": 890796,
+        "cost_usd": 6.828028
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 61571,
+        "cache_read_tokens": 45942,
+        "cache_write_tokens": 239438,
+        "cost_usd": 2.447216
+      },
+      "review": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 29602,
+        "cache_read_tokens": 24648,
+        "cache_write_tokens": 54284,
+        "cost_usd": 0.873538
+      },
+      "fix": {
+        "calls": 23,
+        "failed_calls": 0,
+        "input_tokens": 92,
+        "output_tokens": 112173,
+        "cache_read_tokens": 33220,
+        "cache_write_tokens": 290651,
+        "cost_usd": 3.710371
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 11761,
+        "output_tokens": 1458,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001905
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 17302,
+        "output_tokens": 2293,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002877
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 113,
+        "failed_calls": 0,
+        "input_tokens": 272,
+        "output_tokens": 119391,
+        "cache_read_tokens": 793052,
+        "cache_write_tokens": 236428,
+        "cost_usd": 1.944137
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 101,
+        "failed_calls": 0,
+        "input_tokens": 404,
+        "output_tokens": 320367,
+        "cache_read_tokens": 520253,
+        "cache_write_tokens": 1501839,
+        "cost_usd": 14.126239
+      }
+    }
+  }
+}

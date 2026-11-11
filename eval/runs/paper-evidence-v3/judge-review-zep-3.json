@@ -1,0 +1,100 @@
+{
+  "item": "review-zep",
+  "post": "/tmp/eval-paper/review-zep-v3.md",
+  "source": "https://arxiv.org/html/2501.13956 (v1)",
+  "judge_run": 3,
+  "sample": "body blocks excluding headings and separators, block 3 then every third (blocks 3,6,...,99; lines 40-364)",
+  "scores": {"A": 7.0, "B": 7.5, "C": 6.5, "D": 7.5, "E": 8.0, "F": 6.0},
+  "type_scores": {"R1": 8.5, "R2": 8.0, "R3": 7.0},
+  "extra_scores": {"G": 9.0, "X1": 8.0, "G_note": "blog lint not run; manual: description 125 chars, opens with Zep, numbers from TL;DR; use_math true; no single $ or \\( \\)"},
+  "deductions": {
+    "A": [
+      "L78-80 repeats the definition G=(N,E,phi) already given at L46, and L82 contradicts L48",
+      "L305 '이 지연 수치에서 무엇이 측정되었는지는 구분해서 읽어야 합니다.' is followed by nothing (orphan lead-in)",
+      "L307 heading 'MemGPT와의 비교는 빠졌습니다' is a sentence heading"
+    ],
+    "B": [
+      "L29 '기준값과 결과값은 이 근거에 제시되어 있지 않습니다' and L82 '여기서 인용한 근거에 정의되어 있지 않습니다' leak pipeline wording into the post",
+      "L146 'Graphiti는 Zep의 지식 그래프 엔진입니다.' dropped mid-paragraph between two invalidation sentences",
+      "L364 '몇 가지를 덧붙입니다 ... 마지막으로' with only two items; 8 uses of '할 수 있습니다' (e.g. L167, L247 '답할 수 있습니다' for what simply happens)"
+    ],
+    "C": [
+      "L263 '앞서 소개한 대로, 여러 세션으로 이루어진 다중 세션 대화로 구성됩니다' and L278 '앞서 본 세션 구성' point to an introduction that never happens (500 conversations x 5 sessions x up to 12 messages is never stated)",
+      "L280 retells the Seoul/Busan invalidation inside the DMR section where it does not bear on the DMR result",
+      "L82 says phi is undefined right after L48 defined it"
+    ],
+    "D": [
+      "Running example retold about eight times (L38, L52, L113-115, L156-167, L235-247, L253, L280, L299, L336, L352); hard parts (invalidation, label propagation) get worked examples, but the repetition pads",
+      "L187-193 table plus sentence for a 2-vs-1 vote is over-explained"
+    ],
+    "E": [
+      "L46 and L78 duplicate the same display formula",
+      "L187 hypothetical neighbour table is decorative given L193"
+    ],
+    "F": [
+      "L29 (TL;DR): '이 수치가 상대 하락인지 %p 하락인지, 기준값과 결과값은 이 근거에 제시되어 있지 않습니다' is false; Table 3 gives 94.6->80.4 and 81.8->75.0 with relative deltas, and the post's own table L320/L326 shows them (-2)",
+      "L82: 'phi가 무엇을 나타내는지는 ... 정의되어 있지 않습니다' is false; Section 2 defines phi as 'a formal incidence function' (-2)"
+    ]
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "most H2 are claim noun phrases (L42, L117, L171); L307 is a sentence heading"},
+    "running_example": {"status": "met", "evidence": "Seoul->Busan move from L38 through L336; overused"},
+    "mechanism_order": {"status": "met", "evidence": "invalidation L144-167: problem, rule, timestamps table, worked edge table; label propagation L171-197"},
+    "facts_said_once": {"status": "not met", "evidence": "formula L46/L78; 115k tokens L17/L255/L284; single-session-assistant drop L29/L340/L362; move example ~8 times"},
+    "numbers_with_scope": {"status": "met", "evidence": "L293-295 relative vs %p and 18.3% vs stated 18.5%; L315 relative deltas; model named per number"},
+    "nothing_invented": {"status": "partly met", "evidence": "hypothetical examples labeled (L185, L235, L299, L342); but false meta claims L29, L82"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L348-364 strengths, when to use, unverified community contribution, LLM contradiction dependence"},
+    "length_fitted": {"status": "partly met", "evidence": "~23k chars for a moderate systems paper, inflated by repetition"},
+    "type_shape": {"status": "met", "evidence": "TL;DR with four questions L14-30, limitations section L346"},
+    "korean_style": {"status": "partly met", "evidence": "natural 입니다 register; meta leaks L29/L82; '할 수 있습니다' x8"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 14,
+    "unsupported": 0,
+    "wrong": 1,
+    "unverifiable": 0,
+    "numeric": 8,
+    "examples": [
+      {"line": 40, "claim": "episodes->facts->entities->communities hierarchy; episodic/semantic split from AriGraph, communities from GraphRAG", "verdict": "supported", "source": "Sec 2: 'draws from similar approaches in AriGraph' ... 'builds upon work from GraphRAG' ... 'from episodes to facts to entities to communities'"},
+      {"line": 82, "claim": "phi is not defined in the cited evidence", "verdict": "wrong", "source": "Sec 2: 'phi: E -> N x N represents a formal incidence function'"},
+      {"line": 90, "claim": "reflection step inspired by reflexion to reduce hallucination and widen coverage; entity summary for resolution and retrieval", "verdict": "supported", "source": "Sec 2.2.1"},
+      {"line": 100, "claim": "n = 4 previous messages, two conversation turns", "verdict": "supported", "numeric": true, "source": "Sec 2.2.1: 'n=4, providing two complete conversation turns'"},
+      {"line": 101, "claim": "entity name embedding 1024 dimensions", "verdict": "supported", "numeric": true, "source": "Sec 2.2.1: '1024-dimensional vector space'"},
+      {"line": 109, "claim": "same fact extracted between different entity pairs implements hyper-edges", "verdict": "supported", "source": "Sec 2.2.2"},
+      {"line": 137, "claim": "four timestamps: t'created, t'expired on T'; t_valid, t_invalid on T, stored on edges", "verdict": "supported", "source": "Sec 2.2.3"},
+      {"line": 173, "claim": "label propagation instead of Leiden; new node joins its neighbours' plurality community", "verdict": "supported", "source": "Sec 2.3"},
+      {"line": 209, "claim": "phi maps a query to a 3-tuple of semantic edges, entity nodes, community nodes; API 'highly configurable'", "verdict": "supported", "source": "Sec 3"},
+      {"line": 255, "claim": "LongMemEval_s averages about 115,000 tokens; six question types, not uniformly distributed", "verdict": "supported", "numeric": true, "source": "Sec 4.3"},
+      {"line": 263, "claim": "DMR: Zep retrieved the top 10 nodes and edges", "verdict": "supported", "numeric": true, "source": "Sec 4.2: 'retrieve the top 10 most relevant nodes and edges'"},
+      {"line": 278, "claim": "each DMR conversation has only 60 messages", "verdict": "supported", "numeric": true, "source": "Sec 4.2"},
+      {"line": 291, "claim": "Zep gpt-4o: 71.2%, 2.58 s, IQR 0.684 s, 1.6k tokens", "verdict": "supported", "numeric": true, "source": "Table 2"},
+      {"line": 325, "claim": "single-session-preference gpt-4o 20.0% -> 56.7%, 184% up", "verdict": "supported", "numeric": true, "source": "Table 3"},
+      {"line": 330, "claim": "single-session-user gpt-4o 81.4% -> 92.9%, 14.1% up", "verdict": "supported", "numeric": true, "source": "Table 3 (identical to gpt-4o-mini row)"}
+    ],
+    "outside_sample": [
+      {"line": 29, "claim": "TL;DR: whether the single-session-assistant drop is relative or %p and the base/result values are not given", "verdict": "wrong", "source": "Table 3 gives 94.6->80.4 (17.7% down) and 81.8->75.0 (9.06% down); relative"}
+    ],
+    "tables_cell_check": "Tables at L265-274 (Table 1), L286-291 (Table 2), L317-330 (Table 3) match the paper cell for cell"
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "items": [
+      {"id": "inline-math-delimiters", "result": "avoided", "evidence": "no \\( \\) or \\[ \\] anywhere; inline math is $$...$$ (L48)"},
+      {"id": "longmemeval-tldr-relative", "result": "avoided", "evidence": "L28 gives absolute 60.2%->71.2% and 55.4%->63.8%; no %포인트 (15.2/18.5 not stated in TL;DR)"},
+      {"id": "longmemeval-results-relative", "result": "avoided", "evidence": "L293-295 absolute 55.4/63.8 and 60.2/71.2, '퍼센트포인트 차이가 아니라 기준선 대비 상대 향상률'"},
+      {"id": "longmemeval-baseline-misattributed", "result": "avoided", "evidence": "L295 'gpt-4o에서 Zep은 71.2%를 기록해 전체 컨텍스트의 60.2%를 넘었습니다'"},
+      {"id": "longmemeval-185-arithmetic", "result": "avoided", "evidence": "L295 '11.0%p ... 60.2%로 나누면 약 18.3% ... 초록의 \"최대 18.5% 향상\"은 저자들이 보고한 값'"},
+      {"id": "missing-description", "result": "avoided", "evidence": "L8 description opens with 'Zep은', numbers 60.2/71.2/28.9/2.58 from TL;DR"}
+    ]
+  },
+  "extras": {},
+  "top_issues": [
+    "TL;DR L29 falsely says the single-session-assistant drop's base/result values and relative-vs-%p are not given (Table 3 and the post's own L326 give them); pipeline wording leaks",
+    "L78-82 repeats the graph definition and falsely says phi is undefined, contradicting L48 and the paper",
+    "Repetition and broken flow: the move example retold ~8 times (incl. the DMR section L280), false '앞서' cross-refs at L263/L278, orphan lead-in at L305"
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "item": "review-dpo",
+  "post": "/tmp/eval-paper/review-dpo-v3.md",
+  "source": "https://arxiv.org/html/2305.18290v3",
+  "judge_run": 2,
+  "scores": {"A": 8, "B": 8, "C": 8, "D": 9, "E": 7, "F": 8, "G": 8},
+  "type_scores": {"R1": 9, "R2": 9, "R3": 8, "X1": 7.5},
+  "score_evidence": {
+    "A": "Arc is coherent and headings are claim noun phrases. Deductions: L139-140 display math uses a bare '\\\\' line break outside an aligned environment and nests single '$y_{w}$' inside \\text{} within $$ (rendering/lint risk); KL written with \\mid\\mid at L61/L73/L287 but \\Vert at L225 (rubric: \\Vert for KL); same image embedded twice (L47 and L91).",
+    "B": "Consistent '입니다' register, no '~한다' cells. Deductions: L117 heading '정책에 대한 최대우도' (particle calque; rewrite '정책의 최대우도, 곧 DPO 손실'); L295 'PPO 기반 인간 피드백 기반 강화학습(RLHF)' (double 기반, re-expansion; rewrite 'PPO 기반 RLHF'); L73 '...무관하다는 사실입니다' noun frame (rewrite 'Z(x)는 x와 참조 정책에만 의존하므로 최적화 대상 π와 무관합니다'); L45 '논문은 이 절차를 \"복잡하고 자주 불안정한\" 과정으로 규정합니다' restates L41.",
+    "C": "Concepts introduced before use; back-references accurate. Deduction for stitched repetition: L85 and L115 both re-point to the L79 ratio example ('앞서 예시에서 두 응답의 비율이 Z(x) 없이 나왔던 것'), L93 re-describes the figure L49 already described.",
+    "D": "Hard steps get numeric worked examples clearly marked as hypothetical (L79, L127, L152-161, L183, L197); easy background not padded much.",
+    "E": "Good tables (hyperparameters L267-273, gradient-weight table L154-159 arithmetic correct, human-study table L309-317 matches source cell for cell, three-way normaliser table L243-247). Deduction: identical pipeline figure '-1.png' at L47 and L91 with two near-duplicate captions (L49, L93).",
+    "F": "All 15 sampled claims supported. Deductions outside the sample: L291 '그림을 눈으로 읽어 보면 ... DPO는 모든 KL 값에서 가장 높은 기대 보상을 기록했습니다' is a figure reading stated beyond the paper text ('highest reward while still achieving low KL'); L223 'PPO가 불안정한 이유는 ... 정규화항을 따로 추정해야 하기 때문' is stronger than the paper's 'could have high variance, making learning unstable'; L235 '샘플 하나짜리 추정이니 분산 문제를 근본적으로 없애지는 못합니다' is the writer's inference not marked as such.",
+    "G": "use_math true; description 120 chars, opens with 'DPO', numbers 61%/57% appear in TL;DR; https arXiv link. Deduction: single '$' inside a $$ block at L140.",
+    "R1": "Full derivation (optimal policy, reparameterisation, gradient, equivalence classes, Plackett-Luce, actor-critic), setup and all three experiments plus qualitative samples and PyTorch code (L263 matches the paper's listing).",
+    "R2": "Intuition -> formula -> worked numbers -> table per mechanism; length (366 lines) somewhat inflated by repetition.",
+    "R3": "TL;DR answers the four questions; L34 '사람 평가에서도 DPO는 PPO 대비 58% 승률' omits the matchup temperatures (DPO 0.25 vs PPO 0). Closing (L353-361) is the writer's judgment with paper-stated limitations; omits the paper's other-modalities direction.",
+    "X1": "Category Finetuning fits. Tags: 'RL-Free-Preference-Learning' and 'KL-Constrained-Reward-Maximization' are restated phrases rather than reusable tags; six tags is on the heavy side."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L39 '보상 모델과 온라인 RL을 함께 돌려야 하는 RLHF의 무게', L281 'IMDb 감성 제어에서 PPO를 엄격히 지배하는 보상-KL 프런티어'"},
+    "running_example": {"status": "met", "evidence": "IMDb prefix '이 영화는 처음엔' with y_w/y_l from L45 through L355"},
+    "mechanism_order": {"status": "met", "evidence": "L131-169: problem, gradient formula, weight meaning, numeric table, ablation reason"},
+    "facts_said_once": {"status": "partly met", "evidence": "figure + caption twice (L47-49, L91-93); Z(x)-free ratio point L79/L85/L115; '복잡하고 자주 불안정' L18/L41/L45"},
+    "numbers_with_scope": {"status": "partly met", "evidence": "L34 58% without temperatures; L323 'DPO 0.36, PPO 0.26' without temperature 0 and GPT-4 (C) prompt"},
+    "nothing_invented": {"status": "partly met", "evidence": "hypotheticals marked (L79 '수치는 모두 가상입니다'); but L291 figure-read 'all KL values' and unmarked inference L235"},
+    "writer_assessment": {"status": "met", "evidence": "L353 '이 포스트의 판단으로는 ... DPO는 PPO 대신 먼저 시도할 기본값입니다', L361 three checks"},
+    "length_fitted": {"status": "partly met", "evidence": "~59KB; repetition rather than difficulty drives some length"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR four questions L15-35, '한계와 시사점' L351"},
+    "korean_style": {"status": "partly met", "evidence": "L117 calque heading, L295 double 기반, L73 noun frame"}
+  },
+  "sampling": "Body paragraphs (non-heading, non-image, non-display-math blank-line blocks after front matter; 97 total), starting at #2 and every third (#2,5,8,...,95); 15 claims drawn from these.",
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 43, "claim": "RLHF pipeline follows Ziegler et al. and Stiennon et al.; three phases", "verdict": "supported", "source": "'We review the RLHF pipeline in Ziegler et al. (and later [40, 1, 28]). It usually includes three phases'"},
+      {"line": 81, "claim": "Even with MLE r_phi, estimating Z(x) is expensive", "verdict": "supported", "source": "'Even if we use the MLE estimate r_phi ... it is still expensive to estimate the partition function Z(x)'"},
+      {"line": 129, "claim": "Same derivation possible under Plackett-Luce", "verdict": "supported", "source": "'we can similarly derive expressions under the more general Plackett-Luce models ... Appendix A.3'"},
+      {"line": 165, "claim": "Naive probability-ratio objective (no weight) degenerates the LM", "verdict": "supported", "source": "'a dynamic, per-example importance weight that prevents the model degeneration that we find occurs with a naive probability ratio objective'"},
+      {"line": 269, "claim": "beta 0.1 default, 0.5 for TL;DR summarization", "verdict": "supported", "number": true, "source": "App. B: 'we use a beta=0.1 ... For TL;DR summarization, we use beta=0.5'"},
+      {"line": 270, "claim": "batch 64, RMSprop, lr 1e-6, linear warmup 0->1e-6 over 150 steps", "verdict": "supported", "number": true, "source": "'batch size of 64 and the RMSprop optimizer with a learning rate of 1e-6 ... warmup ... over 150 steps'"},
+      {"line": 279, "claim": "GPT-J zero-shot (summarization), Pythia-2.8B 2-shot (dialogue) prompting baselines", "verdict": "supported", "number": true, "source": "'zero-shot prompting with GPT-J ... 2-shot prompting with Pythia-2.8B'"},
+      {"line": 287, "claim": "Sweep: PPO target KL {3,6,9,12}, beta {0.05,0.1,1,5}, alpha {0.05,0.1,0.5,1}; 22 runs", "verdict": "supported", "number": true, "source": "'target KL in {3,6,9,12} for PPO, beta in {0.05,0.1,1,5}, alpha in {0.05,0.1,0.5,1} ... 22 runs in total'"},
+      {"line": 287, "claim": "Evaluated every 100 steps; sequence-level KL = sum of per-timestep KL", "verdict": "supported", "number": true, "source": "'After each 100 training steps ... sequence-level KL (That is, the sum of the per-timestep KL-divergences)'"},
+      {"line": 295, "claim": "Sentiment uses gpt2-large; models up to 6B overall; matches/improves PPO in summarization and dialogue", "verdict": "supported", "number": true, "source": "App. C.1 'gpt2-large as a base model'; abstract/intro 'up to 6B parameters'"},
+      {"line": 303, "claim": "Human study: DPO (temp 0.25), SFT (0.25), PPO (1.0) vs greedy PPO", "verdict": "supported", "number": true, "source": "'the highest (DPO, temp. 0.25), the lowest (PPO, temp. 1.0), and a middle-performing (SFT, temp. 0.25) ... against greedily-sampled PPO'"},
+      {"line": 303, "claim": "Two raters per DPO-PPO comparison, 275 judgments; table reports 272", "verdict": "supported", "number": true, "source": "App. D.3 'assigning two humans to each comparison, producing 275 judgments for DPO-PPO'; Table 2 'N respondents 272'"},
+      {"line": 319, "claim": "SFT matchup had one rater per comparison, hence no H-H agreement", "verdict": "supported", "source": "'We sample 125 SFT comparisons, assigning a single human to each'; Table 2 H-H '-' for SFT"},
+      {"line": 327, "claim": "DPO only computationally efficient method improving over preferred completions; similar or better than Best of 128", "verdict": "supported", "number": true, "source": "'DPO is the only computationally efficient method that improves over the preferred completions ... similar or better performance to the computationally demanding Best of 128 baseline'"},
+      {"line": 349, "claim": "In '7 plus 2', GPT-4 judged the wrong GT answer correct over DPO; WWII answer verbose, plausible but factually wrong", "verdict": "supported", "source": "Table 10 'GPT-4 incorrectly states that the ground truth is correct'; Table 9 'verbose and plausible, but contains factually incorrect information'"}
+    ],
+    "numbers_checked": 9
+  },
+  "checklist": {
+    "repeated": 1,
+    "avoided": 12,
+    "na": 4,
+    "repeated_ids": ["cnn-dm-prompt-variant"],
+    "details": {
+      "implementation-fragment": {"status": "avoided", "evidence": "L255 explains pi_ref = pi^SFT or MLE on y_w before the loss step; no broken fragment"},
+      "beta-tldr": {"status": "avoided", "evidence": "L269 '0.1 (TL;DR 요약은 0.5)'"},
+      "future-work-ranking-invented": {"status": "avoided", "evidence": "L357 no conditional-preference direction; mentions GPT-4 prompt dependence (other-modalities direction omitted)"},
+      "plackett-luce-not-future": {"status": "avoided", "evidence": "L129, L203-219 present the Plackett-Luce loss as derived"},
+      "ppo-clip-objective": {"status": "n/a", "evidence": "no PPO clipped objective in post"},
+      "partition-function-size": {"status": "avoided", "evidence": "L79-81 sum over all continuations; no quadratic claim"},
+      "cnn-dm-prompt-variant": {"status": "repeated", "evidence": "L323 'DPO 0.36, PPO 0.26' with no GPT-4 (C) prompt named (and no temperature)"},
+      "human-study-columns": {"status": "avoided", "evidence": "L309 '기준: PPO 온도 0 | DPO | SFT | PPO-1'"},
+      "human-study-respondents": {"status": "avoided", "evidence": "L311 '272 | 122 | 199'"},
+      "multi-judgment-comparisons": {"status": "avoided", "evidence": "L303 two raters for DPO-PPO; L319 SFT single rater; no misattribution"},
+      "overoptimization-figure-ref": {"status": "n/a", "evidence": "L357 mentions over-optimization but not the late-training drop"},
+      "gradient-u-definition": {"status": "n/a", "evidence": "L146 does not define u explicitly"},
+      "gradient-sigma-argument": {"status": "avoided", "evidence": "L140 and L150 sigma(r_hat(y_l) - r_hat(y_w)), '틀리게 매긴 쌍일수록 1에 가까워집니다'"},
+      "best-of-n-invented": {"status": "avoided", "evidence": "L337 '약 64~128 샘플에서 포화'; no 64-vs-128 gap claim"},
+      "excluded-participant": {"status": "n/a", "evidence": "the 25-participant count is not stated (L307 '25개씩' is judgments per rater)"},
+      "missing-description": {"status": "avoided", "evidence": "L9 starts with 'DPO', numbers 61%/57% from TL;DR"},
+      "arxiv-https": {"status": "avoided", "evidence": "L366 https://arxiv.org/pdf/2305.18290v3"}
+    }
+  },
+  "extras": {},
+  "top_issues": [
+    "Duplicated pipeline figure and caption (L47-49 and L91-93), plus the Z(x)-free ratio point restated at L79/L85/L115.",
+    "Claims beyond the paper text: L291 figure reading 'DPO는 모든 KL 값에서 가장 높은 기대 보상', L223 causal claim on PPO instability, L235 unmarked inference.",
+    "Scope gaps: L323 CNN/DailyMail win rates lack the GPT-4 (C) prompt and temperature 0; L34 human 58% lacks matchup temperatures; L139-140 math markup ('\\\\' outside aligned, single $ inside $$)."
+  ]
+}

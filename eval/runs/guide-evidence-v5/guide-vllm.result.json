@@ -1,0 +1,158 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.vllm.ai/en/latest/getting_started/quickstart.html, https://arxiv.org/abs/2309.06180, https://blog.vllm.ai/2023/06/20/vllm.html",
+  "title": "vLLM and PagedAttention: KV-Cache Paging, Configuration, Deployment",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-vllm-and-pagedattention-kv-cache-paging-configuration-deployment/2026-11-04-vllm-and-pagedattention-kv-cache-paging-configuration-deployment.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-vllm-and-pagedattention-kv-cache-paging-configuration-deployment.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '연속 사전할당 방식이 낭비하는 GPU 메모리 60~80%': check 1 sentence(s) the evidence may not support: 어림 계산으로 옮기면, 40GB의 약 30%인 12GB 남짓이 요청들의 KV 캐시 몫으로 남습니다 [[E30]]. (numbers not in its evidence)",
+    "Section '연속 사전할당 방식이 낭비하는 GPU 메모리 60~80%' still has: the section must start with its '## ' heading (연속 사전할당 방식이 낭비하는 GPU 메모리 60~80%) | numbers ['12'] are not in the cited evidence: 어림 계산으로 옮기면, 40GB의 약 30%인 12GB 남짓이 요청들의 KV 캐시 몫으로 남습니다 .",
+    "Section 'OS 가상 메모리를 본뜬 고정 크기 KV 블록과 블록 단위 어텐션' still has: ['20.4', '38.2'] already stated in '연속 사전할당 방식이 낭비하는 GPU 메모리 60~80%': refer back without repeating: 이와 대조적으로 KV 캐시를 연속 공간에 두는 기존 시스템에서는 KV 캐시 메모리 중 실제 토큰 상태 저장에 쓰이는 비율이 20.4%~38.2%에 그쳤습니다 . | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 시퀀스당 낭비가 최대 $$B-1$$칸으로 묶이기 때문에 실제 낭비율이 앞서 언급한 4% 미만 수준으로 내려가고, 남는 메모리만큼 더 많은 시퀀스를 한 배치에 넣을 수 있습니다 .",
+    "Section '중앙 스케줄러, KV 캐시 매니저, 블록 테이블로 이어지는 논리→물리 블록 변환 경로' still has: the section must start with its '## ' heading (중앙 스케줄러, KV 캐시 매니저, 블록 테이블로 이어지는 논리→물리 블록 변환 경로)",
+    "Section 'V1 엔진 코어의 통합 스케줄러, 격리된 실행 루프, 해시 기반 프리픽스 캐싱': check 2 sentence(s) the evidence may not support: 로컬 적중 토큰 수를 커넥터에 넘기는 규칙을 설명용 숫자로 따라가 보면, 1,000토큰 프롬프트에서 로컬 적중이 400토큰이고 원격 적중이 800토큰일 때 원격에서 불러올 부분은 $$800 - 400 = 400$$토 (numbers not in its evidence) | 발췌의 마지막 뺄셈을 적용하면 새로 프리필할 토큰은 $$1000 - 800 = 200$$개입니다. (numbers not in its evidence)",
+    "Section 'V1 엔진 코어의 통합 스케줄러, 격리된 실행 루프, 해시 기반 프리픽스 캐싱' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 본 선점 함수가 `num_computed_tokens`를 0으로 되돌리기만 해도 재계산이 성립하는 것도 이 표현 덕분입니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 블록 단위 공유로 프리픽스 연산을 건너뛰는 원리는 앞서 다룬 카피 온 라이트 공유 프리픽스와 같습니다. | ['16'] already stated in 'OS 가상 메모리를 본뜬 고정 크기 KV 블록과 블록 단위 어텐션': refer back without repeating: `block_size`가 16일 때 로컬에서 2블록이 적중하면 재사용할 수 있는 토큰은 32개입니다 . | numbers ['1,000', '400', '800'] without evidence: 로컬 적중 토큰 수를 커넥터에 넘기는 규칙을 설명용 숫자로 따라가 보면, 1,000토큰 프롬프트에서 로컬 적중이 400토큰이고 원격 적중이 800토큰일 때 원격에서 불러올 부분은 $$800 - 400 = 400$$토큰뿐입니다. | ['1,000'] already stated in 'OS 가상 메모리를 본뜬 고정 크기 KV 블록과 블록 단위 어텐션': refer back without repeating: 로컬 적중 토큰 수를 커넥터에 넘기는 규칙을 설명용 숫자로 따라가 보면, 1,000토큰 프롬프트에서 로컬 적중이 400토큰이고 원격 적중이 800토큰일 때 원격에서 불러올 부분은 $$800 - 400 = 400$$토큰뿐입니다.",
+    "Section 'uv와 사전 컴파일 커널로 끝내는 플랫폼별 설치': check 1 sentence(s) the evidence may not support: vLLM은 Linux 전용입니다. (unsupported: Linux is the OS requirement in the GPU guide, but the docs give macOS for Apple Silicon (vLLM-Metal) and list Apple silicon for CPU; calling all of vLLM Linux-only widens the scope.)",
+    "Section 'gpu-memory-utilization에서 시작하는 KV 캐시 크기와 배치 상한 설정' still has: evidence ['E51'] was already referred back to once; do not restate it again: 논문은 대부분의 워크로드에서 GPU를 효율적으로 쓸 만큼 크고 내부 단편화(fragmentation)는 작은 값으로 16을 골랐습니다 . | ['16'] already stated in 'OS 가상 메모리를 본뜬 고정 크기 KV 블록과 블록 단위 어텐션': refer back without repeating: 논문은 대부분의 워크로드에서 GPU를 효율적으로 쓸 만큼 크고 내부 단편화(fragmentation)는 작은 값으로 16을 골랐습니다 . | an evidence marker stands for a word; state the fact and put the marker at the end of the sentence: 이 남은 공간을 [[E52]]에서 본 고정 크기 물리 블록으로 잘라 풀을 만듭니다.",
+    "Section 'OOM을 피하는 메모리 절약 수단: 컨텍스트 제한, CUDA 그래프, 양자화, 텐서 병렬' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: Unsloth의 가이드는 동적 float8 양자화에 `--quantization fp8`을 쓰고, 앞서 설명한 fp8 KV 캐시와 함께 쓰라고 안내합니다 .",
+    "Section 'Docker 이미지 vllm/vllm-openai와 production-stack Helm 차트로 하는 배포' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 호스트의 Hugging Face 캐시를 마운트해 컨테이너를 다시 띄울 때 모델을 새로 받지 않게 하고, `HF_TOKEN`을 환경 변수로 넘기며, 앞서 본 서버의 기본 포트를 그대로 엽니다 . | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 소개한 premai.io의 비교 글은 단독 vLLM이 맡는 범위를 이렇게 정리합니다.",
+    "Section '/metrics의 KV 캐시 사용률 지표와 그 해석상 함정' still has: flags or arguments no official page mentions; use the documented ones or leave them out: vllm:gpu_cache_usage_perc, vllm:num_requests_running, vllm:num_requests_waiting, process_virtual_memory_bytes, process_resident_memory_bytes",
+    "Flags/metrics the official pages fetched for this guide never mention; verify them against the current reference: vllm:gpu_cache_usage_perc, vllm:num_requests_running, vllm:num_requests_waiting, process_virtual_memory_bytes, process_resident_memory_bytes",
+    "[image] line 148: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation1.gif",
+    "[image] line 193: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/annimation3.gif",
+    "[image] line 760: remote image not localized (linked to its source): https://vllm.ai/blog-assets/figures/perf_a100_n3_light.png"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3605.4,
+  "input_tokens": 3178546,
+  "output_tokens": 458376,
+  "estimated_cost_usd": 18.1278,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 211,
+      "failed_calls": 0,
+      "input_tokens": 27923,
+      "output_tokens": 458376,
+      "cache_read_tokens": 1167001,
+      "cache_write_tokens": 1983622,
+      "cost_usd": 18.127814
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 1363,
+        "output_tokens": 631,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000452
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2192,
+        "output_tokens": 607,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000523
+      },
+      "read": {
+        "calls": 93,
+        "failed_calls": 0,
+        "input_tokens": 224,
+        "output_tokens": 80225,
+        "cache_read_tokens": 631595,
+        "cache_write_tokens": 168647,
+        "cost_usd": 1.350629
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 6670,
+        "cache_read_tokens": 1856,
+        "cache_write_tokens": 17597,
+        "cost_usd": 0.222143
+      },
+      "verify": {
+        "calls": 52,
+        "failed_calls": 0,
+        "input_tokens": 208,
+        "output_tokens": 120720,
+        "cache_read_tokens": 407029,
+        "cache_write_tokens": 927604,
+        "cost_usd": 7.216072
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 62576,
+        "cache_read_tokens": 50820,
+        "cache_write_tokens": 285212,
+        "cost_usd": 2.698132
+      },
+      "review": {
+        "calls": 15,
+        "failed_calls": 0,
+        "input_tokens": 60,
+        "output_tokens": 28678,
+        "cache_read_tokens": 27381,
+        "cache_write_tokens": 57674,
+        "cost_usd": 0.873117
+      },
+      "fix": {
+        "calls": 32,
+        "failed_calls": 0,
+        "input_tokens": 128,
+        "output_tokens": 155434,
+        "cache_read_tokens": 48320,
+        "cache_write_tokens": 526888,
+        "cost_usd": 5.76296
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 23688,
+        "output_tokens": 2835,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003786
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 27243,
+        "output_tokens": 4073,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004761
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 93,
+        "failed_calls": 0,
+        "input_tokens": 224,
+        "output_tokens": 80225,
+        "cache_read_tokens": 631595,
+        "cache_write_tokens": 168647,
+        "cost_usd": 1.350629
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 114,
+        "failed_calls": 0,
+        "input_tokens": 456,
+        "output_tokens": 374078,
+        "cache_read_tokens": 535406,
+        "cache_write_tokens": 1814975,
+        "cost_usd": 16.772424
+      }
+    }
+  }
+}

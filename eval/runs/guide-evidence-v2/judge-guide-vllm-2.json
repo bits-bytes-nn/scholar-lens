@@ -1,0 +1,92 @@
+{
+  "item": "guide-vllm",
+  "post": "/tmp/eval-guide/guide-vllm-v2.md",
+  "judge_run": 2,
+  "sampling": "prose paragraphs (headings, tables, code, images, $$ blocks excluded) starting at paragraph 2, every third (2,5,8,...,146); 15 claims drawn from paragraphs 2,32,35,44,62,68,77,86,89,98,116,119,125,131,143 plus paragraph 5's neighbour L33",
+  "scores": {"A": 7.5, "B": 7.5, "C": 7.0, "D": 8.5, "E": 8.5, "F": 8.5, "T1": 7.5, "T2": 8.0, "T3": 7.5},
+  "deductions": {
+    "A": ["L347 '표의 근거는입니다.' and L682 '출처는입니다.' are broken sentences with the citation dropped", "Sources list duplicates Quickstart (L702/L721), the paper (L709/L722) and the vLLM blog (L708/L723)"],
+    "B": ["L347/L682 broken sentences", "L548 meta-writing '이 글이 이 인자에 대해 드는 수치는 서드파티 자료에서 나온 것입니다' -> '이 인자의 아래 수치는 서드파티 자료입니다'", "'~편이 안전합니다/낫습니다' formula repeated (L151, L325, L417, L517, L692 ...)"],
+    "C": ["L517 '앞서 소개한 fp8 KV 캐시의 절감 수치' points to a number the post never gives", "L521 '앞서 본 예처럼' (the 24 GB + 10 GiB offload example) was never shown", "L248 '앞서 설명했듯 매 반복의 입력은 ... 이어 붙인 시퀀스 하나' was never explained earlier"],
+    "D": ["Strong worked examples (L85-96 block table, L177-183 CoW table, L236-242 free-block arithmetic); Metal roadmap L363-369 is more detail than a vLLM guide reader needs"],
+    "E": ["No OpenAI client request example although the server is the running example's main surface (L429, L594)", "duplicate source entries"],
+    "F": ["L46 '원 예시는 이를 배치 연산의 약 40% 낭비로 요약' credits an unnamed source", "L112 '한 분석은 ... 마이크로초 단위' unnamed attribution", "L548 Unsloth's '--swap-space' 4GB default is a flag absent from current engine args (stale third-party option, though attributed)", "L558 omits that the CPU docs now call VLLM_CPU_KVCACHE_SPACE 'a legacy setting; use --kv-cache-memory-bytes instead'"],
+    "T1": ["no client request code; CPU docker command L588 carries a '<CPU cores for inference>' placeholder and needs a locally built 'vllm-cpu-env' image; scale-to-zero YAML L636-641 omits the keepalive trigger the text says to add"],
+    "T3": ["older-docs-only flag behaviour kept: L149 block-size platform limits, L429 v0.8.5.post1 extra_body, L437 v0.7.1 config precedence (rubric: such flags/defaults should be absent)", "L147 says no numeric default for --block-size, but the current CPU page gives 128 on CPU"]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L56 '고정 크기 블록과 블록 테이블로 가상화한 KV 캐시', L664 '폭넓은 하드웨어와 높은 동시성에 강하지만 만능은 아닌 vLLM의 자리'"},
+    "running_example": {"status": "met", "evidence": "Qwen/Qwen2.5-1.5B-Instruct chat service used from L132 through L612"},
+    "mechanism_order": {"status": "met", "evidence": "block table: problem L25-33, design L58-71, formula L104, worked example L85-96"},
+    "facts_once": {"status": "partly met", "evidence": "60-80% waste at L13, L33, L118; UC Berkeley/vLLM definition at L13 and L50; hardware list at L15 and L333"},
+    "numbers_with_scope": {"status": "met", "evidence": "L54 separates paper 2-4x (vs FasterTransformer/Orca) from blog 24x (vs HF); L676-680 table with GPU/model/condition"},
+    "nothing_invented": {"status": "partly met", "evidence": "illustrative examples are labelled (L37, L132, L175), but L46 '원 예시' and L112 '한 분석' are unnamed sources"},
+    "writer_assessment_end": {"status": "met", "evidence": "L696 '이 글의 판단으로는 ... vLLM이 가장 무난한 출발점입니다' with TensorRT-LLM/SGLang/Ollama conditions"},
+    "length_fit": {"status": "partly met", "evidence": "~700 lines; Metal roadmap (L363-369) and CPU NUMA details are long relative to their importance"},
+    "guide_shape": {"status": "met", "evidence": "TL;DR L11, problem section L17, architecture L56 before install L373, ends with when-to-choose L664-696"},
+    "korean_style": {"status": "partly met", "evidence": "natural 입니다 register overall; broken sentences L347, L682; repeated '~편이 안전합니다'"}
+  },
+  "claims": {
+    "checked": 15, "supported": 15, "unsupported": 0, "wrong": 0, "unverifiable": 0,
+    "examples": [
+      {"line": 15, "claim": "CPU: x86, ARM AArch64, Apple silicon, IBM Z; GPU: CUDA, ROCm, XPU, Apple Silicon via vLLM-Metal", "verdict": "supported", "source": "installation/: 'GPU NVIDIA CUDA AMD ROCm Intel XPU Apple Silicon (via vLLM-Metal) CPU Intel/AMD x86 ARM AArch64 Apple silicon IBM Z (S390X)'"},
+      {"line": 33, "claim": "effective memory as low as 20.4%", "verdict": "supported", "source": "arXiv 2309.06180 §3: 'the actual effective memory in previous systems can be as low as 20.4%'"},
+      {"line": 145, "claim": "paper chose 16 as default block size", "verdict": "supported", "source": "§7.2: 'Accordingly, vLLM sets its default block size as 16.'"},
+      {"line": 147, "claim": "--block-size accepts None meaning default, no numeric default listed", "verdict": "supported", "source": "engine_args: 'Size of a contiguous cache block in number of tokens. Accepts None (meaning \"use default\").'"},
+      {"line": 193, "claim": "beam k=4 example frees blocks 2, 4, 5, 8", "verdict": "supported", "source": "§4.4: 'vLLM frees all physical blocks whose reference counts reach 0 (blocks 2, 4, 5, 8)'"},
+      {"line": 263, "claim": "block sizes 16-64: swap and recompute comparable end-to-end", "verdict": "supported", "source": "§7.3: 'For medium block sizes from 16 to 64, the two methods exhibit comparable end-to-end performance.'"},
+      {"line": 292, "claim": "read+attention kernel adapted from FasterTransformer, one warp per block, variable sequence lengths", "verdict": "supported", "source": "§5.1: 'We adapt the attention kernel in FasterTransformer ... we assign a GPU warp to read each block ... support for variable sequence lengths'"},
+      {"line": 375, "claim": "Linux, Python 3.11-3.14, compute capability >= 7.5 (T4, RTX20xx, A100, L4, H100, B200)", "verdict": "supported", "source": "docs gpu.md 'Python: 3.11 -- 3.14'; gpu.cuda.inc.md 'compute capability 7.5 or higher (e.g., T4, RTX20xx, A100, L4, H100, B200, etc.)'"},
+      {"line": 388, "claim": "vllm download-kernels installs FlashInfer precompiled kernels; without them startup adds minutes on Hopper+/Blackwell; rerun after each install/upgrade", "verdict": "supported", "source": "gpu.cuda.inc.md: 'Without them, vLLM downloads and compiles kernels at startup, which can add several minutes on Hopper and newer GPUs, especially Blackwell ... Run it ... after every vLLM install or upgrade'"},
+      {"line": 431, "claim": "--api-key or VLLM_API_KEY; multiple keys accepted for rotation", "verdict": "supported", "source": "quickstart: 'You can pass multiple keys after --api-key, and the server will accept any of the keys passed, this can be useful for key rotation.'"},
+      {"line": 523, "claim": "--tensor-parallel-size (-tp) default 1", "verdict": "supported", "source": "engine_args: '--tensor-parallel-size, -tp ... Default: 1'"},
+      {"line": 548, "claim": "Unsloth: gpu_memory_utilization default 0.9, try 0.95/0.97; swap space default 4GB", "verdict": "supported (attributed to Unsloth; the --swap-space flag itself is absent from current engine args)", "source": "Unsloth: 'Default 0.9 ... Try setting this to 0.95 or 0.97'; '--swap-space Default is 4GB'"},
+      {"line": 568, "claim": "CPU defaults: max-num-seqs 256/128 x world_size, max-num-batched-tokens 4096/2048 x world_size (offline/online)", "verdict": "supported", "source": "installation/cpu FAQ: 'Offline Inference: 4096 * world_size Online Serving: 2048 * world_size ... Offline Inference: 256 * world_size Online Serving: 128 * world_size'"},
+      {"line": 604, "claim": "starcoder2-15b at gpu_memory_utilization=0.5: block_size 16, num_gpu_blocks 5857, num_cpu_blocks 3276; 5857x16=93,712", "verdict": "supported", "source": "issue #8612 metrics: 'block_size=\"16\" ... gpu_memory_utilization=\"0.5\",num_cpu_blocks=\"3276\",num_gpu_blocks=\"5857\"'"},
+      {"line": 682, "claim": "LMSYS cut serving GPUs by 50%, 30K daily / 60K peak requests", "verdict": "supported", "source": "vLLM blog: 'LMSYS was able to cut the number of GPUs used for serving the above traffic by 50%. vLLM has been handling an average of 30K requests daily and a peak of 60K'"}
+    ],
+    "outside_sample_observations": ["L517 dangling 'fp8 savings number' that never appears", "L46 unnamed '원 예시' 40%", "L558 legacy status of VLLM_CPU_KVCACHE_SPACE not mentioned"]
+  },
+  "checklist": {
+    "source": "human_fixes.yaml guide-vllm has fixes: []; the notes' generic guide checks are used",
+    "repeated": 2, "avoided": 4, "na": 0,
+    "repeated_ids": ["cross-ref-nonexistent", "stale-third-party-flags"],
+    "items": [
+      {"id": "cross-ref-nonexistent", "result": "repeated", "evidence": "no numbered chapter refs, but L517 '앞서 소개한 fp8 KV 캐시의 절감 수치', L521 '앞서 본 예처럼', L248 '앞서 설명했듯 매 반복의 입력은' point to content that does not exist"},
+      {"id": "tag-remnant", "result": "avoided", "evidence": "no '</...>' remnants in the body"},
+      {"id": "entity-leak", "result": "avoided", "evidence": "no entities in the body; &#124;/&#91; only inside Sources link titles, which kramdown renders as | and ["},
+      {"id": "unclosed-fence", "result": "avoided", "evidence": "30 fence lines (15 balanced blocks)"},
+      {"id": "stale-third-party-flags", "result": "repeated", "evidence": "L548 relays Unsloth's CPU swap space default 4GB (--swap-space, absent from current engine args); L149/L429/L437 keep older-docs-only flag behaviour, though labelled"},
+      {"id": "install-centric", "result": "avoided", "evidence": "internals L56-L371 precede installation L373"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 56,
+    "architecture_note": "PagedAttention mechanism previewed at L50; block table section L56; engine component flow L205; install at L373",
+    "sources_total": 23,
+    "official_docs": 10,
+    "project_owned_non_docs": 7,
+    "third_party": 6,
+    "non_official_share": "13/23 = 57% not on docs.vllm.ai (paper, vLLM blog, GitHub issues, forum counted non-official); 6/23 = 26% third-party write-ups (Introl, LinkedIn, LabHub, Spheron, Unsloth, Jarvislabs); 3 entries duplicated",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose": true,
+    "failure_modes_covered": "partly: Metal backend without paged KV (L359-361), scale-to-zero cold start (L662), docker NUMA seccomp (L577), benchmark pitfalls (L690-694); no OOM/preemption-storm runbook"
+  },
+  "runnable_code": {
+    "verdict": "mostly runnable",
+    "details": [
+      "L379-384 install: matches GPU docs verbatim",
+      "L409-415 and L496-511 Python: imports defined (LLM; CompilationConfig, CompilationMode from vllm.config as in conserving_memory docs), names consistent, would run on a CUDA GPU",
+      "L321, L425, L433, L527 vllm serve commands: flags exist in current engine args; --kv-cache-dtype fp8 depends on hardware (caveated)",
+      "L443-451 GPU docker: runs as pasted",
+      "L581-592 CPU docker: does not run as pasted ('<CPU cores for inference>' placeholder is a shell redirection; image 'vllm-cpu-env' must be built first)",
+      "L636-641 scale-to-zero YAML: omits the keepalive trigger the text requires; L614-628 keda block shown top-level though it must nest under servingEngineSpec.modelSpec[] (text says so)",
+      "no client request code at all, so request shape against the server cannot be checked"
+    ]
+  },
+  "top_issues": [
+    "Broken citation sentences L347 '표의 근거는입니다.' and L682 '출처는입니다.', plus 3 duplicated Sources entries",
+    "Dangling back-references to content never given (L517 fp8 savings number, L521 offload example, L248 batch-input explanation)",
+    "Older-docs/third-party settings kept (block-size platform limits L149, v0.7.1/v0.8.5 behaviour L429/L437, Unsloth swap-space 4GB L548) and no client request example for the running server"
+  ]
+}

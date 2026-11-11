@@ -1,0 +1,65 @@
+{
+  "item": "summary-lora",
+  "judge_run": 3,
+  "post": "/Users/youngmki/Projects/scholar-lens/eval/baselines/2026-11-03/out/summary-lora.md",
+  "source": "https://arxiv.org/html/2106.09685 (full text incl. appendices)",
+  "sampling": "Prose paragraphs after front matter numbered 1..20 (L16,20,22,26,28,34,38,40,42,46,48,50,56,69,73,77,81,83,87,89); sampled paragraphs 3,6,9,12,15,18 = L22, L34, L42, L50, L73, L83.",
+  "scores": {"A": 9, "B": 7, "C": 9, "D": 7, "E": 9, "F": 9},
+  "type_scores": {"U1": 9, "U2": 8, "X1": 5, "G": 9},
+  "score_notes": {
+    "A": "No body H1, no skipped levels, all math in $$ with blank lines around the display block (L30-32), one real table (L58-67), front matter has subtitle, paper_author, paper_doi, two-level categories, use_math true. Nit: H2/H3 are topic names ('연구 배경' L18, '제안 방법' L24, '구현 방식' L44, '실험 결과' L52, '의의와 한계' L85).",
+    "B": "입니다 register held throughout, no register break in the table. Deductions: noun frame L20 '미세조정이 훨씬 낫다는 점을 보여 줍니다' -> '미세조정이 훨씬 낫습니다(부록)'; English default verb L26 '낮은 \"내재 랭크\"를 가진다고 가정합니다' -> '내재 랭크가 낮다고 가정합니다'; restatement L34 '즉 처음에는 정확히 사전 학습 모델과 같은 함수에서 출발합니다' -> '그래서 학습은 사전 학습 모델과 같은 함수에서 시작합니다'; '할 수 있습니다' for what simply happens L38 'B가 0에서 시작한다는 점을 확인할 수 있습니다' -> 'B는 0에서 시작합니다'; formulaic L89 '한계도 분명합니다.'",
+    "C": "Clean arc background -> method -> implementation -> results -> significance; concepts (A, B, r, alpha, budgets 4.7M/37.7M at L50) introduced before the table (L58) and the rank analysis (L81). No numbered cross-references.",
+    "D": "Good help where it matters: alpha/r rationale (L34), parameter-count worked example (L38), merge-for-deployment (L40). Under-explained hard part: L83 uses '정규화 유사도 0.5 이상' and '$$\\Delta W_q$$가 펼치는 r=4 부분공간에 $$W_q$$를 투영한 노름' without saying what the similarity or projection measures, so the 21.5x amplification is hard to follow for a non-expert.",
+    "E": "Equation (L30), architecture figure (L36), result table (L58-67) and scatter figure (L71) are placed where discussed and referred to descriptively. Table cells checked against the paper's GPT-3 175B table: all 8 rows match cell for cell. No decorative visuals.",
+    "F": "All 15 sampled claims supported; extra spot checks (L20 40.6->89.5, L48 32.5->43.1 tokens/s, L77 DeBERTa XXL 91.1/91.3 and RoBERTa base AdapterDrop 84.4, L81 70.4 vs 73.7, L87 LoRA+PE 75.0-76.2, L89 different-language thought experiment and model-size/optimal-rank open question) also supported. Minor: L48 '32.5 tokens/s에서 43.1 tokens/s로 올라, 약 25% 빨라졌습니다' juxtaposes a 32.6% throughput rise with the paper's separate '25% speedup' claim without explaining the gap.",
+    "U1": "All five questions covered: motivation (L20-22), solution (L26-42), implementation (L46-50), results (L54-83), significance/limits (L87-89).",
+    "U2": "TL;DR is 3 plain-prose sentences without math (L16); one distilled results table; grounded limitations (L89). Somewhat dense in L48 and L77 (many numbers per paragraph), slightly over a five-minute read.",
+    "X1": "Category 'Finetuning' fits. Tags are long phrases restating the abstract rather than short reusable tags: 'Rank-Decomposition-Matrices', 'Frozen-Pre-trained-Weights', 'Adapter-Inference-Latency', 'Intrinsic-Rank' (L10); a short controlled tag ('PEFT'/'LoRA') would suffice.",
+    "G": "use_math true with $$ present; description 138 characters, opens with 'LoRA는', numbers (175B, 10,000배, 3배) all in the TL;DR; no Liquid or prompt tokens. Blog lint not run (not available in this judge run); file name is the eval output name, not a dated post name."
+  },
+  "principles": {
+    "claim_headings": {"status": "not met", "evidence": "Topic headings only: L18 '연구 배경', L24 '제안 방법', L44 '구현 방식', L54 'GPT-3 175B에서의 비교', L79 '랭크와 부분공간 분석'."},
+    "running_example": {"status": "partly met", "evidence": "GPT-3 175B recurs as the reference case (L20, L38, L48, L54-73, L81-83) but no explicit single running example is set up."},
+    "mechanism_order": {"status": "met", "evidence": "L26 hypothesis -> L28-32 formula -> L34 init/scaling choice and reason -> L38 numeric example (12,288 x 4) -> L40 contrast with adapters/prefix."},
+    "facts_once": {"status": "partly met", "evidence": "No-inference-latency stated in L16, L40 and L42; MNLI-m 89.5 in L20 and L69; budgets 4.7M/37.7M in L50 and the table."},
+    "numbers_with_scope": {"status": "met", "evidence": "L22 'GPT-2 medium, 배치 1, 시퀀스 길이 128'; L77 model variants with parameter counts; L69 variance ±0.5%. Minor L48 25% vs 32.5->43.1."},
+    "nothing_invented": {"status": "met", "evidence": "The only non-paper numbers are the writer's own calculation, flagged as such: L38 '규모 감각을 위해 계산해 보면 ... 98,304개'."},
+    "writer_assessment": {"status": "partly met", "evidence": "L87-89 mostly restates the paper's own limitations (batching after merge, heuristic matrix choice, different-language task, open question on model size and rank); little of the writer's own judgement on when to choose LoRA."},
+    "length_fitted": {"status": "met", "evidence": "Method and implementation get most space; background short (L20-22)."},
+    "type_shape": {"status": "met", "evidence": "Fixed five-part summary arc with TL;DR first (L14-16) and one distilled results table."},
+    "korean_style": {"status": "partly met", "evidence": "L20 '~다는 점을 보여 줍니다', L26 '가진다고', L34 '즉', L38 '확인할 수 있습니다', L89 '한계도 분명합니다.'"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 15,
+    "unsupported": 0,
+    "wrong": 0,
+    "unverifiable": 0,
+    "numbers": 12,
+    "examples": [
+      {"line": 22, "claim": "GPT-2 medium, batch 1, seq 128: forward pass 19.8 ms for fine-tune/LoRA", "verdict": "supported", "source": "Table 1: Batch 1, Seq 128, Fine-Tune/LoRA 19.8±2.7"},
+      {"line": 22, "claim": "Houlsby adapter 25.8 ms (+30.3%)", "verdict": "supported", "source": "Table 1: Adapter^H 25.8±2.2 (+30.3%)"},
+      {"line": 22, "claim": "Lin adapter 23.9 ms (+20.7%)", "verdict": "supported", "source": "Table 1: Adapter^L 23.9±2.1 (+20.7%)"},
+      {"line": 34, "claim": "A random Gaussian, B zero, so BA = 0 at start", "verdict": "supported", "source": "Sec 4.1: 'We use a random Gaussian initialization for A and zero for B, so ΔW = BA is zero at the beginning of training.'"},
+      {"line": 34, "claim": "ΔWx scaled by α/r; α set to the first r tried and not tuned, since with Adam tuning α ≈ tuning LR", "verdict": "supported", "source": "Sec 4.1: 'tuning α is roughly the same as tuning the learning rate ... we simply set α to the first r we try and do not tune it.'"},
+      {"line": 42, "claim": "Adapters add modules sequentially; LoRA's parallel linear path is absorbed into W after training", "verdict": "supported", "source": "Sec 3 (adapters 'processed sequentially') and Sec 4.1 'explicitly compute and store W = W0 + BA'"},
+      {"line": 50, "claim": "GPT-3: all methods AdamW, 2 epochs, batch 128", "verdict": "supported", "source": "D.4: 'we train using AdamW for 2 epochs with a batch size of 128 samples'"},
+      {"line": 50, "claim": "Only LR tuned per method; LoRA LR 2E-04", "verdict": "supported", "source": "Table 12: LoRA Learning Rate 2.00E-04; 'same hyperparameters for all datasets after tuning learning rate'"},
+      {"line": 50, "claim": "Budgets 4.7M (r_q=r_v=1 or r_v=2) and 37.7M (r_q=r_v=8 or all four r=2)", "verdict": "supported", "source": "Sec 5.5/D.4: 'two parameter budgets for LoRA: 4.7M (r_q=r_v=1 or r_v=2) and 37.7M (r_q=r_v=8 or r_q=r_k=r_v=r_o=2)'"},
+      {"line": 73, "claim": "Prefix methods drop beyond 256 special tokens (PreEmbed) / 32 (PreLayer)", "verdict": "supported", "source": "Sec 5.5: 'more than 256 special tokens for prefix-embedding tuning or more than 32 special tokens for prefix-layer tuning'"},
+      {"line": 73, "claim": "MNLI-100: LoRA 63.8 vs fine-tune 60.2", "verdict": "supported", "source": "Table 16: Fine-Tune 60.2, LoRA 63.8 (MNLI(m)-100)"},
+      {"line": 73, "claim": "PrefixEmbed 37.6% vs random chance 33.3%", "verdict": "supported", "source": "F.3: 'PrefixEmbed performing only slightly better than random chance (37.6% vs. 33.3%)'"},
+      {"line": 83, "claim": "Layer 48, A_{r=8} vs A_{r=64}: only a 1-dim subspace overlaps with normalized similarity > 0.5; other directions mostly noise", "verdict": "supported", "source": "Sec 7.2: 'share a subspace of dimension 1 with normalized similarity > 0.5' and 'other directions potentially contain mostly random noises'"},
+      {"line": 83, "claim": "r=4 projection norms: ΔW_q 0.32, W_q top directions 21.67, random 0.02", "verdict": "supported", "source": "Table 7: r=4 ‖U^T W_q V^T‖_F = 0.32 / 21.67 / 0.02"},
+      {"line": 83, "claim": "Amplification factor about 21.5 = 6.91/0.32", "verdict": "supported", "source": "Sec 7.3: 'the amplification factor is rather huge: 21.5 ≈ 6.91/0.32 for r = 4'"}
+    ]
+  },
+  "checklist": {"repeated": 0, "avoided": 0, "na": 0, "repeated_ids": [], "note": "human_fixes.yaml summary-lora has fixes: [] (no published post, no item-specific fixes). Generic defects named in its notes are absent: no HTML entity leak (no '&amp;' in the body), title is the paper title (L3), not 'Pdf'."},
+  "extras": {},
+  "top_issues": [
+    "Rank/subspace analysis (L83) uses normalized subspace similarity and projection norms without defining them, so the 21.5x amplification is hard to follow.",
+    "Tags are long abstract restatements ('Rank-Decomposition-Matrices', 'Frozen-Pre-trained-Weights', 'Adapter-Inference-Latency') instead of short reusable tags (L10).",
+    "Korean style and closing: noun frames and restatements (L20, L26, L34, L38, L89); the closing (L87-89) restates the paper's limitations instead of giving the writer's judgement; topic-name headings."
+  ]
+}

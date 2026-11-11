@@ -1,0 +1,86 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v4.md",
+  "judge_run": 2,
+  "sample": "prose paragraphs (headings, code, tables excluded) numbered from the body start; paragraph 2 then every third (2, 5, 8, ..., 164); claims taken from sampled paragraphs or the table/code they introduce",
+  "scores": {"A": 8, "B": 8, "C": 7.5, "D": 8, "E": 7.5, "F": 6, "T1": 7.5, "T2": 8, "T3": 8.5},
+  "deductions": {
+    "A": ["L1186 is an orphan one-sentence paragraph ('핸들 쪽 메트릭 지연인 ... 같은 방식으로 읽습니다.')", "L1144 section '프록시 헬스 체크와 드레이닝 주기' re-presents the L160-169 content as a new section"],
+    "B": ["L21 repeats the TL;DR sentence nearly verbatim ('Ray Serve는 온라인 추론 API를 만드는 확장 가능한 모델 서빙 라이브러리이고, 특정 프레임워크에 묶이지 않습니다.')", "L1157 '...나란히 놓고 봐야 합니다. 두 값을 함께 맞춰야 합니다.' says the same thing twice", "L31 '쉽게 확장됩니다' is promotional"],
+    "C": ["L46 sets the running example's entry point as a FastAPI ingress, but L943 and L1211 deploy text_ml:app with Summarizer as the ingress ('배포된 text_ml:app의 인그레스 Summarizer'), so TextPipeline (L762-783) is dropped", "L874-935 (framework tutorials: sklearn/TF/PyTorch) and L666-870 (Hello/World, Adder/Multiplier, Streamer, SayHi) are generic docs examples that leave the running example"],
+    "D": ["Good worked examples: power-of-two table L221-226, 12/2=6 L368, desired 5 vs target 4 L1190; but L874-935 explains easy material at length"],
+    "E": ["proxy env-var table repeated (L162-167 and L1148-1153) along with the 3-failure and draining text (L165/L169 vs L1155/L1157)", "no architecture image; the L184-192 text box is the only diagram"],
+    "F": ["L1044 '단일 Translator 예제는 app1을 받고, 요약·번역 예제는 default를 받습니다' wrong: serve build (Ray 2.60) names every app app1 (verified: serve build text_ml:app -> name: app1); the docs' 'default' is just a hand-edited sample", "L248 and L323 'from ray.serve.config import RequestRouterConfig, DeploymentConfig' raises ImportError in Ray 2.60 (DeploymentConfig is in ray.serve._private.config); copied from the RequestRouterConfig docstring, which is itself broken"],
+    "T1": ["The running example runs as pasted (verified below), but the two router snippets fail on import and TextPipeline has no matching client: it is GET /?text=..., while every client in the post sends POST json= (POST -> 405)", "L276-296 StatefulRouter overrides __init__(self) with no arguments, while RequestRouter.__init__ takes deployment_id, handle_source, ...; the docs path is initialize_state. It is labelled a skeleton, but it would not instantiate"],
+    "T2": ["Covers the important topics in a sensible order; the framework-tutorial section and the many generic composition snippets are padding relative to the running example"],
+    "T3": ["Strong internals: controller/proxy/router split, distributed routers, autoscaler inside the controller, recovery owner per layer, metric push vs export intervals; third-party design opinions are labelled as such (L15, L427, L1161, L1285)"]
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L19, L48, L127, L198, L336 are claim noun phrases; L1295 '선택 기준' is a topic heading"},
+    "running_example": {"status": "partly met", "evidence": "Summarizer/Translator text app runs through config, KubeRay, metrics and logs (L46, L1096, L1188, L1211); the FastAPI ingress promised at L46 (TextPipeline L762) is dropped later, and L1201 uses Summarizer as the ingress"},
+    "mechanism_order": {"status": "met", "evidence": "routing L210-227 (mechanism, reason, table example); autoscaling L348-372 (fields, formula, 12/2=6, asymmetric delays)"},
+    "facts_said_once": {"status": "not met", "evidence": "proxy env-var table twice (L162-167, L1148-1153); draining twice (L169, L1157); serial-scaler ADR view twice (L15, L427); L21 repeats TL;DR L13"},
+    "numbers_with_scope": {"status": "met", "evidence": "L334 benchmark gives model, 8x8xL4, TP 4, RayTurbo, relative %; L348 table pinned to Ray 2.59.0"},
+    "nothing_invented": {"status": "partly met", "evidence": "L1044 app1/default naming wrong; L248/L323 DeploymentConfig import does not exist; illustrative numbers are flagged as examples (L219 '예시로 5라고 둡니다')"},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L1297 '이 글의 판단은 다음과 같습니다...' and L1299 three prerequisites"},
+    "length_fitted": {"status": "partly met", "evidence": "1,324 lines; several docs examples (L666-870, L874-935) not needed for the running example"},
+    "type_specific_shape": {"status": "met", "evidence": "opens with TL;DR and the problem (L11, L23); architecture L48/L127 before config (L937); ends with choosing and limits (L1277-1299)"},
+    "korean_style": {"status": "mostly met", "evidence": "natural 입니다 register, varied sentences; minor repetition (L21, L1157)"}
+  },
+  "claims": {
+    "checked": 15, "supported": 13, "unsupported": 0, "wrong": 2,
+    "examples": [
+      {"line": 180, "claim": "requests of 100KiB+ go to the object store, read zero-copy", "verdict": "supported", "source": "serve/architecture: 'Larger request objects (100KiB+) are written to the object store and the replica can read them via zero-copy read.'"},
+      {"line": 149, "claim": "architecture page says one proxy on the head node by default; config reference says EveryNode", "verdict": "supported", "source": "architecture: 'By default there is one HTTP proxy actor on the head node'; production-guide/config: EveryNode default"},
+      {"line": 164, "claim": "proxy health check period 10.0, timeout 10.0, ready 5.0, draining 30.0; 3 consecutive failures", "verdict": "supported", "source": "ray/serve/_private/constants.py (2.60): RAY_SERVE_PROXY_* defaults 10.0/10.0/5.0/30.0, PROXY_HEALTH_CHECK_UNHEALTHY_THRESHOLD = 3"},
+      {"line": 235, "claim": "RequestRouterConfig defaults: PowerOfTwoChoicesRequestRouter, stats period 10, timeout 30, initial_backoff 0.025, multiplier 2, max_backoff 0.5", "verdict": "supported", "source": "RequestRouterConfig model_fields in Ray 2.60 match exactly"},
+      {"line": 306, "claim": "a central store actor becomes a bottleneck at thousands of requests per second", "verdict": "supported", "source": "routing-policies: 'A single actor can become a bottleneck in high-throughput applications ... (~1000s of requests/s)'"},
+      {"line": 311, "claim": "Anyscale blog 2025-09-15: custom request routing and PrefixCacheAffinityRouter in Ray 2.49", "verdict": "supported", "source": "Anyscale blog: September 15, 2025; 'in Ray 2.49'"},
+      {"line": 316, "claim": "match rate >=10% routes to the highest prefix match, <10% to the lowest cache use", "verdict": "supported", "source": "routing-policies: 'High match rate (>=10%)' / 'Low match rate (<10%)'; source match_rate_threshold=0.1"},
+      {"line": 323, "claim": "DeploymentConfig is importable from ray.serve.config", "verdict": "wrong", "source": "Ray 2.60: ImportError: cannot import name 'DeploymentConfig' from 'ray.serve.config'; class lives in ray.serve._private.config (the RequestRouterConfig docstring has the same error)"},
+      {"line": 334, "claim": "DeepSeek-R1-Distill-Qwen-32B on eight 8xL4 (64 GPUs), RayTurbo, TP 4: TTFT -60%, throughput +40%+", "verdict": "supported", "source": "Anyscale blog: 'eight 8xL4 machines (64 GPUs total)', 'tensor_parallel_size: 4', '60% reduction in time-to-first-token', 'more than 40% improvement in end-to-end throughput'"},
+      {"line": 352, "claim": "AutoscalingConfig defaults min 1, max 1, target 2, look_back 30.0, upscale 30.0, downscale 600.0, smoothing 1.0", "verdict": "supported", "source": "AutoscalingConfig model_fields (Ray 2.60) match"},
+      {"line": 388, "claim": "BackpressureConfig status 503 (default) or 429; Retry-After rounded up to integer seconds; default None; gRPC always RESOURCE_EXHAUSTED; unknown keys rejected; alpha", "verdict": "supported", "source": "ray.serve.config.BackpressureConfig docstring and model_config extra='forbid' (Ray 2.60)"},
+      {"line": 1044, "claim": "serve build names the single Translator example app1 and the summarize/translate example default", "verdict": "wrong", "source": "serve build text_ml:app (Ray 2.60) writes '- name: app1'; scripts.py: 'auto-generated application names default to app1, app2'; the docs sample showing 'default' is hand-edited"},
+      {"line": 1138, "claim": "while the controller is dead, HTTP/gRPC/handle requests continue, autoscaling pauses, and earlier metrics are lost", "verdict": "supported", "source": "architecture: 'requests can still be sent via HTTP, gRPC and DeploymentHandle, but autoscaling is paused ... all previous metrics collected are lost'"},
+      {"line": 1194, "claim": "RAY_SERVE_REQUEST_LATENCY_BUCKETS_MS is fixed at startup and needs a Serve actor restart", "verdict": "supported", "source": "monitoring: 'Bucket boundaries are fixed at startup ... require restarting Serve actors'"},
+      {"line": 1274, "claim": "LoRA default 16 adapters per replica, LRU eviction; engine metrics on by default since Ray 2.51; disable_log_stats=True rejected", "verdict": "supported", "source": "llm configuration: 'Maximum adapters loaded on each replica, evicted LRU' (16); observability: 'on by default as of Ray 2.51'"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0, "avoided": 2, "na": 0, "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "verdict": "avoided", "evidence": "no Markdown links or images with empty text or ../_images paths (grep for '](../', '[](', '![' finds nothing); the architecture is a text block (L184-192)"},
+      {"id": "proxy-env-ray-start-unsupported", "verdict": "avoided", "evidence": "the proxy env-var tables (L160-169, L1146-1155) give names, meanings and defaults only; the only 'ray start' (L1171) is the dashboard's Docker flag, which the docs support"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 48,
+    "architecture_internals_section_line": 127,
+    "non_official_sources": "4 of 21 (19%): iotdigitaltwinplm ADR, zread.ai, Anyscale blog, Medium",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true
+  },
+  "runnable_code": {
+    "verdict": "running example runs as pasted; two snippets fail and one has no matching client",
+    "env": "Ray 2.60.0, torch 2.15.0, transformers 5.22.1, Python 3.12, local cluster",
+    "ran_ok": [
+      "L58-91 Translator: serve.run + handle.translate.remote -> 'Bonjour monde!'; requests.post(json=...) -> 200 French text, X-Request-ID echoed",
+      "L597-647 composed Summarizer(Translator) -> 200",
+      "L964-1031 text_ml.py with reconfigure -> 200; serve build text_ml:app works",
+      "L762-783 TextPipeline appended to the composed file -> GET /?text=... 200",
+      "L666-691, L715-755 (assert 12), L799-833, L842-869, L455-471, L520-556, L401-423 (BackpressureConfig accepted)"
+    ],
+    "failed": [
+      "L247-257 and L322-329: ImportError, DeploymentConfig not in ray.serve.config",
+      "TextPipeline: the post's clients POST json=, but TextPipeline answers POST with 405; no GET ?text= client shown",
+      "L276-296 StatefulRouter.__init__(self) conflicts with RequestRouter.__init__ signature (not executed; skeleton)"
+    ],
+    "not_run": ["L1235-1271 LLMConfig (needs ray[llm]/GPU)", "L478-510 factory (needs opentelemetry-instrumentation-fastapi)"]
+  },
+  "top_issues": [
+    "Wrong API facts: DeploymentConfig import from ray.serve.config fails (L248, L323), and serve build app naming app1 vs default is wrong (L1044)",
+    "Running example splits: the FastAPI ingress TextPipeline (GET ?text=) is dropped; later sections deploy Summarizer as the ingress, and no client matches TextPipeline (POST -> 405)",
+    "Repeated facts and padding: proxy env-var table and draining text twice (L162/L1148), TL;DR sentence repeated at L21, and long generic docs examples (L666-935) outside the running example"
+  ]
+}

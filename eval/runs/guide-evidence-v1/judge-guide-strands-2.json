@@ -1,0 +1,111 @@
+{
+  "item": "guide-strands",
+  "judge_run": 2,
+  "post": "/tmp/eval-guide/guide-strands-v1.md",
+  "sampling": "prose paragraphs (excluding headings, code, tables, math) numbered from the TL;DR; paragraph 2 then every third (2,5,8,...,170); claims drawn from P2,P20(skipped),P23,P26,P29,P56,P62,P104,P107,P116,P125,P137,P143,P158,P170",
+  "scores": {"A": 6.0, "B": 7.0, "C": 7.5, "D": 8.0, "E": 8.0, "F": 6.0, "T1": 8.0, "T2": 8.5, "T3": 8.5},
+  "score_evidence": {
+    "A": [
+      "L484-486: a stray `---` rule mid-body followed by a generation meta-note leaked into the post: \"참고: 요청하신 `LLMSteeringHandler` import 줄은 넣지 않았습니다. 정확한 경로를 담은 코드 근거가 확보되면 코드 블록 맨 위에 한 줄로 추가하면 됩니다.\"",
+      "L180: hook-event table cell carries a cross-reference sentence (\"콜백 실행 순서는 아래 `order` 설명에서 다룹니다\") instead of a value",
+      "Otherwise sound arc: TL;DR -> problem (L17) -> architecture (L29) -> mechanisms -> production controls -> when-to-choose (L1002); no skipped levels, use_math true with $$ present"
+    ],
+    "B": [
+      "Formulaic judgement frame repeated 9x: \"이 글의 판단으로는\" (L99, L400, L482, L588, L672, L744, L790) and \"이 가이드의 판단으로는\" (L1000, L1031); inconsistent self-reference (글/가이드)",
+      "\"~하는 편이 맞습니다/낫습니다/안전합니다\" 10x, e.g. L275 \"게이트를 적용하는 편이 맞습니다\", L569, L670",
+      "L486 addresses the requester (\"요청하신\") - meta talk in a published post",
+      "Prose is otherwise natural, subjects explicit, 입니다 register held"
+    ],
+    "C": [
+      "L21 and L27 restate L13: \"Python과 TypeScript용 오픈소스 SDK\" three times, \"호스팅(되는) 제어 플레인 없이\" three times (L13, L15, L27)",
+      "Late repetition: unbounded after_model_call Guide (L390 and again L478), soft limits (L836 and L1024), ConcurrencyException (L873 and L1027), retry overlap (L815 and L1028), interrupt vs cancel (L731 and L869)",
+      "Concepts introduced before use and cross-references accurate"
+    ],
+    "D": [
+      "Good help at hard points: hook/middleware placement diagram L299-306, intervention composition table L371-377, structured-output attempt table L577-584, token-limit trace L840-847",
+      "Padding: L93-97 display math \"N = 1 + 2k + 1\" for counting messages is trivial"
+    ],
+    "E": [
+      "Tables and code used well; ASCII diagrams for loop (L60-77) and span tree (L940-945)",
+      "Trivial formula L95; the two top ASCII diagrams (L31-39, L60-77) are self-drawn, not the official loop diagram (acceptable, no remote image)"
+    ],
+    "F": [
+      "WRONG L853: \"잘린 메시지가 남은 에이전트를 그대로 다시 부르지 않는 편이 안전합니다. 새 에이전트를 만들고...\" - docs say the opposite for Python: \"The SDK adds the recovered partial message to conversation history ... then invoke the same agent again to continue from that history.\"",
+      "UNSUPPORTED L111: \"에이전트 루프는 기본적으로 모든 결정을 트레이스로 남기므로\" - sources say a run 'can produce a trace' once OTEL is set up (the post itself, L938, requires StrandsTelemetry)",
+      "UNSUPPORTED/scope L15: \"스티어링은 개입 핸들러 위에서 동작하는\" - Steering page: \"in Python, steering handlers are plugins; in TypeScript, they build on the interventions framework\"",
+      "L486 asserts the import path is not known, but the Steering page shows `from strands.vended_plugins.steering import LLMSteeringHandler`"
+    ],
+    "T1": "Runnable-looking snippets with real params (limits, per_turn, ModelRetryStrategy, HumanInTheLoop, structured_output_prompt, idempotency_token); several fragments lack imports (HookProvider, InterventionHandler, Deny/Proceed, LLMSteeringHandler, DockerSandbox, make_shell), and the steering import is explicitly missing (L486)",
+    "T2": "Covers every major topic in the official pages in a sensible order (loop, tools/registry, hooks, middleware, interventions, steering, structured output, conversation management, HITL, retries, limits/cancel/concurrency, OTEL, sandbox, deployment); v1.25.0 changelog items woven in where relevant",
+    "T3": "Explains internals and design reasons (hooks outside the middleware chain, typed decisions vs last-write-wins, fresh inner steering agent for statelessness, retry strategy outside middleware), integration (OTEL span tree, sandbox split, A2A/AG-UI, deployment shapes) and failure modes; design advice is labelled as the writer's judgement"
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "noun-phrase claim headings, e.g. L17 \"직접 만든 에이전트 루프가 프로덕션에서 무너지는 지점\", L316 \"타입이 있는 결정과 고정 우선순위로 합성되는 개입 계층\", L817"},
+    "running_example": {"status": "met", "evidence": "order-support agent (lookup_order/refund/send_email/delete_file) introduced L23 and used through L1031"},
+    "mechanism_design_code_example": {"status": "met", "evidence": "interventions L322-377: problem (last-write-wins) -> typed decisions -> ToolGuard code -> 3-call table; structured output L494-584 likewise"},
+    "facts_said_once": {"status": "partly met", "evidence": "SDK identity thrice (L13, L21, L27); soft limits L836/L1024; ConcurrencyException L873/L1027; after_model_call Guide unbounded L390/L478"},
+    "numbers_with_scope": {"status": "met", "evidence": "L956 token numbers scoped to \"항공편 예약 데모 에이전트를 한 번 실행했을 때\"; retry defaults with units L759"},
+    "nothing_invented": {"status": "partly met", "evidence": "illustrative values labelled (L119 \"설명용 예시\", L427, L518, L889), but L853 recovery advice contradicts docs and L111 overstates default tracing"},
+    "writers_assessment_at_end": {"status": "met", "evidence": "L1031-1037 judgement and choice table"},
+    "length_fitted": {"status": "partly met", "evidence": "~1,000 body lines; hard parts get space but restatements (see facts_said_once) and trivial math L93-97 add length"},
+    "type_specific_shape": {"status": "met", "evidence": "TL;DR L11, problem L17, architecture L29 before configuration; closes with limits/failure modes L1020-1029 and when-to-choose table L1033-1037; non-official sources included"},
+    "korean_style": {"status": "partly met", "evidence": "\"이 글의 판단으로는\" x7 + \"이 가이드의 판단으로는\" x2; \"편이 맞습니다/낫습니다/안전합니다\" x10; meta note L486"}
+  },
+  "claims": {
+    "checked": 15,
+    "supported": 12,
+    "unsupported": 2,
+    "wrong": 1,
+    "unverifiable": 0,
+    "examples": [
+      {"line": 15, "claim": "intervention handlers return proceed/deny/guide/confirm/transform and are built on hooks", "verdict": "supported", "source": "Interventions: \"intervention handlers return typed decisions (proceed, deny, guide, confirm, transform)\"; \"Interventions build on the hooks system: each lifecycle method registers a hook callback.\""},
+      {"line": 15, "claim": "steering runs on top of intervention handlers", "verdict": "unsupported", "source": "Steering: \"in Python, steering handlers are plugins; in TypeScript, they build on the interventions framework\" (true only for TS; the post's Python code uses plugins=[handler])"},
+      {"line": 111, "claim": "the agent loop traces every decision by default", "verdict": "unsupported", "source": "AWS ML blog: \"Each run of an agent can produce a trace\"; tracing needs OTEL setup (post L938 StrandsTelemetry)"},
+      {"line": 140, "claim": "@tool args description/inputSchema/name override extracted values; context=True injects tool_context, a string renames it; injection in place on validated input, derived from invocation_state if omitted", "verdict": "supported", "source": "strands.tools.decorator: \"inputSchema - Optional custom JSON schema to override...\"; \"defaults to 'tool_context', or ... set context equal to a string\"; \"validated_input ... (modified in place)\"; \"when omitted, one is derived from invocation_state\""},
+      {"line": 154, "claim": "process_tools accepts file paths, module paths, decorated functions, AgentTool instances and returns processed tool names", "verdict": "supported", "source": "strands.tools.registry: \"def process_tools(tools: list[Any]) -> list[str]\" ... \"List of tool names that were processed.\""},
+      {"line": 365, "claim": "handlers evaluate in registration order; Deny short-circuits; Guide accumulates; precedence deny > confirm > guide > transform > proceed", "verdict": "supported", "source": "Interventions: \"Handlers evaluate in registration order. If any handler returns Deny, remaining handlers are skipped\"; \"(deny > confirm > guide > transform > proceed)\""},
+      {"line": 396, "claim": "on_error default is 'throw'; 'proceed' fail-open; 'deny' fail-closed", "verdict": "supported", "source": "Interventions: \"'throw' Rethrow the error (default)... 'proceed' ... (fail-open). 'deny' ... (fail-closed).\""},
+      {"line": 606, "claim": "per_turn default False (after loop), True (before every model call), integer N (every N calls)", "verdict": "supported", "source": "Conversation Management: \"False (default): Only apply management after the agent loop completes; True: ... before every model call; An integer N (must be > 0)\""},
+      {"line": 639, "claim": "proactive compression is best-effort; if reduce() throws or returns false the error is ignored and the call proceeds", "verdict": "supported", "source": "Conversation Management: \"Proactive compression is best-effort only, so if reduce() throws or returns false, the error is swallowed and the model call proceeds normally.\""},
+      {"line": 703, "claim": "allowed_tools default None, supports \"*\" and \"!tool_name\"; listed tools bypass the classifier", "verdict": "supported", "source": "Human in the loop: \"allowed_tools ... None ... Tools that bypass approval. Supports \"*\" (all) and \"!tool_name\" (negation).\"; \"Tools in allowed_tools bypass\" the classifier"},
+      {"line": 776, "claim": "since v1.25.0 retry_strategy=None equals ModelRetryStrategy(max_attempts=1); before, None applied the default", "verdict": "supported", "source": "Python v1.25.0 changelog: \"Passing retry_strategy=None ... previously applied the default retry strategy ... Now None explicitly disables all SDK retries (equivalent to ModelRetryStrategy(max_attempts=1))\""},
+      {"line": 776, "claim": "TS ModelRetryStrategy is abstract (use DefaultModelRetryStrategy); backoff jitter default 'full'", "verdict": "supported", "source": "Retry Strategies: \"In TypeScript, ModelRetryStrategy is the abstract base class. Use DefaultModelRetryStrategy\"; \"Default is 'full' jitter, which spreads concurrent clients across the wait window.\""},
+      {"line": 853, "claim": "after MaxTokensReachedException, do not reinvoke the same agent; create a new one", "verdict": "wrong", "source": "Lifecycle Controls (Python): \"The SDK adds the recovered partial message to conversation history before raising MaxTokensReachedException. Reduce the next request ... then invoke the same agent again to continue from that history.\" (the partial-message and TS partialMessage facts in the same paragraph are correct)"},
+      {"line": 875, "claim": "same idempotency_token waits for the original and returns the same AgentResult; different token raises ConcurrencyException; aborted original raises IdempotencyAbortedError", "verdict": "supported", "source": "Lifecycle Controls: \"A second call with the same token waits for the original and returns the same AgentResult; a call with a different token still raises ConcurrencyException.\"; strands.agent.agent: \"Raises IdempotencyAbortedError if the original is aborted before producing a result.\""},
+      {"line": 988, "claim": "sandbox_shell opens a fresh shell per call; timeout in seconds raises SandboxTimeoutError; cwd, env; TS signal raises SandboxAbortError", "verdict": "supported", "source": "Sandbox: \"Each call runs in a fresh shell\"; \"timeout (seconds, throws SandboxTimeoutError when exceeded), cwd ..., env ..., and in TypeScript, signal (AbortSignal, throws SandboxAbortError)\""},
+      {"line": 1024, "claim": "limits count tokens not cost incl. prompt-cache reads/writes; in Python an agent used as a tool and summarization calls are not bound", "verdict": "supported", "source": "Agent Loop: \"that total counts prompt-cache reads and writes in full ... The limit caps tokens, not cost.\"; \"Token limits count only this agent's own model calls. An agent it calls as a tool, and a conversation manager's summarization calls, run outside these limits\""}
+    ]
+  },
+  "checklist": {
+    "repeated": 2,
+    "avoided": 2,
+    "na": 1,
+    "repeated_ids": ["shared-agent-throw-scope", "shared-agent-history-leak"],
+    "details": [
+      {"id": "loop-diagram-remote", "result": "avoided", "evidence": "no image links at all; the loop is drawn as a text block L60-77"},
+      {"id": "shared-agent-throw-scope", "result": "repeated", "evidence": "L1027 \"호출이 겹치면 `ConcurrencyException`이 납니다. 그래서 요청마다 새 에이전트를 만드는 패턴이 필요합니다.\" - no tie to invoke_async and no note that sync agent(...) in an async handler blocks/serializes instead of raising"},
+      {"id": "shared-agent-history-leak", "result": "repeated", "evidence": "L889 recommends per-request agents only because \"동시성 가드에 걸릴 일이 없습니다\"; no statement that a shared agent carries the previous request's conversation into the next, no invoke_async recommendation"},
+      {"id": "result-fields-incomplete", "result": "avoided", "evidence": "L952-953 `result.metrics.get_summary()` with cycles/tokens/per-tool (L949); stop_reason used L714, L903-913"},
+      {"id": "multi-agent-subject", "result": "n/a", "evidence": "the sentence about the smallest execution unit does not appear"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 29,
+    "architecture_note": "L29-41 layer diagram (loop as primitive, conversation management/hooks/multi-agent/evaluation above); loop mechanics from L43",
+    "sources_total": 24,
+    "sources_official_docs": 16,
+    "sources_official_repo": 1,
+    "sources_non_official": 7,
+    "non_official_share": 0.29,
+    "non_official_note": "AWS blogs x4 (ML deep dive, Open Source x2, DevOps), Langfuse, Medium (Posoldova), AWS Builder Center; third-party non-AWS 3/24 = 0.125",
+    "opens_with_problem": true,
+    "opens_with_problem_evidence": "L17 \"직접 만든 에이전트 루프가 프로덕션에서 무너지는 지점\" right after TL;DR",
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "closes_evidence": "L1020-1029 production limits list; L1031-1037 when-to-choose table"
+  },
+  "top_issues": [
+    "Generation meta-note leaked into the body (L484-486, \"요청하신 ... import 줄은 넣지 않았습니다\"), and the import path it calls unknown is on the Steering page (strands.vended_plugins.steering)",
+    "L853 advice contradicts the docs: Python adds the partial message to history so you reinvoke the same agent; the post says to build a new agent",
+    "Overstated/unscoped claims and repetition: 'traces every decision by default' (L111), steering 'on top of interventions' without the Python=plugins scope (L15); SDK identity and several controls restated 2-3 times; 'shared agent' guidance misses the human-fix nuances (invoke_async, sync blocking, history carry-over)"
+  ]
+}

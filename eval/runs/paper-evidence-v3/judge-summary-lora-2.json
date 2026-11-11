@@ -1,0 +1,73 @@
+{
+  "item": "summary-lora",
+  "post": "/tmp/eval-paper/summary-lora-v3.md",
+  "source": "arXiv 2106.09685v2 full text (PDF)",
+  "scores": {"A": 8, "B": 7.5, "C": 6, "D": 7, "E": 7.5, "F": 6, "G": 9},
+  "type_scores": {"U1": 6.5, "U2": 7, "X1": 6},
+  "deductions": {
+    "A": ["Headings are topic names, not claims: L18 '연구 배경', L28 '제안 방법', L46 '구현 방식', L68 '실험 결과'. Front matter, $$ math, and table markup are otherwise correct."],
+    "B": ["L42 three '그래서' in a row: '그래서 α가 학습률과 같은 역할을 합니다. 그래서 저자들은 ...' -> 'α가 학습률 역할을 하므로 저자들은 처음 시도한 r 값을 α로 두고 튜닝하지 않았습니다.'",
+          "L8 description '랭크 1~2만으로' reads as 'rank 10,000-20,000' -> '랭크 1이나 2만으로'",
+          "L40 mixed '단일 forward' (L22 says '단일 순전파'); L97 '모델이 원래 가진 표현' (가지다) -> '모델에 이미 있는 표현'"],
+    "C": ["L78 '저자들은 연구 배경에서 소개한 MNLI 저데이터 과제를 썼습니다' - the background section never introduces it (broken cross-reference).",
+          "L70 '앞서 든 예처럼 GPT-3를 WikiSQL에 맞춘다면' - no such example was set up earlier.",
+          "L40 introduces adapters again ('비교 대상인 어댑터(adapter)는 ... 기존 방법입니다') and repeats the RTX8000/30% latency measurement already given in L22 and L26."],
+    "D": ["L44 '가상의 계산' has no numbers plugged in (d=k=12,288 would give 24,576 vs about 1억 5,100만 parameters), so the scale example does not land.",
+          "The α/r scaling (L42) and the φ formula (L91-93) are explained well where they appear."],
+    "E": ["Tables 5 and 16 copy the source cells verbatim, but the headline GPT-3 comparison (Table 4: LoRA 73.4/91.7/53.8 vs FT 73.8/89.5/52.0) is missing where a table is needed; L70 gives only '같거나 더 높은 성능'.",
+          "L40 repeats L22/L26 latency content (duplication)."],
+    "F": ["L26 'LoRA는 모듈을 병렬로 붙이는 구조라서 이런 지연이 생기지 않습니다' (and L40 '경로를 옆에 나란히 두기 때문에') credits the zero added latency to the parallel branch; the paper credits it to merging W = W0 + BA (Sec. 4.1) and notes an unmerged LoRA cannot avoid it when batching tasks (Sec. 4.2).",
+          "L97 'GPT-3를 WikiSQL에 맞출 때 W_q·W_v에 붙인 랭크 1~4의 작은 행렬도 ... SQL 생성에 필요한 방향을 증폭할 뿐입니다' - extrapolation the paper does not make (Table 7 is the 48th-layer W_q, r=4/64, no task-specific claim)."],
+    "G": ["Description 127 chars, opens with 'LoRA', numbers (1,750억, 1~2, 3배) all in TL;DR; use_math true with $$ present. Only the '1~2만' ambiguity."],
+    "U1": ["Motivation, method and implementation are covered, but the results omit the main numbers (Table 4), RoBERTa/DeBERTa/GPT-2 results, and the 10,000x checkpoint (350GB->35MB), 1.2TB->350GB VRAM and 25% throughput figures."],
+    "U2": ["TL;DR is plain prose; one grounded limitation (L99, footnote 6 and heuristics) is given. The paper's own stated limitation (no batching of different-task inputs once merged) is missing, and L40 is repeated filler."],
+    "X1": ["Tags restate the title/abstract: 'Low-Rank-Adaptation', 'Rank-Decomposition-Matrices', 'Frozen-Pretrained-Weights', 'No-Inference-Latency'; 'Parameter-Efficient-Fine-Tuning' is the reusable one."]
+  },
+  "principles": {
+    "claim_headings": {"status": "not met", "evidence": "L18/L28/L46/L68/L95 are topic names."},
+    "running_example": {"status": "partly met", "evidence": "GPT-3 on WikiSQL is invoked in L70 ('앞서 든 예처럼') and L97, but never set up earlier."},
+    "mechanism_order": {"status": "partly met", "evidence": "L30-44 go hypothesis -> formula -> init/scaling, but the worked example in L44 has no numbers."},
+    "facts_once": {"status": "not met", "evidence": "Adapter latency (RTX8000, >30%) appears in L22, L26 and L40; adapter definition L22 and L40."},
+    "numbers_with_scope": {"status": "met", "evidence": "Tables carry model/metric headers; L87 gives ±0.3 seed variance; L93 48th of 96 layers."},
+    "nothing_invented": {"status": "partly met", "evidence": "L48 '가상의 과제 X' and L44 '가상의 계산' are marked as the writer's, but L97 SQL-direction extrapolation and L26 latency mechanism go beyond the paper."},
+    "own_assessment_at_end": {"status": "met", "evidence": "L101 '이 글의 관점에서는 ... 일반화하려면 검증이 더 필요합니다 ... 랭크를 바꿔 가며 직접 확인하는 편이 안전합니다.'"},
+    "length_fitted": {"status": "partly met", "evidence": "About 8,100 characters; space spent on duplicated latency content while headline results are absent."},
+    "type_shape": {"status": "partly met", "evidence": "TL;DR + five-question arc present; no single distilled headline results table."},
+    "korean_style": {"status": "partly met", "evidence": "Register consistent ('입니다'); L42 triple '그래서'; L40 '단일 forward'."}
+  },
+  "sampling": "Body blocks after the front matter counted as paragraphs (prose, tables, display equations, images; headings excluded), 33 in total; sampled 2,5,8,11,14,17,20,23,26,29,32 (L20,L26,L34,L40,L48,L54-62,L70,L76,L87,L93,L101), several claims per paragraph.",
+  "claims": {
+    "checked": 15, "supported": 14, "unsupported": 0, "wrong": 1, "unverifiable": 0, "numeric": 8,
+    "examples": [
+      {"line": 20, "claim": "Full fine-tuning creates a full model copy per task", "verdict": "supported", "source": "Intro: 'deploying independent instances of fine-tuned models, each with 175B parameters, is prohibitively expensive'"},
+      {"line": 26, "claim": "Adapter latency can rise over 30% vs no-adapter baseline in online short-sequence settings", "verdict": "supported", "source": "Fig. 5 caption: 'the slow-down can be as high as over 30% in an online, short-sequence-length scenario'"},
+      {"line": 26, "claim": "LoRA has no such latency because its module is attached in parallel", "verdict": "wrong", "source": "Sec. 4.1: 'we can explicitly compute and store W = W0 + BA ... guarantees that we do not introduce any additional latency'; Sec. 4.2 notes unmerged weights are needed to batch tasks"},
+      {"line": 34, "claim": "h = W0x + ΔWx = W0x + BAx; outputs summed coordinate-wise", "verdict": "supported", "source": "Eq. 3 and 'their respective output vectors are summed coordinate-wise'"},
+      {"line": 40, "claim": "GPT-2 medium, single forward on NVIDIA Quadro RTX8000, >30% slowdown", "verdict": "supported", "source": "App. B: 'single forward pass on an NVIDIA Quadro RTX8000 by averaging over 100 trials'"},
+      {"line": 48, "claim": "Recover W0 by subtracting BA and add B'A', little memory overhead", "verdict": "supported", "source": "Sec. 4.1: 'recover W0 by subtracting BA and then adding a different B'A', a quick operation with very little memory overhead'"},
+      {"line": "54-62", "claim": "Table 5 cells (W_q 70.4/91.0 ... all four r=2 73.7/91.7)", "verdict": "supported", "source": "Table 5, all 14 cells match"},
+      {"line": 70, "claim": "GPT-3 175B as final stress test; WikiSQL/MNLI-m accuracy, SAMSum ROUGE; matches or exceeds FT on all three", "verdict": "supported", "source": "Sec. 5.5 and Table 4 caption"},
+      {"line": 76, "claim": "Prefix tuning drops with more special tokens; authors suspect input distribution shift", "verdict": "supported", "source": "Sec. 5.5: 'more than 256 special tokens ... more than 32 ... we suspect that having more special tokens causes the input distribution to shift'"},
+      {"line": 87, "claim": "LoRA beats FT at MNLI-100 and full; comparable at 1k/10k within ±0.3 seed variance", "verdict": "supported", "source": "App. F.3"},
+      {"line": 87, "claim": "PrefixEmbed near random on the smallest set", "verdict": "supported", "source": "App. F.3: '37.6% vs. 33.3%'"},
+      {"line": 93, "claim": "Analysis on the 48th of 96 layers", "verdict": "supported", "source": "Sec. 7.2: 'We only look at the 48th layer (out of 96)'"},
+      {"line": 93, "claim": "Only the top singular direction overlaps; ΔWq and ΔWv share a 1-dim subspace with high similarity", "verdict": "supported", "source": "Sec. 7.2: 'share a subspace of dimension 1 with normalized similarity > 0.5'"},
+      {"line": "91-93", "claim": "φ in [0,1] over top-i/top-j right singular vectors; 0 separation, 1 overlap", "verdict": "supported", "source": "Eq. 4 and 'right-singular unitary matrices'"},
+      {"line": 101, "claim": "The amplification reading rests on a specific GPT-3 matrix analysis", "verdict": "supported", "source": "Table 7: 'weight matrices are taken from the 48th layer of GPT-3' (W_q only)"}
+    ],
+    "out_of_sample_notes": [
+      {"line": 97, "claim": "WikiSQL W_q/W_v rank 1-4 matrices amplify SQL-generation directions", "verdict": "unsupported", "source": "Paper makes no task-specific claim; Sec. 7.3/H.3 are task-agnostic"},
+      {"line": 97, "claim": "Top-4 ΔW vs top-10% W similarity barely exceeds 0.2", "verdict": "supported", "source": "App. H.3"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0, "avoided": 0, "na": 0, "repeated_ids": [],
+    "note": "human_fixes.yaml lists no fixes for summary-lora (fixes: []). Generic notes checked: HTML entity leak ('&amp;') avoided - none in the post; 'Pdf' title avoided - L3 is the paper title."
+  },
+  "extras": {},
+  "top_issues": [
+    "Wrong mechanism: L26/L40 credit zero inference latency to the parallel branch; the paper credits merging W0+BA (and notes the batching limitation when unmerged).",
+    "Results lack the headline numbers: no GPT-3 Table 4 values, no RoBERTa/DeBERTa/GPT-2 results, no 10,000x/350GB->35MB or VRAM figures; L70 says only '같거나 더 높은 성능'.",
+    "Flow and duplication: broken cross-references (L78 '연구 배경에서 소개한 MNLI 저데이터 과제', L70 '앞서 든 예처럼'), adapter latency repeated in L22/L26/L40, plus the L97 SQL-direction extrapolation."
+  ]
+}

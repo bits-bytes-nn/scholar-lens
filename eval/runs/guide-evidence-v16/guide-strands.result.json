@@ -1,0 +1,153 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/, https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+  "title": "Strands Agents: The Model-Driven Loop and Its Production Controls",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-strands-agents-the-model-driven-loop-and-its-production-controls/2026-11-07-strands-agents-the-model-driven-loop-and-its-production-controls.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-strands-agents-the-model-driven-loop-and-its-production-controls.md",
+  "pr_url": null,
+  "warnings": [
+    "Section 'JSON 생성 대신 도구 호출로 받는 검증된 구조화 출력': the writer could not fix: 에이전트 수준에 붙인 스키마의 동작은 근거가 \"에이전트나 단일 호출에 붙일 수 있다\"는 데서 그쳐서 따로 설명하지 않았습니다. 그 방식이 있다는 사실만 적고, 호출 단위 규칙에는 한정어를 달았습니다. 근거는 상한에 도달했을 때 예외를 던진다고 말하지 않습니다. 시도 제한을 두면 예외 대신 재시도를 이어 간다고 할 뿐입니다. 그래서 이 문장은 근거대로 두 문장으로 나눴고, 상한 도달 시 예외가 난다는 내용은 넣지 않았습니다.",
+    "Section '수명주기 지점마다 끼어드는 타입 있는 훅 이벤트와 트레이스 span': check 1 sentence(s) the evidence may not support: 훅이 걸리는 모델 호출과 도구 호출 경계는 트레이스에서도 단위로 나타납니다. (unsupported: Only a third-party blog (E164) describes model and tool calls as trace spans; the sentence states this as current tool behaviour, and no official source confirms it. (not supported: 모델 호출과 도구 호출 경계는 트레이스에서도 단위로 나타납니다))",
+    "Section '타입 있는 결정을 반환하는 개입 계층과 위험 분류 기반 사람 승인': check 1 sentence(s) the evidence may not support: 사람 승인은 도구가 실행되기 전에만 의미가 있고, 이 액션은 SDK의 인터럽트·재개 시스템과 맞물려 도구 실행 전에 루프를 멈추기 때문입니다 [[E41]]. (unsupported: The docs say Confirm is only supported on before_tool_call and pauses via interrupt/resume before a tool executes, but they give no design reason (approval only matters before execution) for the restriction. (not supported: 사람 승인은 도구가 실행되기 전에만 의미가 있기 때문 (stated as the reason for the restriction)))",
+    "Section '스로틀링에만 걸리는 기본 모델 재시도와 그 범위를 넓히는 두 가지 확장': 1 edit(s) not applied: would unbalance a code fence: 'agent = Agent(hooks=[CustomRetry()])\\n``` 이 훅은 시도 횟수를 인스턴스 속성'",
+    "Section '모델이 보는 기록, 저장되는 상태, 보이지 않는 호출 상태로 나뉜 세 층과 락 없는 세션 영속화': the writer could not fix: 스냅샷 복원 메서드 이름은 근거에 없어서 밝히지 못했습니다(근거에는 `take_snapshot`만 나옵니다). 영속화를 일으키는 구체적인 수명주기 이벤트도 근거에 이름이 없어서, 그 사이에 바꾼 상태는 저장되지 않는다는 결과만 썼습니다. `request_state` 슬롯을 도구나 훅이 어떻게 채우는지도 근거에 없어서, 이 슬롯이 무엇이고 `agent.state`와 어떻게 다른지만 설명했습니다.",
+    "Section '모델이 보는 기록, 저장되는 상태, 보이지 않는 호출 상태로 나뉜 세 층과 락 없는 세션 영속화': 1 edit(s) not applied: would add a writing-rule slip (table): '| 구분 | 모델 컨텍스트 포함 | 수명 | 세션 영속화 |\\n|---|---|---|---|'",
+    "Section '대화 기록·에이전트 상태·호출 상태의 분리와 세션 영속화': check 1 sentence(s) the evidence may not support: Python에서는 저장소를 지정하지 않아도 컨테이너 로컬 디스크에 조용히 쓰이므로, 프로덕션에서는 `S3Storage`를 명시합니다 [[E82]]. (unsupported: Evidence gives the LocalFileStorage fallback but not that it happens silently (no warning) or that it writes to the container's local disk. (not supported: 저장소를 지정하지 않아도 컨테이너 로컬 디스크에 조용히 쓰이므로))",
+    "Section '단일 에이전트 중심 SDK의 적합 영역과 한계': check 1 sentence(s) the evidence may not support: 앞서 본 `Confirm` 액션도 이 인터럽트 위에서 동작합니다. (unsupported: Confirm pausing via the interrupt system is documented only for the Python SDK (E43); the sentence states it without that qualifier. (not supported: Confirm 액션이 인터럽트 위에서 동작 (Python 한정 근거)))",
+    "Section '정지 사유가 다음 동작을 정하는 추론-행동-관찰 사이클': the writer could not fix: The later 설치 section isn't part of this text, so it can't be edited here. Someone needs to change that section so it refers back to the `pip install strands-agents` command shown here instead of introducing it again.",
+    "Section '반복 경계에서 검사되는 예산, 협력으로 멈추는 취소, 기본으로 거부되는 겹친 호출': the writer could not fix: `build_ticket_agent`와 `build_ticket_session_agent`는 이 섹션에 없어서, 같은 `HumanInTheLoop` 수정을 거기에는 적용하지 못했습니다. `HumanInTheLoop`의 import 경로는 근거 자료에 없습니다. 그래서 `RefundLimitGuard`처럼 앞에서 정의된 것으로 보고 사용했습니다."
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2180.8,
+  "input_tokens": 2446977,
+  "output_tokens": 255472,
+  "estimated_cost_usd": 12.3119,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 130,
+      "failed_calls": 0,
+      "input_tokens": 387501,
+      "output_tokens": 255472,
+      "cache_read_tokens": 854442,
+      "cache_write_tokens": 1205034,
+      "cost_usd": 12.311867
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2616,
+        "output_tokens": 207,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000365
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2785,
+        "output_tokens": 758,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000657
+      },
+      "read": {
+        "calls": 44,
+        "failed_calls": 0,
+        "input_tokens": 108,
+        "output_tokens": 29510,
+        "cache_read_tokens": 223818,
+        "cache_write_tokens": 62081,
+        "cost_usd": 0.495283
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 7930,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 24387,
+        "cost_usd": 0.280551
+      },
+      "verify": {
+        "calls": 32,
+        "failed_calls": 0,
+        "input_tokens": 242515,
+        "output_tokens": 80774,
+        "cache_read_tokens": 372064,
+        "cache_write_tokens": 330512,
+        "cost_usd": 4.386921
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 57498,
+        "cache_read_tokens": 43170,
+        "cache_write_tokens": 433177,
+        "cost_usd": 3.333291
+      },
+      "review": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 29165,
+        "cache_read_tokens": 23508,
+        "cache_write_tokens": 91489,
+        "cost_usd": 1.050344
+      },
+      "fix": {
+        "calls": 26,
+        "failed_calls": 0,
+        "input_tokens": 117129,
+        "output_tokens": 44882,
+        "cache_read_tokens": 191882,
+        "cache_write_tokens": 263388,
+        "cost_usd": 2.759856
+      },
+      "finalize": {
+        "calls": 2,
+        "failed_calls": 0,
+        "input_tokens": 22252,
+        "output_tokens": 4748,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.004599
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 27653,
+        "output_tokens": 5713,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.005621
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 44,
+        "failed_calls": 0,
+        "input_tokens": 108,
+        "output_tokens": 29510,
+        "cache_read_tokens": 223818,
+        "cache_write_tokens": 62081,
+        "cost_usd": 0.495283
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 82,
+        "failed_calls": 0,
+        "input_tokens": 359740,
+        "output_tokens": 220249,
+        "cache_read_tokens": 630624,
+        "cache_write_tokens": 1142953,
+        "cost_usd": 11.810963
+      }
+    }
+  }
+}

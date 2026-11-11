@@ -1,0 +1,128 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.vllm.ai/en/latest/getting_started/quickstart.html, https://arxiv.org/abs/2309.06180, https://blog.vllm.ai/2023/06/20/vllm.html",
+  "title": "vLLM in Practice: PagedAttention, Scheduling, and Production Serving",
+  "markdown_path": "/private/tmp/sl-old/papers/guide-vllm-in-practice-pagedattention-scheduling-and-production-serving/2026-11-08-vllm-in-practice-pagedattention-scheduling-and-production-serving.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-08-vllm-in-practice-pagedattention-scheduling-and-production-serving.md",
+  "pr_url": null,
+  "warnings": [
+    "Guide section '오프라인 배치 추론' kept below the bar (score 82, 1 blocking issue(s); targeted fix reverted after re-scoring): check it: \"근거 없는 주장: \"`chat` 결과의 `output.prompt`에는 템플릿이 적용된 문자열이 들어가므로, 예제는 원래 질문을 `prompts[idx]`에서 다시 꺼내 출력합니다.\" 공식 Quickstart는 `prompts[idx]`를 쓰는 코드만 보여 주고, `llm.chat`의 `output.prompt`에 무엇이 들어가는지는 설명하지 않습니다. 원\"",
+    "Guide section '어텐션 백엔드 선택' kept below the bar (score 72, 0 blocking issue(s); targeted fix applied and re-scored): check it.",
+    "Flags/metrics the official pages fetched for this guide never mention; verify them against the current reference: vllm:num_preemptions_total, vllm:prefix_cache_hits_total, vllm:prefix_cache_queries_total, vllm_e2e_request_latency_seconds"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2886.8,
+  "input_tokens": 3098907,
+  "output_tokens": 330299,
+  "estimated_cost_usd": 18.3707,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 69,
+      "failed_calls": 0,
+      "input_tokens": 3098907,
+      "output_tokens": 330299,
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "cost_usd": 18.370732
+    },
+    "by_stage": {
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 255203,
+        "output_tokens": 2726,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.537666
+      },
+      "draft": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 559268,
+        "output_tokens": 77307,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 3.783212
+      },
+      "review": {
+        "calls": 27,
+        "failed_calls": 0,
+        "input_tokens": 1188855,
+        "output_tokens": 113772,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 7.03086
+      },
+      "revise": {
+        "calls": 10,
+        "failed_calls": 0,
+        "input_tokens": 489388,
+        "output_tokens": 47933,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 2.916212
+      },
+      "fix": {
+        "calls": 4,
+        "failed_calls": 0,
+        "input_tokens": 189217,
+        "output_tokens": 15047,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 1.057808
+      },
+      "verify": {
+        "calls": 13,
+        "failed_calls": 0,
+        "input_tokens": 401571,
+        "output_tokens": 71815,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 3.042584
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 15405,
+        "output_tokens": 1699,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00239
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 255203,
+        "output_tokens": 2726,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.537666
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 67,
+        "failed_calls": 0,
+        "input_tokens": 2828299,
+        "output_tokens": 325874,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 17.830676
+      },
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 15405,
+        "output_tokens": 1699,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.00239
+      }
+    }
+  }
+}

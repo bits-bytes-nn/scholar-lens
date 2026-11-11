@@ -1,0 +1,161 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://strandsagents.com/docs/user-guide/sdk/agents/agent-loop/, https://strandsagents.com/docs/user-guide/sdk/agents/hooks/",
+  "title": "Strands Agents: Model-Driven Loop and Its Production Controls",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-strands-agents-model-driven-loop-and-its-production-controls/2026-11-07-strands-agents-model-driven-loop-and-its-production-controls.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-07-strands-agents-model-driven-loop-and-its-production-controls.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '중단 사유로 분기하는 추론-도구 호출 사이클': 1 edit(s) not applied: would add a writing-rule slip (table): '이때 기록에는 티켓 원문(user), 도구 사용 요청(assistant), 도구 결과(user), 최종 답변'",
+    "Section '중단 사유로 분기하는 추론-도구 호출 사이클' still has: a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section 'JSON 생성 대신 도구 호출로 받는 구조화 출력': the writer could not fix: 고치지 못한 항목은 하나입니다. `result.invocation_context`를 다음 호출에 넘길 때 쓰는 인자 이름이 근거 자료에 없습니다. SDK 소스에는 `Agent.__init__`만 있고 호출 쪽 시그니처는 나오지 않습니다. 인자를 지어내지 않으려고 이 문장은 그대로 두었습니다. 나머지 수정은 다음과 같습니다. - 날짜 예시는 출처 이름을 빼고 이 코드가 실행될 때 오가는 값을 보여 주는 작은 표로 바꿨습니다. 근거에 이 숫자가 없어서 직접 만든 예시로 [[EX]]를 달았습니다. 이 표가 섹션의 두 번째 시각 자료가 됩",
+    "Section 'JSON 생성 대신 도구 호출로 받는 구조화 출력': 1 edit(s) not applied: would add a writing-rule slip (table): '문서의 사례에서 모델은 처음에 `2025-07-22`를 넣었다가 \"due_date must be after '",
+    "Section 'JSON 생성 대신 도구 호출로 받는 구조화 출력': check 1 sentence(s) the evidence may not support: 모델은 필드 설명을 모두 읽기 때문에, 설명에는 타입이 아니라 필드의 의미를 적어야 합니다 [[E93]]. (unsupported: Source says describe what a field means, 'not only its type'; the sentence says meaning instead of type. The cited E93 is about validation errors. (not supported: 설명에는 타입이 아니라 필드의 의미를 적어야))",
+    "Section '설치부터 티켓 분류 객체를 받는 첫 실행까지': the writer could not fix: The problem asked me to name the package that provides `file_editor`. The evidence shows `file_editor` imported from `strands.vended_tools`, and the quickstart uses it after installing only `strands-agents`. So I did not say `strands-agents-tools` provides it. The text says this guide follows the tw",
+    "Section '설치부터 티켓 분류 객체를 받는 첫 실행까지': 1 edit(s) not applied: would add a writing-rule slip (English stem with a Korean ending 'import하는데'): 'Python 퀵스타트는 `pip install strands-agents` 하나만 설치합니다 [[E147]]'",
+    "Section 'provider 문자열과 effort로 정하는 모델과 추론 수준': the writer could not fix: `bedrock-mantle`이 무엇인지 설명하지 못했습니다. 근거에는 별칭 이름만 있고 정의가 없습니다. 하네스 예시는 티켓 메시지로 이어 갔지만 `TicketTriage` 구조화 출력은 넣지 않았습니다. 근거에는 하네스에서 `structured_output_model`을 쓰는 예가 없습니다.",
+    "Section '턴·토큰 한도, 협력적 취소, 요청당 에이전트로 묶는 호출 경계': check 1 sentence(s) the evidence may not support: 같은 인스턴스에서 들어오는 재시도만 토큰으로 묶이므로, 요청마다 새 에이전트를 만드는 구성에서는 `idempotency_token`이 중복 제거에 쓰이지 않습니다. (unsupported: Evidence never states that idempotency tokens are scoped per agent instance or that they do nothing when each request gets a fresh agent. (not supported: 같은 인스턴스에서 들어오는 재시도만 토큰으로 묶이므로; 요청마다 새 에이전트를 만드는 구성에서는 `idempotency_token`이 중복 제거에 쓰이지 않습니다))",
+    "Section '턴·토큰 한도, 협력적 취소, 요청당 에이전트로 묶는 호출 경계' still has: a table cell is blank ('—', or only evidence markers, which code removes): give the value the evidence or the passages state, or drop the row or column it belongs to; markers go after a cell's content: | 도구 실행 전 | 도구 호출을 건너뛰고 유효한 대화 상태를 위해 오류 결과 추가 | - | | English stem with a Korean ending 'import하면': y`에 따르면 이 도구는 v0.9.0에서 제거되었고, import하면 `ImportError`가 나며 `strands-ag",
+    "Section '스로틀링만 다루는 기본 재시도와 그 너머의 확장 지점': the writer could not fix: - **`max_delay` default:** I changed it from 128 to 240 because that is what the installed SDK code (strands-agents 1.64.0) sets. I also took E78 off the sentence that introduces the parameter table, since that evidence gives the old value of 128. - **New citations:** the default-wait sentences now ",
+    "Section '스로틀링만 다루는 기본 재시도와 그 너머의 확장 지점': check 2 sentence(s) the evidence may not support: 기본값 그대로면 재시도 전 대기가 4초에서 64초까지 다섯 번 이어집니다. (numbers not in its evidence) | 가장 긴 대기도 64초라서 `max_delay`의 240초 상한에는 닿지 않습니다. (numbers not in its evidence)",
+    "Section '스로틀링만 다루는 기본 재시도와 그 너머의 확장 지점' still has: numbers ['64'] without evidence (cite it; an illustration of your own ends with [[EX]]): 기본값 그대로면 재시도 전 대기가 4초에서 64초까지 다섯 번 이어집니다. | numbers ['64', '240'] without evidence (cite it; an illustration of your own ends with [[EX]]): 가장 긴 대기도 64초라서 `max_delay`의 240초 상한에는 닿지 않습니다.",
+    "Section '훅 위에 얹은 타입 있는 결정 계층으로서의 개입': the writer could not fix: Problem 1 (cedar extra install command): not fixed. No evidence or SDK source passage shows that `CedarAuthorization` needs the `strands-agents[cedar]` extra, and no install command appears. The Cedar evidence only shows the import path `strands.vended_interventions.cedar`. Adding `pip install 'stra",
+    "Section '대화 기록·에이전트 상태·호출 상태와 락 없는 세션 영속화': 1 edit(s) not applied: would unbalance a code fence: '        session_manager=session_manager,\\n        callback_ha'",
+    "Section '대화 기록·에이전트 상태·호출 상태와 락 없는 세션 영속화': 1 sentence(s) from a whole-post fix removed (they contradict their evidence or talk about the post's sources): Python에서 `@tool(context=True)`로 선언하면 `ToolContext`는 `tool_context`라는 이름의 매개변수로 들어오고, `context`에 문자열을 넘기면 그 이름의 매개변수로 들어옵",
+    "Section 'TL;DR' still has: copies a sentence of the body; sum it up in new words: Strands Agents는 에이전트 루프를 직접 짜려던 자리에 들어가는 Python·TypeScript용 오픈소스 SDK입니다.",
+    "English stem with a Korean ending 'import하면': y`에 따르면 이 도구는 v0.9.0에서 제거되었고, import하면 `ImportError`가 나며 `strands-ag"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2326.6,
+  "input_tokens": 2575066,
+  "output_tokens": 261459,
+  "estimated_cost_usd": 13.2077,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 118,
+      "failed_calls": 0,
+      "input_tokens": 427579,
+      "output_tokens": 261459,
+      "cache_read_tokens": 880628,
+      "cache_write_tokens": 1266859,
+      "cost_usd": 13.207742
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2616,
+        "output_tokens": 191,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000357
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2785,
+        "output_tokens": 675,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000616
+      },
+      "read": {
+        "calls": 29,
+        "failed_calls": 0,
+        "input_tokens": 72,
+        "output_tokens": 17737,
+        "cache_read_tokens": 133456,
+        "cache_write_tokens": 40993,
+        "cost_usd": 0.30669
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 8386,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 23596,
+        "cost_usd": 0.285716
+      },
+      "verify": {
+        "calls": 33,
+        "failed_calls": 0,
+        "input_tokens": 269618,
+        "output_tokens": 79807,
+        "cache_read_tokens": 448888,
+        "cache_write_tokens": 359319,
+        "cost_usd": 4.650755
+      },
+      "draft": {
+        "calls": 11,
+        "failed_calls": 0,
+        "input_tokens": 44,
+        "output_tokens": 59435,
+        "cache_read_tokens": 38853,
+        "cache_write_tokens": 445792,
+        "cost_usd": 3.433379
+      },
+      "review": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 30769,
+        "cache_read_tokens": 21209,
+        "cache_write_tokens": 104210,
+        "cost_usd": 1.145109
+      },
+      "fix": {
+        "calls": 29,
+        "failed_calls": 0,
+        "input_tokens": 140508,
+        "output_tokens": 63058,
+        "cache_read_tokens": 238222,
+        "cache_write_tokens": 292949,
+        "cost_usd": 3.383231
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 11884,
+        "output_tokens": 1401,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.001889
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 17285,
+        "output_tokens": 2267,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002862
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 29,
+        "failed_calls": 0,
+        "input_tokens": 72,
+        "output_tokens": 17737,
+        "cache_read_tokens": 133456,
+        "cache_write_tokens": 40993,
+        "cost_usd": 0.30669
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 86,
+        "failed_calls": 0,
+        "input_tokens": 410222,
+        "output_tokens": 241455,
+        "cache_read_tokens": 747172,
+        "cache_write_tokens": 1225866,
+        "cost_usd": 12.89819
+      }
+    }
+  }
+}

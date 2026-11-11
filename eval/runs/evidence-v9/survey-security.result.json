@@ -1,0 +1,119 @@
+{
+  "kind": "survey_write",
+  "status": "failed",
+  "input": "eval/sets/plans/survey-security.json",
+  "title": null,
+  "markdown_path": null,
+  "plan_path": null,
+  "s3_uri": null,
+  "pr_url": null,
+  "warnings": [
+    "Figures arXiv does not serve were left out: https://arxiv.org/html/2503.00061v2/tex/figures/asr_defense_adaptive_attack_bar_spaced.png, https://arxiv.org/html/2503.00061v2/tex/figures/system.png",
+    "Evidence that misstates its quote was left out: E83 (The quoted row is 'Real delim.' (real delimiters), but the claim and cell call it 유사/근접 구분자 (similar/close delimiters). )",
+    "Section '안전 학습의 두 실패 모드와 자동화되는 탈옥' still has: heading is a sentence: write the claim as a noun phrase ('정책보다 먼저 무너지는 보상 모델'): 교란 기반 방어는 토큰 수준 공격에만 듣습니다 | ['35'] already stated in '목표 탈취에서 적응형 공격까지 이어진 프롬프트 인젝션': refer back without repeating: 범용 접미사를 보류된 행동에 적용한 테스트에서는 Llama-2-7B-Chat에서 84%로, AutoPrompt의 35%를 넘었습니다 . | ['34'] already stated in '목표 탈취에서 적응형 공격까지 이어진 프롬프트 인젝션': refer back without repeating: PAIR는 평균 34초, CPU 메모리 366MB, 약 $0.026으로 탈옥을 찾았고, GCG는 1.8시간에 72GB GPU가 필요했습니다 . | ['50'] already stated in '목표 탈취에서 적응형 공격까지 이어진 프롬프트 인젝션': refer back without repeating: 성공률은 두 GPT 모델에서 50%, Gemini에서 73%였습니다 .",
+    "Section 'LLM 시뮬레이션에서 상태 기반 환경으로 옮겨 간 에이전트 보안 측정' still has: self-reference '앞 절': . 데이터 탈취에서는 단계별 차이가 두드러졌습니다. 앞 절에서 본 대로, 추출 단계는 직접 피해 도구 실행보다 | self-reference '앞 절': 이전트가 공격 없이도 그리 유능하지 않다는 것입니다. 앞 절에서 본 대로 에이전트는 공격이 없어도 과제를 상당 부 | self-reference '앞 절': 교하며 파레토 프런티어 위의 점을 따로 표시합니다 . 앞 절에서 본 공격 하 절대 유용성 하락이 이 그래프에서도 | self-reference '앞 절': 공격일수록 모델 전반에서 피해 점수가 올라갑니다 . 앞 절에서 본 Claude 모델의 사례처럼, 단순한 범용 탈 | self-reference '앞 절': 에 성공한 뒤에도 모델 능력이 크게 줄지 않습니다 . 앞 절에서 본 Claude 모델의 템플릿 공격 비거부 피해",
+    "Section '모델 학습에서 시스템 설계로 내려간 프롬프트 인젝션 방어' still has: ['34'] already stated in '목표 탈취에서 적응형 공격까지 이어진 프롬프트 인젝션': refer back without repeating: 학습에서 일부러 뺀 탈옥, 비밀번호 추출, 도구 기반 인젝션에도 일반화되어 견고성이 최대 34% 향상되었고, 이 수치 역시 상대·%p 구분과 해당 평가 항목 없이 보고됩니다 .",
+    "Section '지시 대신 지식과 시연을 심는 검색·메모리·백도어 오염': check 1 sentence(s) the evidence may not support: GPT-3.5와 LLaMA3 백본, 두 종류 리트리버의 평균으로 검색 성공률은 81.2%, 정상 성능에 대한 영향은 평균 0.74%였습니다. (numbers not in its evidence)",
+    "Section '지시 대신 지식과 시연을 심는 검색·메모리·백도어 오염' still has: heading is a sentence: write the claim as a noun phrase ('정책보다 먼저 무너지는 보상 모델'): PoisonedRAG: 지식 DB가 새 공격면이 된다 | heading is a sentence: write the claim as a noun phrase ('정책보다 먼저 무너지는 보상 모델'): RAGForensics: 막지 못했다면 추적한다 | numbers ['3.5', '81.2', '0.74'] without evidence: GPT-3.5와 LLaMA3 백본, 두 종류 리트리버의 평균으로 검색 성공률은 81.2%, 정상 성능에 대한 영향은 평균 0.74%였습니다. | ['3.5'] already stated in '안전 학습의 두 실패 모드와 자동화되는 탈옥': refer back without repeating: GPT-3.5와 LLaMA3 백본, 두 종류 리트리버의 평균으로 검색 성공률은 81.2%, 정상 성능에 대한 영향은 평균 0.74%였습니다. | ['80'] already stated in 'LLM 시뮬레이션에서 상태 기반 환경으로 옮겨 간 에이전트 보안 측정': refer back without repeating: 자율주행(Agent-Driver), QA(ReAct-StrategyQA), EHRAgent 세 에이전트에서는 오염율 0.1% 미만으로 평균 공격 성공률 80% 이상, 정상 성능 저하 1% 이하였습니다 .",
+    "Section '도구 문서와 에이전트 간 메시지로 번지는 공급망형 공격' still has: ['3.5'] already stated in '안전 학습의 두 실패 모드와 자동화되는 탈옥': refer back without repeating: 이 설정에서 자기복제 감염은 비복제 감염보다 GPT-4o에서 공격 성공률이 13.92% 높았고, GPT-3.5에서는 209% 더 효과적이었습니다 . | ['3.5'] already stated in '안전 학습의 두 실패 모드와 자동화되는 탈옥': refer back without repeating: 감염 프롬프트가 기억의 중요도 점수를 조작하면, GPT-4o는 감염 프롬프트에 일관되게 10점을, GPT-3.5는 평균 9.84점을 매겼습니다 .",
+    "Section '계보마다 되풀이되는 탐지·필터 방어의 실패' still has: ['0.87'] already stated in '목표 탈취에서 적응형 공격까지 이어진 프롬프트 인젝션': refer back without repeating: PoisonedRAG의 블랙박스 공격은 패러프레이징 방어를 거친 뒤에도 NQ에서 공격 성공률이 0.97에서 0.87로 내려가는 데 그쳤습니다 . | ['50'] already stated in '목표 탈취에서 적응형 공격까지 이어진 프롬프트 인젝션': refer back without repeating: $$k=50$$에서도 HotpotQA 공격 성공률이 블랙박스 41%, 화이트박스 43%로 남았고, 컨텍스트가 길어지는 비용까지 붙었습니다 . | ['0.74'] already stated in '지식과 시연을 심는 오염: 지시문 없이도 에이전트를 조종하는 방법': refer back without repeating: ToolHijacker의 악성 도구 문서에 PPL과 PPL-W 탐지를 적용하자 대부분을 놓쳤고, AUC는 각각 0.64와 0.74였습니다 . | a standard section needs at least 1 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '능력이 커질수록 넓어지는 공격면과 남은 공백': check 2 sentence(s) the evidence may not support: 'Attack Ignored' 비율로 보면 GPT-4o가 GPT-3.5보다 공격을 훨씬 잘 무시했습니다. (numbers not in its evidence) | GPT-3.5 Turbo는 파라미터를 환각하는 경향이 더 강했고, 그 환각이 도구 오류로 이어졌을 때 스스로 복구하거나 바로잡는 능력도 떨어졌습니다. (numbers not in its evidence)",
+    "Section '능력이 커질수록 넓어지는 공격면과 남은 공백' still has: numbers ['3.5'] without evidence: 'Attack Ignored' 비율로 보면 GPT-4o가 GPT-3.5보다 공격을 훨씬 잘 무시했습니다. | ['3.5'] already stated in '안전 학습의 두 실패 모드와 자동화되는 탈옥': refer back without repeating: 'Attack Ignored' 비율로 보면 GPT-4o가 GPT-3.5보다 공격을 훨씬 잘 무시했습니다. | ['66', '54', '3.5', '20'] already stated in '안전 학습의 두 실패 모드와 자동화되는 탈옥': refer back without repeating: GPT-4o는 자기복제 공격의 66%, 비복제 공격의 54%를 무시했고, GPT-3.5는 각각 9%와 20%만 무시했습니다 . | numbers ['3.5'] without evidence: GPT-3.5 Turbo는 파라미터를 환각하는 경향이 더 강했고, 그 환각이 도구 오류로 이어졌을 때 스스로 복구하거나 바로잡는 능력도 떨어졌습니다. | ['3.5'] already stated in '안전 학습의 두 실패 모드와 자동화되는 탈옥': refer back without repeating: GPT-3.5 Turbo는 파라미터를 환각하는 경향이 더 강했고, 그 환각이 도구 오류로 이어졌을 때 스스로 복구하거나 바로잡는 능력도 떨어졌습니다.",
+    "Section '모델이 아닌 시스템 경계에 거는 다음 단계' still has: evidence ['E282'] was already referred back to once; do not restate it again: 이후 나온 학습형 방어도 앞서 본 악성 도구 문서 공격 앞에서 같은 한계를 드러냈습니다 . | evidence ['E96'] was already referred back to once; do not restate it again: 공격의 입구는 앞서 본 대로 입력 속 지시문에서 검색되는 지식 DB 문서의 오염으로 , 다시 도구 문서와 에이전트 간 메시지로 옮겨 갔습니다. | evidence ['E268'] was already referred back to once; do not restate it again: 앞서 본 정책 결정 지점처럼 모델 밖의 장치가 허가 여부를 정해야 합니다 . | evidence ['E271'] was already referred back to once; do not restate it again: 앞서 다룬 서명·재승인 기반의 도구 정의 관리도 같은 경계에 속합니다 . | evidence ['E52'] was already referred back to once; do not restate it again: 앞서 논의한 대로, 탐지기와 모델을 동시에 속이도록 최적화한 공격 앞에서 필터형 방어는 버티지 못합니다 ."
+  ],
+  "error": "S3OperationError: Failed to upload '/Users/youngmki/Projects/scholar-lens/papers/survey-security-of-llm-based-ai-agents-prompt-injection-jailbreak-rag-poisoning-tool/2026-11-03-securing-llm-agents-from-prompt-injection-to-mcp-and-defenses.md'",
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 2988.3,
+  "input_tokens": 2824323,
+  "output_tokens": 336043,
+  "estimated_cost_usd": 16.615,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 101,
+      "failed_calls": 0,
+      "input_tokens": 13989,
+      "output_tokens": 336043,
+      "cache_read_tokens": 834892,
+      "cache_write_tokens": 1975442,
+      "cost_usd": 16.615022
+    },
+    "by_stage": {
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 14007,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 59147,
+        "cost_usd": 0.575891
+      },
+      "verify": {
+        "calls": 41,
+        "failed_calls": 0,
+        "input_tokens": 164,
+        "output_tokens": 62611,
+        "cache_read_tokens": 524223,
+        "cache_write_tokens": 1198420,
+        "cost_usd": 7.454654
+      },
+      "draft": {
+        "calls": 24,
+        "failed_calls": 0,
+        "input_tokens": 96,
+        "output_tokens": 87493,
+        "cache_read_tokens": 276489,
+        "cache_write_tokens": 328302,
+        "cost_usd": 3.129412
+      },
+      "review": {
+        "calls": 12,
+        "failed_calls": 0,
+        "input_tokens": 48,
+        "output_tokens": 28425,
+        "cache_read_tokens": 10728,
+        "cache_write_tokens": 58889,
+        "cost_usd": 0.867425
+      },
+      "fix": {
+        "calls": 22,
+        "failed_calls": 0,
+        "input_tokens": 88,
+        "output_tokens": 142695,
+        "cache_read_tokens": 23452,
+        "cache_write_tokens": 330684,
+        "cost_usd": 4.517044
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 13589,
+        "output_tokens": 812,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.070596
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 98,
+        "failed_calls": 0,
+        "input_tokens": 13977,
+        "output_tokens": 318591,
+        "cache_read_tokens": 832289,
+        "cache_write_tokens": 1896294,
+        "cost_usd": 16.242087
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 12,
+        "output_tokens": 17452,
+        "cache_read_tokens": 2603,
+        "cache_write_tokens": 79148,
+        "cost_usd": 0.372935
+      }
+    }
+  }
+}

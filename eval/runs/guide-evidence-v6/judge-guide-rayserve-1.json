@@ -1,0 +1,85 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v6.md",
+  "judge_run": 1,
+  "scores": {"A": 8, "B": 8, "C": 7, "D": 8, "E": 8, "F": 8, "T1": 8.5, "T2": 8.5, "T3": 9},
+  "score_notes": {
+    "A": "Front matter fine (two-level categories, use_math with $$ at L439/L696, no H1). Deductions: the TL;DR (L13-15) is two dense paragraphs; the same install command appears twice (L73, L331).",
+    "B": "Natural Korean, consistent 입니다 register, no colon-after-다 lists. Deductions: six '곧/즉' restatements (e.g. L62 '별도의 Ray 액터, 곧 별도 프로세스'), and L48 '정리하면 Ray Serve는 ... 서빙 라이브러리입니다' repeats L19.",
+    "C": "L241 '아래 팬아웃 예제처럼' points to an example that does not exist (the next code block is the streaming one). L241 also cites a '_hello_handle' ingress example, and L237 an Adder/Combiner graph, neither of which is shown. There are two conflicting text_ml.py versions: L178 says the file uses load_t5/generate helpers, while L336 says the file does not use them. L493 runs 'serve_quickstart:translator_app', but the post never names that file. L128 says the HTTP proxy runs on the head node by default, yet the L642 table gives the proxy_location default as EveryNode, and the two are never reconciled.",
+    "D": "Good help where things get hard: the power-of-two worked table (L160-168), the draining arithmetic (L792), and the query-param pitfall (L445). L42 is a little promotional padding.",
+    "E": "Tables and ASCII flow diagrams sit where they are discussed. The official architecture figure is missing. The 100KiB table (L230-233) repeats the L172 prose.",
+    "F": "All 15 sampled claims are supported. One invented-attribution case (-2): L178 says 'text_ml.py에서 ... t5-small 로딩과 생성 단계는 load_t5, generate 함수가 맡습니다', but the official text_ml.py has no such helpers (the generator's own warning flagged this too). That snippet also drops Summarizer's min_length=5.",
+    "T1": "The running example runs as pasted. On Ray 2.60.0 with a private cluster, text_ml:app returned 200 with French text, the reconfigure version switches to German, and the FastAPI query-param client, both streaming examples and the hello example also work. Gaps: the serve_quickstart.py file name is never given (L493), and the deploy YAML (L614-636) has no working_dir, so 'serve deploy' to a cluster started elsewhere relies on text_ml being importable there.",
+    "T2": "Covers the important topics in a sensible order. The Ray Data LLM batch section (L872-930) sits at the edge of the source scope.",
+    "T3": "Strong coverage of internals: actors and the request path, power-of-two routing, the object store, layered fault tolerance, autoscaler vs Ray Autoscaler, per-caller backpressure, proxy health and draining with a load balancer, observability, and when to choose it. Design advice reads as advice (L723, L958). The sources include a duplicate older-docs page (releases-2.59.0, L988), but nothing in the post relies on it alone."
+  },
+  "principles": {
+    "claim_headings": {"status": "partly met", "evidence": "Most headings are claim noun phrases (L111, L156, L294). Some are topic names: L798 '대시보드 접속 경로', L765 '외부 스케일러를 쓰는 경우', L956 '상황별 선택'."},
+    "running_example": {"status": "met", "evidence": "The text_ml Summarizer→Translator app runs from L25 to L969: config, autoscaling YAML, KubeRay, Grafana filters."},
+    "mechanism_design_code_example": {"status": "met", "evidence": "L156-168 power of two choices with a worked table; L688-696 user_config→reconfigure with a German update walk-through; L717-725 target_ongoing_requests."},
+    "facts_said_once": {"status": "not met", "evidence": "pip install at L73 and L331; controller death pausing autoscaling at L126, L308 and L731; 100KiB at L172 and L232; max_replicas default 1 at L715 and L954; Spheron PENDING at L731 and L954; KubeRay recovery at L15, L322 and L779."},
+    "numbers_with_scope_unit": {"status": "met", "evidence": "'Ray 2.59.0 기준' (L706), 100KiB, env-var defaults in seconds (L787-788), 'Ray 2.51부터' (L843)."},
+    "nothing_invented": {"status": "partly met", "evidence": "The L162 example is labelled illustrative ('4는 설명을 위해 고른 값입니다'), but the L178 helpers are attributed to text_ml.py."},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L958 '이 글의 판단으로는 ...', with a choice table at L960-967 and L969."},
+    "length_fitted": {"status": "partly met", "evidence": "992 lines. Hard parts get depth, but the repeated facts and the Ray Data section pad the length."},
+    "type_specific_shape": {"status": "met", "evidence": "Opens with the problem and a TL;DR (L11-48); architecture (L111) comes before config detail (L569); 3 non-official sources; closes with when to choose and failure modes (L932-969)."},
+    "korean_style": {"status": "mostly met", "evidence": "Consistent register with no 한다 sentences; 6 '곧/즉' restatements and one '점입니다' (L950)."}
+  },
+  "claims": {
+    "checked": 15, "supported": 15, "unsupported": 0, "wrong": 0, "unverifiable": 0, "numeric": 8,
+    "sampling": "Prose paragraphs counted from L13; every third paragraph (1, 4, 7, ...) taken, plus their tables and code.",
+    "examples": [
+      {"line": 128, "claim": "HTTP proxy defaults to one on the head node; proxy_location puts one per node", "verdict": "supported", "source": "serve/architecture: 'By default there is one HTTP proxy actor on the head node ... via the proxy_location field'. Note: production-guide/config and the schema give the EveryNode default, which the post also states at L642."},
+      {"line": 306, "claim": "Controller data is checkpointed to GCS on the head node; transient queues are lost on machine failure", "verdict": "supported", "source": "serve/architecture fault tolerance"},
+      {"line": 235, "claim": "Summary generated with max_length=15 (and min_length=5)", "verdict": "supported", "source": "getting_started Summarizer: min_length=5, max_length=15"},
+      {"line": 439, "claim": "PyTorch example batch size 1; TF client sends 28x28 random array via requests.get json", "verdict": "supported", "source": "serve-ml-models: 'Our current batch size is one'; np.random.randn(28 * 28)"},
+      {"line": 565, "claim": "With no await left, the replica finishes and the proxy discards the response", "verdict": "supported", "source": "http-guide Request cancellation"},
+      {"line": 684, "claim": "serve deploy --working-dir must be a remote .zip URI", "verdict": "supported", "source": "serve deploy --help (2.60.0): 'This must be a remote URI to a .zip file (e.g., S3 bucket)'"},
+      {"line": 690, "claim": "reconfigure is called right after __init__ when user_config is set, and on reapply", "verdict": "supported", "source": "production-guide/config user_config section"},
+      {"line": 696, "claim": "rolling_update_percentage must be in (0.0, 1.0]", "verdict": "supported", "source": "ray.serve.schema: 'Must be in (0.0, 1.0]'"},
+      {"line": 708, "claim": "num_replicas=auto equals max_ongoing_requests 5, target 2, min 1, max 100", "verdict": "supported", "source": "autoscaling-guide"},
+      {"line": 735, "claim": "max_queued_requests is per caller, default -1; handles raise BackPressureError, HTTP gets 503, configurable to 429/Retry-After", "verdict": "supported", "source": "configure-serve-deployment; best-practices load shedding"},
+      {"line": 767, "claim": "external_scaler_enabled defaults to False and excludes autoscaling_config", "verdict": "supported", "source": "production-guide/config"},
+      {"line": 787, "claim": "RAY_SERVE_PROXY_HEALTH_CHECK_TIMEOUT_S 10.0, 3 consecutive failures; MIN_DRAINING_PERIOD_S 30.0", "verdict": "supported", "source": "fault-tolerance env vars"},
+      {"line": 843, "claim": "Engine metric logging on by default as of Ray 2.51; log_engine_metrics=False disables it", "verdict": "supported", "source": "serve/llm observability"},
+      {"line": 880, "claim": "Install ray[data, llm]>=2.53.0; ServeDeployment stage uses a fixed pool, others autoscale", "verdict": "supported", "source": "data/working-with-llms"},
+      {"line": 950, "claim": "Holy Grail: per-replica actor state, Ray ecosystem integration, Ray cluster overhead for non-Ray teams, KServe more common for fresh-K8s LLM serving", "verdict": "supported", "source": "kunwar.page chapter 45, section 45.5"}
+    ],
+    "extra_verified_by_execution": ["L445 FastAPI 'text: str' is read as a query param (a JSON body returns 422)", "L612 serve build names the app app1 and leaves runtime_env empty"]
+  },
+  "checklist": {
+    "repeated": 0, "avoided": 2, "na": 0, "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "verdict": "avoided", "evidence": "No empty-text or ../_images links; the post uses ASCII diagrams (L27-34, L140-152) and no architecture image."},
+      {"id": "proxy-env-ray-start-unsupported", "verdict": "avoided", "evidence": "L783-792 gives only names, defaults and behaviour; nothing about exporting before ray start."}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 15,
+    "architecture_section_line": 111,
+    "non_official_sources": "3/19 (15.8%): Spheron, Suhas Bhairav, The Holy Grail",
+    "opens_with_problem": true,
+    "closes_with_when_to_choose_and_failure_modes": true,
+    "duplicate_source": "L987-988 Working with LLMs (latest and releases-2.59.0)"
+  },
+  "runnable_code": {
+    "verdict": "runs as pasted",
+    "environment": "ray 2.60.0, transformers 5.22.1, torch 2.15.0, Python 3.11, private local cluster (port 26391, own temp dir), Serve HTTP on 18431",
+    "results": [
+      "text_ml.py (L338-361 + L369-398) with the L414-425 client: 200, French text",
+      "L180-218 load_t5 variant: 200",
+      "L78-94 hello example: assert passes",
+      "L251-279 streaming handle: [0, 1, 2]",
+      "L447-481 FastAPI Translator with the L498-507 params client: works; a JSON-body POST gets 422, as L445 warns",
+      "L519-546 StreamingResponse route: 200, 'a b c '",
+      "L577-604 reconfigure Translator: user_config german → German output"
+    ],
+    "gaps": ["The serve_quickstart.py file name in L493 is never stated", "The L614-636 YAML has no working_dir, so serve deploy on a cluster started elsewhere needs text_ml importable there (not tested on a fresh cluster)"]
+  },
+  "top_issues": [
+    "L178 attributes invented load_t5/generate helpers to text_ml.py; this contradicts L336 and drops min_length=5",
+    "Facts repeated across sections: controller death x3, 100KiB x2, max_replicas=1 x2, Spheron PENDING x2, pip install x2",
+    "Broken or unshown references: L241 '아래 팬아웃 예제' and the _hello_handle and Adder/Combiner examples are not in the post, the L493 file name is unstated, and the L128 head-node proxy default is never reconciled with the L642 EveryNode default"
+  ]
+}

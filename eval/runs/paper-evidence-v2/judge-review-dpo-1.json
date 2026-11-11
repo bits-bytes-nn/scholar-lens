@@ -1,0 +1,98 @@
+{
+  "item": "review-dpo",
+  "post": "/tmp/eval-paper/review-dpo-v2.md",
+  "source": "https://arxiv.org/html/2305.18290v3",
+  "judge_run": 1,
+  "sampling": "111 body paragraphs (blank-line blocks, excluding headings, display math, images); took paragraphs 1,4,7,...,109 and drew the 15 claims from them",
+  "scores": {"A": 8, "B": 7, "C": 8, "D": 8, "E": 8, "F": 7},
+  "type_scores": {"R1": 9, "R2": 8, "R3": 8},
+  "score_evidence": {
+    "A": "Coherent arc: TL;DR (four questions) -> problem -> closed form -> DPO loss -> gradient -> theory -> implementation -> evaluation design -> three results -> GPT-4 validation -> qualitative -> limitations. Front matter has subtitle, paper_author, paper_doi, two-level categories, use_math. Deductions: L168 display math contains single-$ inline math inside \\text{} ('increase likelihood of $y_{w}$'); KL notation mixes '\\mid\\mid' (L54) and '\\lVert' (L76, L81).",
+    "B": "Register is consistent ('입니다'). Calques: L67/L101 '보상에 대한 손실을 정책에 대한 손실로' (rubric's own example; rewrite '보상의 손실을 정책의 손실로 옮깁니다'), L23 '정책에 대한 로지스틱 분류 손실' (-> '정책의 로지스틱 분류 손실'), L143 heading '순위 데이터로의 일반화' (-> '순위 데이터로 넓히기'). Pipeline language leaks into prose: L332 '제공된 근거에 개별 승률 값은 없습니다' (-> '논문은 대화 승률을 그래프로만 보여 줍니다'). L81 '이렇게 쓰면 최적화가 끝납니다' and L73 '결정적인 한 수는 다음 단계에 있습니다' are formulaic.",
+    "C": "Back-references are accurate (L177 -> L139 example; L303 -> Figure at L291; L271 HH introduced at L263). Deductions: L328 meta-commentary on the figure's caption ('이 그림은 가로축이 N이 아니라 온도입니다. 따라서 ... 캡션의 주장은 ... 정도로만 확인됩니다') and L332 break the flow; the DPO pipeline is re-explained at L63, L245, L255, L295, L301 and L375.",
+    "D": "Hard steps get help where they appear: the KL-to-target-distribution rewrite (L73-L89) with a two-response numeric example (L93, arithmetic checks out: Z~3.56, pi*~0.83/0.17), loss values (L139: -log s(0.3)~0.55, -log s(-0.3)~0.85, correct), gradient weights s(+-3) (L179). Deductions: L255 repeats the gradient-weight example a third time with symbolic beta; pi_ref initialisation told three times (L28, L257, L377 '참고로 ...').",
+    "E": "Equations, one code line, two tables and four figures placed where discussed and referred to descriptively. Deductions: L308 table cell '나머지' is prose and the head-to-head human row mixes a different metric into a win-rate table; L293 reads numbers off the figure ('KL이 약 2.5일 때 이미 보상 0.95 안팎', '0.64 안팎'), labelled approximate but not source values.",
+    "F": "Most numbers and table cells match the paper (61%/57%, 0.36/0.31/0.26/0.23, Table 2 cells 47/27/13, 54/32/12, 58/43/17, 70/77/86, 67/79/85, 65/-/87, 150/100/125 comparisons, ~1% ties, 22 runs, 170k dialogues, hyperparameters). Deductions (2 each, minor ones 1): L265 '저자들은 TL;DR 요약에서만 beta를 바꾸고 나머지 하이퍼파라미터는 모든 과제에서 고정했습니다' contradicts the post's own L289 IMDb beta sweep {0.05,0.1,1,5}, and the paper says only 'Unless noted otherwise'; L41/L59 attribute most cost and instability to the final RL stage ('문제는 이 마지막 단계에 몰려 있습니다'), while the paper blames the whole pipeline (training multiple LMs and sampling in the loop); L320 '요약 과제보다 기준이 높습니다' is the writer's unlabelled inference; L154 uses '|x' instead of \\mid in the Plackett-Luce loss.",
+    "R1": "Full derivation (L71-L101), the cancellation of Z (L117-L127), Plackett-Luce (L143-L157), gradient (L163-L191), the equivalence-class theorem and its proof idea (L197-L225), the actor-critic analysis (L227-L241), implementation and hyperparameters, all three experiments, human study details. Little is skipped.",
+    "R2": "Intuition -> formula -> numeric example throughout; the running TL;DR pair ties it together. Length (~31k chars of body) is somewhat over the difficulty because of repeated examples (L255) and re-explanations.",
+    "R3": "TL;DR answers all four questions with settings (L34 'DPO가 온도 0.0에서 약 61%, PPO가 최적 온도에서 57%'). The closing gives the writer's judgment (L371) and specific gaps (scale, GPT-4 judge, verbose factual errors with the paper's appendix examples). Deductions: it omits the paper's own stated open questions (OOD generalisation, reward over-optimisation and the Figure 3-right dip, eliciting judgments from automated evaluators, other modalities); 'L383 표본이 작습니다' is the writer's verdict; L328 critiques a caption."
+  },
+  "principles": {
+    "claim_headings": {"status": "met", "evidence": "L39 '보상 모델 적합과 PPO 미세조정으로 이어지는 복잡하고 불안정한 RLHF 파이프라인', L159 '암묵적 보상이 틀릴수록 커지는 예제별 가중치', L283 'IMDb 감성 과제에서 PPO를 엄격히 지배하는 보상-KL 프런티어'; a few subheadings are topic names (L163 '기울기의 구조')."},
+    "running_example": {"status": "met", "evidence": "The Reddit TL;DR pair (concise y_w vs verbose y_l) introduced at L41 recurs at L93, L139, L177, L203, L239, L255, L338, L375."},
+    "mechanism_design_formula_example": {"status": "met", "evidence": "L97-L101 why the closed form is unusable -> L107-L127 reparameterisation and cancellation -> L133 loss -> L139 numeric example."},
+    "facts_said_once": {"status": "partly met", "evidence": "pi_ref initialisation at L28, L257, L377; hyperparameters at L30 and L265 (and twice inside L265); the DPO-vs-RLHF pipeline contrast at L63, L245, L255, L295, L301, L375."},
+    "numbers_with_variant_scope_unit": {"status": "partly met", "evidence": "Good: L34 temperatures, L281 '6B 파라미터(60억)', L307-L310 settings per row. Weak: L293 values read off a figure."},
+    "nothing_invented": {"status": "partly met", "evidence": "Hypothetical values are labelled (L93 '논문에 없는, 설명을 위해 임의로 정한 값'). Unsupported: L41/L59 cost concentrated in the RL stage; L265 'only TL;DR changes beta'; L320 '요약 과제보다 기준이 높습니다'; L295 '차이의 상당 부분은 최적화 과정 자체에서 나온 것으로 보입니다' (hedged, unlabelled)."},
+    "writer_assessment_at_end": {"status": "met", "evidence": "L371 '오프라인 선호 데이터를 이미 확보한 팀이라면 DPO를 기본 선택지로 시작해도 무리가 없다는 것이 이 글의 판단입니다', L381-L387."},
+    "length_fitted_to_difficulty": {"status": "partly met", "evidence": "Depth is justified for a theory-heavy paper, but repeated examples (L255) and re-explanations add length."},
+    "type_specific_shape": {"status": "met", "evidence": "Review shape: TL;DR with four questions (L15-L35), body sections, '## 한계와 시사점' (L369), References. Guide/survey rules not applicable."},
+    "korean_style": {"status": "partly met", "evidence": "Natural '입니다' register overall; calques '정책에 대한 손실' (L67, L101), '순위 데이터로의 일반화' (L143); pipeline wording '제공된 근거' (L332)."}
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 8,
+    "supported": 13,
+    "unsupported": 1,
+    "wrong": 0,
+    "unverifiable": 1,
+    "examples": [
+      {"n": 1, "line": 18, "type": "method", "claim": "Standard RLHF runs SFT, reward model learning, then PPO-based RL in sequence.", "verdict": "supported", "source": "§3: 'It usually includes three phases: 1) supervised fine-tuning (SFT); 2) preference sampling and reward learning and 3) RL optimization.'"},
+      {"n": 2, "line": 33, "type": "comparison", "claim": "On the IMDb reward-KL frontier DPO strictly dominates PPO and is also better than PPO-GT.", "verdict": "supported", "source": "§6.1: 'DPO's reward/KL tradeoff strictly dominates PPO. Second, DPO achieves a better frontier than PPO, even when PPO can access ground truth rewards (PPO-GT).'"},
+      {"n": 3, "line": 34, "type": "number", "claim": "TL;DR GPT-4 win rate vs reference summaries: DPO about 61% at temperature 0.0.", "verdict": "supported", "source": "§6.2: 'DPO has a win rate of approximately 61% at a temperature of 0.0'"},
+      {"n": 4, "line": 34, "type": "number", "claim": "PPO reaches 57% at its optimal temperature.", "verdict": "supported", "source": "§6.2: 'exceeding the performance of PPO at 57% at its optimal sampling temperature of 0.0'"},
+      {"n": 5, "line": 35, "type": "number", "claim": "Experiments go up to 6B-parameter models.", "verdict": "supported", "source": "§1: 'using language models with up to 6B parameters'"},
+      {"n": 6, "line": 49, "type": "method", "claim": "The reward model is usually initialised from the SFT model with a linear layer producing one scalar.", "verdict": "supported", "source": "§3: 'often initialized from the SFT model ... with the addition of a linear layer on top of the final transformer layer that produces a single scalar prediction'"},
+      {"n": 7, "line": 59, "type": "attribution", "claim": "'문제는 이 마지막 단계에 몰려 있습니다' - the cost and instability are concentrated in the final RL stage (also L41 '비용과 불안정성의 대부분').", "verdict": "unsupported", "source": "§1 blames the pipeline as a whole: 'considerably more complex than supervised learning, involving training multiple LMs and sampling from the LM policy in the loop of training'; abstract: 'RLHF is a complex and often unstable procedure, first fitting a reward model ... and then fine-tuning'. No stage is singled out."},
+      {"n": 8, "line": 213, "type": "method", "claim": "If pi_ref(y|x)>0 for all (x,y) and beta>0, each reward equivalence class has exactly one reward of the form beta log(pi/pi_ref).", "verdict": "supported", "source": "Appendix A.6 Theorem 1 restated: 'pi_ref(y|x)>0 for all pairs ... and a parameter beta>0. All reward equivalence classes ... can be represented'; proof: 'the reward function that has the reparameterization ... is unique.'"},
+      {"n": 9, "line": 235, "type": "method", "claim": "The normalisation term is the reference policy's soft value function; it does not change the optimum but without it policy-gradient variance is high.", "verdict": "supported", "source": "§5.2: 'interpret the normalization term ... as the soft value function of the reference policy ... While this term does not affect the optimal solution, without it, the policy gradient of the objective could have high variance'"},
+      {"n": 10, "line": 250, "type": "method", "claim": "Core loss line: losses = -F.logsigmoid(beta * (pi_logratios - ref_logratios)).", "verdict": "supported", "source": "Appendix B code: 'losses = -F.logsigmoid(beta * (pi_logratios - ref_logratios))'"},
+      {"n": 11, "line": 303, "type": "number", "claim": "The right panel of the frontier figure shows TL;DR win rates for sampling temperatures 0.0 to 1.0.", "verdict": "unverifiable", "source": "Figure 2 caption: 'Right. TL;DR summarization win rates vs. human-written summaries'; the temperature range is only on the plot axis, not in the text."},
+      {"n": 12, "line": 322, "type": "number", "claim": "Dialogue baselines: Best of 128 over Preferred-FT completions and a 2-shot prompted Pythia-2.8B.", "verdict": "supported", "source": "§6.2: 'the best of 128 Preferred-FT completions ... and a 2-shot prompted version of the Pythia-2.8B base model'"},
+      {"n": 13, "line": 322, "type": "number", "claim": "A public PPO RLHF model (Pythia-6B) trained on Anthropic HH; no prompt or temperature beat base Pythia-2.8B, so Best of 128 is a rough PPO proxy.", "verdict": "supported", "source": "§6.2 footnote 'reciprocate/ppo_hh_pythia-6B'; 'unable to find a prompt or sampling temperature that gives performance better than the base Pythia-2.8B model ... we consider Best of 128 a rough proxy for PPO-level performance.'"},
+      {"n": 14, "line": 348, "type": "number", "claim": "Table cells: GPT-4 (S) win 47/27/13, GPT-4 (C) win 54/32/12, human win 58/43/17 for DPO/SFT/PPO-1 vs PPO temp 0.", "verdict": "supported", "source": "Table 2 rows 'GPT-4 (S) win %', 'GPT-4 (C) win %', 'Human win %' match cell for cell."},
+      {"n": 15, "line": 351, "type": "number", "claim": "Agreement cells: GPT-4 (S)-H 70/77/86, GPT-4 (C)-H 67/79/85, H-H 65/-/87.", "verdict": "supported", "source": "Table 2 rows 'GPT-4 (S)-H agree', 'GPT-4 (C)-H agree', 'H-H agree' match cell for cell."}
+    ],
+    "outside_sample_findings": [
+      {"line": 265, "verdict": "wrong", "claim": "'저자들은 TL;DR 요약에서만 beta를 바꾸고 나머지 하이퍼파라미터는 모든 과제에서 고정했습니다'", "source": "Appendix B: 'Unless noted otherwise ...'; §6.1 sweeps beta in {0.05,0.1,1,5} on IMDb, which the post itself reports at L289."},
+      {"line": 320, "verdict": "unsupported", "claim": "Beating the preferred response makes the dialogue bar higher than the summarisation task's.", "source": "The paper makes no such comparison."}
+    ]
+  },
+  "checklist": {
+    "repeated": 1,
+    "avoided": 10,
+    "na": 6,
+    "repeated_ids": ["cnn-dm-prompt-variant"],
+    "details": {
+      "implementation-fragment": {"result": "avoided", "evidence": "No broken math fragment; L257-L261 explains pi_ref = SFT or MLE on (x, y_w) (also TL;DR L28 before the loss at L29). In the body section the loss line (L249) comes before the pi_ref paragraph."},
+      "beta-tldr": {"result": "avoided", "evidence": "L30 'TL;DR 요약 과제에서만 beta=0.5를 썼습니다'. Note the separate overreach at L265 ('나머지 하이퍼파라미터는 모든 과제에서 고정'), counted under F."},
+      "future-work-ranking-invented": {"result": "n/a", "evidence": "No future-work list; 'conditional preferences' never appears. The closing (L379-L387) also leaves out the paper's stated directions (automated evaluators, other modalities)."},
+      "plackett-luce-not-future": {"result": "avoided", "evidence": "L143-L157 derives the Plackett-Luce DPO loss as done."},
+      "ppo-clip-objective": {"result": "n/a", "evidence": "The PPO clipped objective is not written."},
+      "partition-function-size": {"result": "avoided", "evidence": "L99 '어휘 크기를 길이만큼 거듭제곱한 수의 토큰열'."},
+      "cnn-dm-prompt-variant": {"result": "repeated", "evidence": "L314 'GPT-4 프롬프트는 TL;DR과 같게 두되 \"forum post\"만 \"news article\"로 바꿨습니다' - does not name GPT-4 (C) (only implied later at L355)."},
+      "human-study-columns": {"result": "avoided", "evidence": "L346 '| 지표 (각 방법 vs PPO 온도 0) | DPO | SFT | PPO-1 |'."},
+      "human-study-respondents": {"result": "n/a", "evidence": "The N-respondents row is omitted; L344 gives 150/100/125 sampled comparisons instead."},
+      "multi-judgment-comparisons": {"result": "avoided", "evidence": "L344 'DPO 대 PPO-0 비교 150건과 PPO-1 대 PPO-0 비교 100건 ... 건마다 두 사람을 배정'; 'SFT 비교 125건은 한 사람씩'."},
+      "overoptimization-figure-ref": {"result": "n/a", "evidence": "The late-training drop is not mentioned."},
+      "gradient-u-definition": {"result": "n/a", "evidence": "No u variable in the post."},
+      "gradient-sigma-argument": {"result": "avoided", "evidence": "L168, L173, L187, L255 all use sigma(r_hat(y_l) - r_hat(y_w))."},
+      "best-of-n-invented": {"result": "avoided", "evidence": "L324 '128개 근처에서 포화', L328 restricts itself to the plateau; no claim about a 64-vs-128 gap."},
+      "excluded-participant": {"result": "n/a", "evidence": "The participant count (25) is not given; only '한 사람당 25개' judgments (L340)."},
+      "missing-description": {"result": "avoided", "evidence": "L9 description (128 chars) starts with 'DPO는' and uses 61%/57% from the TL;DR."},
+      "arxiv-https": {"result": "avoided", "evidence": "L392 https://arxiv.org/pdf/2305.18290v3."}
+    }
+  },
+  "extras": {
+    "description_chars": 128,
+    "body_chars": 30915,
+    "figure_values_read_off": "L293 (labelled approximate)",
+    "caption_critique": "L328",
+    "pipeline_language_leak": "L332 '제공된 근거에'"
+  },
+  "top_issues": [
+    "L265 says only the TL;DR task changed beta and every other hyperparameter was fixed across tasks; the paper says 'unless noted otherwise' and the IMDb sweep (L289) varies beta.",
+    "L41/L59 put most of RLHF's cost and instability on the final RL stage ('문제는 이 마지막 단계에 몰려 있습니다'); the paper blames the whole pipeline. L320 and L295 add unlabelled inferences of the writer's own.",
+    "L314 still does not name the GPT-4 (C) prompt for CNN/DailyMail (a known human fix). L328/L332 add meta-commentary on the figure caption and the 'provided evidence'. Pi_ref initialisation and the pipeline contrast are repeated several times (L28/L257/L377)."
+  ]
+}

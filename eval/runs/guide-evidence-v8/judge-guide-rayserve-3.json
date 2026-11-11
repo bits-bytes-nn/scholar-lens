@@ -1,0 +1,112 @@
+{
+  "item": "guide-rayserve",
+  "post": "/tmp/eval-guide/guide-rayserve-v8.md",
+  "judge_run": 3,
+  "scores": {"A": 7.5, "B": 8, "C": 7.5, "D": 8.5, "E": 7.5, "F": 3, "T1": 9, "T2": 8, "T3": 8.5},
+  "deductions": {
+    "A": [
+      "L5 description is 114 characters (blog range 120-160)",
+      "L1192, L1200, L1216 'W2 페이지' is an internal source id leaked into the body; no such entry in Sources",
+      "L243/L251 Anyscale blog (2025-09-15) is credited but missing from the Sources list",
+      "L6 category 'Language-Models' for a general serving library is questionable"
+    ],
+    "B": [
+      "L122 '개념 사이의 관계를 정리하면 다음과 같습니다(이해를 돕기 위한 예시입니다).' formulaic and a second disclaimer in one paragraph -> '두 디플로이먼트와 레플리카의 관계는 아래와 같습니다.'",
+      "L491 '여기서 눈여겨볼 부분은 두 가지입니다.' / L140 '그림에서 눈여겨볼 곳은' formulaic openers",
+      "L1082 '함께 구성하는 편이 권장됩니다', L1113 '구성이 권장됩니다' passive hides the actor -> '공식 문서는 ... 함께 구성하라고 권장합니다'",
+      "L57 'KubeRay가 사용자가 Serve 코드를 고치지 않아도' double subject",
+      "Example disclaimers repeated (L37, L122 x2, L167, L1101)"
+    ],
+    "C": [
+      "L167 '다음 절에서 구성할 text_ml:app' - the next section is the request router; the app is assembled two sections later (L255)",
+      "L509 tells the reader to replace Translator's num_replicas: 1 with autoscaling_config in serve_config.yaml, yet L1036-1043 and L1072-1073 keep num_replicas: 1 for Translator",
+      "L620 one-sentence pointer paragraph; L929 '마지막 절에서 다루는 user_config' points to the section's last subsection, not the post's last section"
+    ],
+    "D": [
+      "L224-239 backoff table plus closed-form formula for a plain doubling with a cap is padding",
+      "Good timely help: Power-of-Two example L192, prefix-tree example L247, 24/2 worked example L511, bucket interpolation example L1180"
+    ],
+    "E": [
+      "L1202-1206 Triton table fills Triton's 'routing/composition' and 'scaling' cells with '—' although the source table has content for both; the row 'Model management' is renamed",
+      "L146 Ray paper table headers rewritten ('Small Input/Larger Input' -> '상태 4KB/100KB 처리량')",
+      "L226-239 table and formula say the same thing twice"
+    ],
+    "F": [
+      "L509 wrong: a YAML num_replicas: 1 next to a code-side autoscaling_config is NOT rejected; tested on Ray 2.60.0 (serve run cfg.yaml -> app RUNNING, Translator HEALTHY RUNNING:1); override_deployment_info does not validate the pair",
+      "L1202-1206 wrong: Triton cells shown as '—' where the cited page says 'Centralized model repository, versioning, ensembles, and multi-model endpoints' and 'Preconfigured deployment patterns with autoscaling on GPUs; robust batching and queuing'",
+      "L1192/L1212 unsupported: the Suhas Bhairav page never mentions Train/Tune/Data, per-replica state or KServe; the 'W2 page' statements (dynamic routing, actor-style state, hybrid Triton, drift failure modes) are in fact the Suhas page, so one source is presented as two agreeing third parties",
+      "L118 (outside the sample) wrong: 'bind가 돌려주는 DeploymentNode' - Ray 2.60.0 type(A.bind()) is ray.serve.deployment.Application; no current docs page uses DeploymentNode (same defect as v7)"
+    ]
+  },
+  "principles": {
+    "claim_headings": {"verdict": "met", "evidence": "L19 '정적 서빙 그래프를 대신하는 프로그래머블 서빙 계층', L469 '진행 중 요청 수를 목표값에 맞추는 오토스케일러와 큐 한도 기반 백프레셔'; each H2 opens with a one-line thesis"},
+    "running_example": {"verdict": "met", "evidence": "text_ml:app (Summarizer -> Translator) from L27 through autoscaling L493, FastAPI L647, config L941, KubeRay L1056, observability L1129"},
+    "mechanism_design_code_example": {"verdict": "partly met", "evidence": "Router (L190-253) and autoscaler (L475-513) follow problem -> choice -> code -> numbers; deployments/proxy sections are mostly description without the alternative/design reason"},
+    "facts_said_once": {"verdict": "not met", "evidence": "pip install repeated L74/L571; proxy_location options L159-165 and L1086; 'no model-specific optimization' L17, L59, L1196; notebook->K8s L15, L57, L1190; http_options cluster-global L734, L963; TTFT defined L251 and L919"},
+    "numbers_with_scope": {"verdict": "partly met", "evidence": "Anyscale numbers keep model/hardware/vendor caveat (L251); L144 ties 5ms/10ms to input size whereas the paper ties them to the residual vs fully connected network"},
+    "nothing_invented": {"verdict": "not met", "evidence": "L509 serve deploy rejection, L1202-1206 blank Triton cells, L1192/L1212 claims not in the credited page, L118 DeploymentNode"},
+    "writer_assessment_at_end": {"verdict": "met", "evidence": "L1220 '이 글의 판단은 다음과 같습니다 ...' with three concrete choices"},
+    "length_fitted": {"verdict": "partly met", "evidence": "1,240 lines; RFC (L548-560, proposal only), 2017 scheduler/GCS (L134-151) and backoff table+formula are tangential to operating today's Serve"},
+    "type_specific_shape": {"verdict": "met", "evidence": "TL;DR L11, problem L23, concepts/architecture L61 and request path L153 before config details; closes with when to choose and failure modes L1184-1220"},
+    "korean_style": {"verdict": "partly met", "evidence": "Natural 입니다 register overall; formulaic openers L122/L491/L140, passive '권장됩니다' L1082/L1113, repeated example disclaimers"}
+  },
+  "claims": {
+    "checked": 15, "supported": 12, "unsupported": 1, "wrong": 2, "unverifiable": 0,
+    "sampling": "Body blocks separated by blank lines after front matter, excluding headings and fenced code (tables and lists count as blocks); paragraph 3 and every third after it (3, 6, ..., 177); 15 claims drawn from paragraphs 24-171.",
+    "examples": [
+      {"para": 27, "line": 146, "claim": "Ray paper Table 3: Clipper 4400±15 / 290±1.3, Ray 6200±21 / 6900±150 states/sec, p3.8xlarge, batches of 64", "verdict": "supported", "source": "arXiv 1712.05889 §5.2.2 Table 3"},
+      {"para": 24, "line": 140, "claim": "global scheduler picks the node with lowest estimated waiting time = queueing + remote-input transfer", "verdict": "supported", "source": "arXiv 1712.05889 §4.2.2"},
+      {"para": 36, "line": 192, "claim": "request_router_class accepts string or class, default PowerOfTwoChoicesRequestRouter", "verdict": "supported", "source": "ray/serve/config.py RequestRouterConfig field description (2.60.0)"},
+      {"para": 39, "line": 220, "claim": "request_router_kwargs go to initialize_state; non-JSON value raises ValueError at construction", "verdict": "supported", "source": "config.py validator; reproduced: 'Value error, request_router_kwargs is not JSON-serializable'"},
+      {"para": 42, "line": 224, "claim": "backoff initial 0.025s, multiplier 2, max 0.5s", "verdict": "supported", "source": "config.py: 'Defaults to 0.025', 'Defaults to 2', 'Defaults to 0.5'"},
+      {"para": 48, "line": 251, "claim": "32B model: TTFT -60%, end-to-end throughput +40%+, eight 8xL4 machines on RayTurbo, similar trend on OSS Ray", "verdict": "supported", "source": "Anyscale blog 2025-09-15 'Ray Serve: Reduce LLM Inference Latency by 60%...' (not in Sources list)"},
+      {"para": 72, "line": 479, "claim": "AutoscalingConfig defaults min 1, max 1, initial None, target 2, look_back 30, mean/max/min, upscale 30, downscale 600, to-zero None", "verdict": "supported", "source": "config.py AutoscalingConfig fields and AggregationFunction enum"},
+      {"para": 75, "line": 509, "claim": "num_replicas: 1 left in serve_config.yaml with autoscaling_config in code makes serve deploy refuse", "verdict": "wrong", "source": "Local Ray 2.60.0 cluster: config with Translator num_replicas: 1 over the autoscaling decorator deployed RUNNING (Translator HEALTHY, RUNNING: 1); the mutual-exclusion check only applies within one options set/one YAML entry"},
+      {"para": 81, "line": 544, "claim": "unavailable-deployment rejections not covered; gRPC always RESOURCE_EXHAUSTED; unknown keys fail at parse", "verdict": "supported", "source": "BackpressureConfig docstring (503 always for unavailable) and extra='forbid'; reproduced 'Extra inputs are not permitted' for retry_after"},
+      {"para": 84, "line": 557, "claim": "RFC Option A: head fan-in O(nodes), end-to-end latency one pull tick (default 5s)", "verdict": "supported", "source": "ray-project/ray#63144 §7 comparison table"},
+      {"para": 123, "line": 852, "claim": "accelerator_type 'A10' normalised to 'A10G'", "verdict": "supported", "source": "ray/llm/_internal/serve/core/configs/llm_config.py L405-407"},
+      {"para": 150, "line": 1095, "claim": "proxy failing 3 consecutive health checks is marked unhealthy and restarted (period 10s)", "verdict": "supported", "source": "Serve Config Files: 'If a proxy fails 3 consecutive health checks, the controller marks it unhealthy and restarts it.'"},
+      {"para": 165, "line": 1182, "claim": "RAY_SERVE_METRICS_EXPORT_INTERVAL_MS only controls Serve-side batching; Prometheus visibility follows Ray Core metrics_report_interval_ms", "verdict": "supported", "source": "Monitor Your Application, 'Metrics export interval'"},
+      {"para": 168, "line": 1192, "claim": "Suhas Bhairav's blog credits per-replica state via actors and Train/Tune/Data integration; 'W2 page' gives dynamic routing / actor state / data coupling", "verdict": "unsupported", "source": "Suhas page has no Train/Tune/Data/KServe/per-replica wording; the 'W2' sentence is verbatim from the Suhas page ('Ray Serve shines when ... dynamic routing, actor-style state, and close coupling with data processing steps')"},
+      {"para": 171, "line": 1202, "claim": "Triton vs Ray Serve table: Triton cells for routing/composition and scaling are '—'", "verdict": "wrong", "source": "Suhas page table: Model management -> 'Centralized model repository, versioning, ensembles, and multi-model endpoints'; Scaling model -> 'Preconfigured deployment patterns with autoscaling on GPUs; robust batching and queuing'"}
+    ]
+  },
+  "checklist": {
+    "repeated": 0, "avoided": 2, "na": 0, "repeated_ids": [],
+    "details": [
+      {"id": "arch-diagram-relative-link", "verdict": "avoided", "evidence": "Only image L138 has Korean alt text and a local /assets/images path; no empty-text links or ../_images paths"},
+      {"id": "proxy-env-ray-start-unsupported", "verdict": "avoided", "evidence": "L1086 '프록시의 감시 주기와 수명은 환경 변수로 조정하며' with names/defaults only; no 'export before ray start' or process claim"}
+    ]
+  },
+  "extras": {
+    "architecture_first_line": 61,
+    "internals_first_line": 134,
+    "request_path_line": 153,
+    "non_official_sources": "3 of 16 listed (arXiv Ray paper, Suhas Bhairav blog, GitHub RFC #63144) = 19%; 4 of 17 (24%) counting the Anyscale blog cited in the body but missing from Sources",
+    "opens_with_problem": true,
+    "closes_with_choice_and_failure_modes": true,
+    "runnable_code": {
+      "verdict": "runs as pasted (with the post's own assembly instructions)",
+      "environment": "Ray 2.60.0, torch 2.15.0, transformers 5.22.1, private local cluster in a temp dir on unique ports",
+      "verified": [
+        "text_ml.py skeleton + Translator + Summarizer -> POST json string -> 200 French text",
+        "text_ml_pipeline.py response chaining -> 200",
+        "text_ml_fastapi.py with summarize pasted, route_prefix /text: /text/summarize?text=... -> 200; /text/stream streams summary then translation",
+        "autoscaling + BackpressureConfig decorator deploys",
+        "reconfigure + user_config: german and romanian switch output without redeploying code",
+        "X-Request-ID echoed in the response header",
+        "Hello/World, SayHi _to_object_ref, Streamer/Caller examples",
+        "sklearn train + deploy + client -> {\"result\":\"versicolor\"}"
+      ],
+      "problems": [
+        "L209-212 prefix_router_config with the PrefixCacheAffinityRouter string path fails at construction with ray[serve] only (ModuleNotFoundError: pyarrow from ray.llm); ray[serve,llm] is introduced only at L861",
+        "L1036-1078 YAML keeps Translator num_replicas: 1 although L509 says to replace it; harmless in practice since Ray accepts it"
+      ]
+    }
+  },
+  "top_issues": [
+    "L509 says serve deploy rejects num_replicas: 1 next to a code autoscaling_config; Ray 2.60.0 deploys it fine (tested), and later YAML blocks keep that line anyway",
+    "Third-party sourcing: 'W2 페이지' is a leaked internal id for the Suhas page, so one page shows up as two agreeing sources; Train/Tune/Data and KServe claims credited to Suhas are not on that page; the Triton table blanks cells the source fills; the Anyscale blog is missing from Sources",
+    "Leftover API error L118 'bind가 돌려주는 DeploymentNode' (it is Application in 2.60.0), plus repeated facts and tangential RFC/2017-scheduler material that make the post longer than needed"
+  ]
+}

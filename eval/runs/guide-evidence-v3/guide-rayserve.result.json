@@ -1,0 +1,156 @@
+{
+  "kind": "guide",
+  "status": "succeeded",
+  "input": "https://docs.ray.io/en/latest/serve/getting_started.html",
+  "title": "Ray Serve in Practice: Deployments, Composition, Scaling and KubeRay",
+  "markdown_path": "/Users/youngmki/Projects/scholar-lens/papers/guide-ray-serve-in-practice-deployments-composition-scaling-and-kuberay/2026-11-04-ray-serve-in-practice-deployments-composition-scaling-and-kuberay.md",
+  "plan_path": null,
+  "s3_uri": "s3://sagemaker-ap-northeast-2-998601677581/scholar-lens/posts/2026-11-04-ray-serve-in-practice-deployments-composition-scaling-and-kuberay.md",
+  "pr_url": null,
+  "warnings": [
+    "Section '정적 그래프 대신 프로그래밍 가능한 API로 다루는 다중 모델 추론 서빙' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: Ray Serve는 앞서 소개한 대로 특정 학습 프레임워크에 묶여 있지 않습니다 .",
+    "Section '컨트롤러·프록시·레플리카 액터와 요청이 레플리카에 닿기까지의 경로': check 1 sentence(s) the evidence may not support: 긴 문서를 통째로 보내거나 여러 문단을 한 요청에 묶어 요청 객체가 100KiB 이상이 되면 두 번째 경로로 넘어갑니다. (numbers not in its evidence)",
+    "Section '컨트롤러·프록시·레플리카 액터와 요청이 레플리카에 닿기까지의 경로' still has: numbers ['100'] without evidence: 긴 문서를 통째로 보내거나 여러 문단을 한 요청에 묶어 요청 객체가 100KiB 이상이 되면 두 번째 경로로 넘어갑니다.",
+    "Section 'Starlette·FastAPI 인그레스와 스트리밍·웹소켓·요청 취소의 의미론' still has: ['2.59'] already stated in '컨트롤러·프록시·레플리카 액터와 요청이 레플리카에 닿기까지의 경로': refer back without repeating: Ray 2.59.0 스키마 기준으로 앞서 설명한 최장 접두사 일치는 애플리케이션을 고르는 단계까지만 담당하고, 그 안의 경로 분기는 FastAPI가 맡습니다 .",
+    "Section 'bind 인자가 DeploymentHandle로 치환되는 모델 컴포지션과 응답 객체': check 2 sentence(s) the evidence may not support: `.remote()`가 바로 반환되기 때문에 여러 하위 호출을 먼저 모두 보내 놓고 나중에 기다리면 병렬로 실행됩니다. (unsupported: No evidence states that sending several .remote() calls before awaiting makes them run in parallel.) | `await`를 늦출수록 하위 호출이 병렬로 돌고, `.result()`나 동기 순회를 쓰면 그 순간 레플리카 하나가 통째로 멈춥니다. (unsupported: No evidence says that awaiting later makes downstream calls run in parallel.)",
+    "Section 'bind 인자가 DeploymentHandle로 치환되는 모델 컴포지션과 응답 객체' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: `.result()`는 앞서 본 `handle.remote(5).result()`처럼 디플로이먼트 밖의 테스트나 스크립트에서 씁니다. | a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence) | a 47-line code block; show the 40 or fewer lines the text explains and say what the rest does",
+    "Section 'target_ongoing_requests를 축으로 한 애플리케이션 수준 오토스케일러': check 1 sentence(s) the evidence may not support: t5-small 요약처럼 요청당 수백 밀리초가 걸리는 작업에서는 기본값 2가 무난한 출발점입니다. (unsupported: No evidence gives a per-request latency for t5-small (hundreds of milliseconds), and none says the default of 2 suits such workloads.)",
+    "Section 'target_ongoing_requests를 축으로 한 애플리케이션 수준 오토스케일러' still has: a deep section needs at least 2 visuals (its figures, an equation, or a small table from its number evidence)",
+    "Section '프레임워크 모델·LLM 서빙 패턴과 요청 배칭': check 1 sentence(s) the evidence may not support: 앞서 만든 `Translator`가 t5-small을 생성자에서 불러온 방식이 바로 이 구조이며, TensorFlow 모델도 똑같이 생깁니다 [[E26]]. (unsupported: No evidence shows Translator loading t5-small in its constructor; only the TensorFlow part is backed by E26.)",
+    "Section '프레임워크 모델·LLM 서빙 패턴과 요청 배칭' still has: ['8000'] already stated in '`__call__`의 Starlette 요청에서 FastAPI 라우트로 이어지는 인그레스와 `await`에서만 일어나는 요청 취소': refer back without repeating: 클라이언트는 `http://localhost:8000/`으로 `requests.get`을 써서 `{\"array\": ...}` 형태의 JSON을 보냅니다 .",
+    "Section 'serve run에서 serve build·serve deploy로 넘어가는 단일 진실 공급원 설정 파일' still has: ['8000'] already stated in '`__call__`의 Starlette 요청에서 FastAPI 라우트로 이어지는 인그레스와 `await`에서만 일어나는 요청 취소': refer back without repeating: 다른 터미널에서 Python `requests`로 8000번 포트에 영어 텍스트를 보내면 인그레스인 `Summarizer`가 요약하고, `Translator`가 번역한 결과가 본문으로 돌아옵니다 . | ['8000'] already stated in '`__call__`의 Starlette 요청에서 FastAPI 라우트로 이어지는 인그레스와 `await`에서만 일어나는 요청 취소': refer back without repeating: HTTP 포트는 기본값이 8000이고 gRPC 포트는 9000입니다 . | ['2.59'] already stated in '컨트롤러·프록시·레플리카 액터와 요청이 레플리카에 닿기까지의 경로': refer back without repeating: Ray 2.59.0 스키마에는 레플리카 그룹을 원자적으로 함께 스케줄하는 `gang_scheduling_config`도 있으며, 여기서는 `gang_size`가 필수입니다 .",
+    "Section 'KubeRay RayService를 통한 Kubernetes 프로덕션 운영' still has: points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 앞서 정리한 갱신 규칙도 함께 따라옵니다. | points back to something earlier without citing the earlier evidence; cite it or drop the back-reference: 장애 복구는 앞서 다룬 계층별 복구와 연결해서 보아야 합니다.",
+    "Section 'TL;DR' still has: 1,560 characters of prose for a target of 1,000: cut background, repetition and minor detail"
+  ],
+  "error": null,
+  "violations": [],
+  "job_id": null,
+  "duration_seconds": 3231.1,
+  "input_tokens": 3356787,
+  "output_tokens": 470594,
+  "estimated_cost_usd": 16.9462,
+  "usage": {
+    "price_version": "2026-11-03",
+    "total": {
+      "calls": 232,
+      "failed_calls": 0,
+      "input_tokens": 18551,
+      "output_tokens": 470594,
+      "cache_read_tokens": 1516646,
+      "cache_write_tokens": 1821590,
+      "cost_usd": 16.946221
+    },
+    "by_stage": {
+      "relevance": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2617,
+        "output_tokens": 183,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000353
+      },
+      "research_plan": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 2786,
+        "output_tokens": 607,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.000582
+      },
+      "read": {
+        "calls": 117,
+        "failed_calls": 0,
+        "input_tokens": 280,
+        "output_tokens": 130742,
+        "cache_read_tokens": 997776,
+        "cache_write_tokens": 251485,
+        "cost_usd": 2.13624
+      },
+      "outline": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 4,
+        "output_tokens": 7165,
+        "cache_read_tokens": 1830,
+        "cache_write_tokens": 21816,
+        "cost_usd": 0.253128
+      },
+      "verify": {
+        "calls": 52,
+        "failed_calls": 0,
+        "input_tokens": 208,
+        "output_tokens": 112223,
+        "cache_read_tokens": 394210,
+        "cache_write_tokens": 879421,
+        "cost_usd": 6.800066
+      },
+      "draft": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 56486,
+        "cache_read_tokens": 49476,
+        "cache_write_tokens": 231687,
+        "cost_usd": 2.308175
+      },
+      "review": {
+        "calls": 14,
+        "failed_calls": 0,
+        "input_tokens": 56,
+        "output_tokens": 31682,
+        "cache_read_tokens": 26544,
+        "cache_write_tokens": 50240,
+        "cost_usd": 0.895676
+      },
+      "fix": {
+        "calls": 31,
+        "failed_calls": 0,
+        "input_tokens": 124,
+        "output_tokens": 129799,
+        "cache_read_tokens": 46810,
+        "cache_write_tokens": 386941,
+        "cost_usd": 4.549905
+      },
+      "finalize": {
+        "calls": 1,
+        "failed_calls": 0,
+        "input_tokens": 12420,
+        "output_tokens": 1707,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.002096
+      }
+    },
+    "by_model": {
+      "global.anthropic.claude-haiku-5-5": {
+        "calls": 3,
+        "failed_calls": 0,
+        "input_tokens": 17823,
+        "output_tokens": 2497,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+        "cost_usd": 0.003031
+      },
+      "global.anthropic.claude-sonnet-5-5": {
+        "calls": 117,
+        "failed_calls": 0,
+        "input_tokens": 280,
+        "output_tokens": 130742,
+        "cache_read_tokens": 997776,
+        "cache_write_tokens": 251485,
+        "cost_usd": 2.13624
+      },
+      "global.anthropic.claude-opus-5-5": {
+        "calls": 112,
+        "failed_calls": 0,
+        "input_tokens": 448,
+        "output_tokens": 337355,
+        "cache_read_tokens": 518870,
+        "cache_write_tokens": 1570105,
+        "cost_usd": 14.80695
+      }
+    }
+  }
+}

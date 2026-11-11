@@ -1,0 +1,280 @@
+{
+  "item": "review-zep",
+  "run": 1,
+  "post": "/tmp/eval-paper/review-zep-v6.md",
+  "source": "https://arxiv.org/html/2501.13956 (v1)",
+  "sampling": "86 body paragraphs (blank-line blocks incl. tables and lists; headings, rules, display math, references excluded); paragraphs 1,4,...,85 read; claims drawn from them; whole post read for wrong claims outside the sample",
+  "scores": {
+    "A": 7.5,
+    "B": 8,
+    "C": 7.5,
+    "D": 8,
+    "E": 7.5,
+    "F": 8
+  },
+  "type_scores": {
+    "R1": 8,
+    "R2": 8,
+    "R3": 8.5
+  },
+  "deductions": {
+    "A": [
+      "L117-123 restates the graph definition $$\\mathcal{G}=(\\mathcal{N},\\mathcal{E},\\phi)$$ and its three tiers, already given at L46-56 (same display formula at L48 and L120)",
+      "L143-146 table has a fourth column '근거' whose cells are all empty (schema residue)",
+      "L220 '구성 단계는 의미 엣지의 사실마다 ... 유효기간을 붙여 내보냅니다.' is a standalone paragraph that only restates L216",
+      "Topic headings remain: H3 '평가 설정' (L249), '결과' (L257), H2 '한계와 시사점' (L298); '### References' (L322) under that H2",
+      "Front matter complete: subtitle, paper_author 'Zep AI', paper_doi, two-level categories, use_math true, no author key; no body H1, no skipped levels; math only $$...$$"
+    ],
+    "B": [
+      "Term drift: L25 '반성(reflexion) 기법' vs L129 'reflexion에서 착안한 반성(reflection)'; rewrite L25: 'reflexion에서 착안한 반성(reflection) 단계로'",
+      "L135 '... 환각 가능성을 줄일 수 있다는 점을 들었습니다' (noun frame); rewrite: '스키마 형식을 일관되게 지키고 환각을 줄이기 위해서라고 설명합니다'",
+      "'앞서 본' 10 times (L141, L158, L176, L247, L253, L270, L302, L304, L309, L311) plus '앞서 든' L72, L107: pointer phrases as a tic",
+      "L66 '중심축 구실을 합니다' (역할을 하다 calque); rewrite: '엔티티 층이 원문 층과 요약 층을 잇습니다'",
+      "Formulaic lead-ins L72 '대입하면 다음과 같습니다', L306 '한계는 다음과 같습니다'; L268 '훨씬 극적입니다' (emphasis word)",
+      "Otherwise natural 입니다 register; '이러한' 0, '즉' 1, '결국' 0, '할 수 있습니다' 3"
+    ],
+    "C": [
+      "L32 the LongMemEval single-session-assistant drop sits in the DMR bullet ('DMR에서는 ... 94.8%로 ... single-session-assistant 질문에서는 오히려 성능이 떨어졌습니다'), so it reads as a DMR result",
+      "L117 '이 파이프라인이 채우는 대상은 논문이 형식적으로 정의한 ... 그래프입니다' re-introduces a concept defined two sections earlier",
+      "L148 second half re-introduces the running example as new ('가상의 고객 지원 대화에서 사용자가 서울에서 부산으로 이사했다고 알린다고 해 보겠습니다') inside a paragraph already using it",
+      "L70 '이 설계가 바탕으로 삼은 선행 연구는 앞의 ... 섹션에서 다루었습니다' is a pointer sentence that adds nothing",
+      "L176 '반면 검색 방식은 GraphRAG의 map-reduce 방식과 크게 다릅니다' - '반면' contrasts with nothing because the post omits that the summaries themselves are map-reduce-derived (Sec 2.3)"
+    ],
+    "D": [
+      "Well placed: four-timestamp table L88-93 with the 3월 8일/3월 15일 worked example L107; A/B-user dedup example L148; plurality example L168; BM25 vs cosine vs BFS walk-through L198",
+      "Setup omits what a reader needs to interpret results: gpt-4o-mini builds the graph, BGE-m3 embeds and reranks (Sec 4.1); DMR's 500 conversations x 5 sessions x up to 12 messages (Sec 4.2)",
+      "L226 gives 20 retrieved items for DMR without noting that the paper's DMR section says 'top 10' (Sec 4.2 vs Sec 4)",
+      "Graph definition explained twice (L46-50, L117-123) while the reranker trade-offs get one sentence"
+    ],
+    "E": [
+      "L143-146 table: empty '근거' column (blank cells)",
+      "L204-210 reranker table: RRF and MMR cells '기존 기법' are not a sort criterion (header '정렬 기준')",
+      "L280-292 question-type table copies Table 3 cells verbatim; 11 of 12 rows (gpt-4o single-session-user dropped as a whole row), labelled '상대 변화' correctly",
+      "DMR table L230-239 and LongMemEval table L259-264 match Tables 1 and 2 cell for cell; no paper figure/table numbering; no architecture figure for the three-tier graph and retrieval pipeline"
+    ],
+    "F": [
+      "L202 'Zep이 지원하는 재순위기는 다섯 가지입니다' - unsupported count: Sec 3.2 'supports existing reranking approaches such as RRF and MMR'",
+      "L76 '논문은 ... Graphiti가 다른 지식 그래프 엔진과 가장 크게 다른 점으로 꼽습니다' - unsupported superlative: Sec 2.2.3 'A key differentiating feature'",
+      "L32 single-session-assistant drop attributed by placement to DMR (it is LongMemEval Table 3)",
+      "L115 '각 단계마다 LLM의 자유도를 줄여 ... 설계되어 있습니다' - the paper gives this reason only for predefined Cypher queries and pair-scoped dedup; reflection adds an LLM pass",
+      "L304 '실무에서는 지연 감소가 정확도 향상보다 더 결정적입니다' - writer's opinion stated as fact (not marked)",
+      "Fixed since v5: no community summaries in the experimental context (L226 edges and entity nodes), single-session-assistant cause now hedged ('추정만 할 수 있습니다', L314). No wrong numbers: DMR, LongMemEval, question-type cells, 1024 dims, n=4, four timestamps, 115k/1.6k, 60 messages, 18.5%, 184% match the source"
+    ]
+  },
+  "principles": {
+    "claim_headings": {
+      "status": "partly met",
+      "evidence": "H2s are claim noun phrases (L36, L44, L74, L113, L152, L180, L222 'DMR에서 전체 대화 기준선과 대등한 Zep의 정확도', L245, L276); topic H2 '한계와 시사점' (L298) and H3 '평가 설정'/'결과' (L249, L257)"
+    },
+    "running_example": {
+      "status": "met",
+      "evidence": "Hypothetical Seoul->Busan move (labelled '가상의') through L40 setup, L72 tiers, L107 invalidation with dates, L133 entity resolution, L148 dedup, L168 community, L198 retrieval, L212 node distance, L218 constructor, L304 closing; re-introduced as new at L148"
+    },
+    "mechanism_choice_formula_example": {
+      "status": "met",
+      "evidence": "Invalidation: problem L40/L80, rule L99, formula L101-103, example L107; label propagation: choice L154-158, rule L162, formula L164 (marked as the writer's), example L168, trade-off L172; retrieval: f L188, three searchers L194, example L198"
+    },
+    "facts_once": {
+      "status": "partly met",
+      "evidence": "Graph definition twice (L48, L120); 115k six times plus 115,000 three times (L30, L31, L247, L251, L261/263, L268, L272, L294); 1.6k six times; single-session-assistant drop in prose at L32, L296, L309, L314; periodic refresh L172, L178, L308; L220 restates L216; '앞서 본' pointers x10"
+    },
+    "numbers_with_scope": {
+      "status": "met",
+      "evidence": "Numbers carry model and setting (L30 'gpt-4o 설정에서', L31 'gpt-4o-mini 설정', L241 'gpt-4-turbo에서'); L266 and L278 mark 18.5% and 184% as the authors' relative figures; L280 column '상대 변화'; exception L32 places a LongMemEval result in the DMR bullet"
+    },
+    "nothing_invented": {
+      "status": "partly met",
+      "evidence": "Hypotheticals labelled (L40, L72, L107, L148, L168, L198, L218), formula L164 marked as the writer's, φ* reading L50 marked; but L202 'five' rerankers, L76 '가장 크게 다른 점', L115 design-principle claim"
+    },
+    "writer_assessment_end": {
+      "status": "met",
+      "evidence": "L300, L304 when to use, L314 hedged reasoning for the assistant drop with a concrete mitigation, L316 ingestion cost; future work only from the Conclusion (L318)"
+    },
+    "length_fit": {
+      "status": "met",
+      "evidence": "About 20k characters for a systems paper with three result tables; the repeated graph definition (L117-123) and L220/L268/L272 restatements could go"
+    },
+    "type_shape": {
+      "status": "met",
+      "evidence": "TL;DR with four questions L14-32; no abstract/introduction section; closing is judgement plus authors' limitations"
+    },
+    "korean_style": {
+      "status": "partly met",
+      "evidence": "Natural 입니다 register; '이러한' 0, '즉' 1, '결국' 0, '할 수 있습니다' 3; but '앞서 본' x10, L135 '~다는 점을 들었습니다', L66 '구실을 합니다', two '다음과 같습니다'"
+    }
+  },
+  "claims": {
+    "checked": 15,
+    "numbers": 10,
+    "supported": 13,
+    "unsupported": 2,
+    "wrong": 0,
+    "unverifiable": 0,
+    "examples": [
+      {
+        "line": 30,
+        "type": "number",
+        "claim": "LongMemEval gpt-4o: accuracy 60.2% -> 71.2% vs full context; latency 28.9 s -> 2.58 s",
+        "verdict": "supported",
+        "source": "Table 2: Full-context gpt-4o 60.2%, 28.9 s; Zep gpt-4o 71.2%, 2.58 s"
+      },
+      {
+        "line": 30,
+        "type": "number",
+        "claim": "LongMemEval conversations average about 115,000 tokens",
+        "verdict": "supported",
+        "source": "Sec 4: 'on average 115,000 tokens'"
+      },
+      {
+        "line": 31,
+        "type": "number",
+        "claim": "gpt-4o-mini: context 115k -> 1.6k tokens, accuracy 55.4% -> 63.8%",
+        "verdict": "supported",
+        "source": "Table 2: 115k/1.6k; 55.4%/63.8%"
+      },
+      {
+        "line": 31,
+        "type": "number",
+        "claim": "Preference questions (gpt-4o): 184% relative gain",
+        "verdict": "supported",
+        "source": "Table 3: single-session-preference gpt-4o 20.0% -> 56.7%, Delta 184%"
+      },
+      {
+        "line": 32,
+        "type": "number",
+        "claim": "DMR gpt-4-turbo: Zep 94.8%, marginal over full conversation",
+        "verdict": "supported",
+        "source": "Table 1: Full-conversation 94.4%, Zep 94.8%; Sec 4.2 'marginal improvements'"
+      },
+      {
+        "line": 32,
+        "type": "comparison",
+        "claim": "single-session-assistant drop stated inside the DMR bullet",
+        "verdict": "unsupported",
+        "source": "The drop is LongMemEval Table 3 (94.6->80.4, 81.8->75.0); DMR has no question types (Sec 4.2)"
+      },
+      {
+        "line": 86,
+        "type": "number",
+        "claim": "Four timestamps stored on each edge",
+        "verdict": "supported",
+        "source": "Sec 2.2.3: 'the system tracks four timestamps ... stored on edges alongside other fact information'"
+      },
+      {
+        "line": 228,
+        "type": "number",
+        "claim": "Four DMR comparisons: MemGPT and recursive summarisation (reported), full conversation and session summaries (implemented); MemGPT not reproducible with gpt-4o-mini",
+        "verdict": "supported",
+        "source": "Sec 4.2 and Table 1 dagger 'Results reported in [3]'; 'unable to reproduce MemGPT's results using gpt-4o-mini'"
+      },
+      {
+        "line": 243,
+        "type": "number",
+        "claim": "Each DMR conversation has only 60 messages",
+        "verdict": "supported",
+        "source": "Sec 4.2: 'each conversation contains only 60 messages'"
+      },
+      {
+        "line": 266,
+        "type": "number",
+        "claim": "gpt-4o 71.2% vs 60.2%; authors report an 18.5% relative improvement",
+        "verdict": "supported",
+        "source": "Sec 4.3.2: 'gpt-4o showed an 18.5% improvement' (paper does not say 'relative'; 71.2/60.2 = 1.183)"
+      },
+      {
+        "line": 280,
+        "type": "number",
+        "claim": "Question-type table: 11 rows of Table 3, cells and Delta verbatim",
+        "verdict": "supported",
+        "source": "Table 3, cell for cell; gpt-4o single-session-user row omitted"
+      },
+      {
+        "line": 76,
+        "type": "attribution",
+        "claim": "The paper names temporal extraction and edge invalidation as the biggest difference from other KG engines",
+        "verdict": "unsupported",
+        "source": "Sec 2.2.3: 'A key differentiating feature of Graphiti' - one key feature, not the largest"
+      },
+      {
+        "line": 99,
+        "type": "method",
+        "claim": "LLM compares new edges with semantically related ones; overlapping contradiction sets t_invalid(old) = t_valid(new)",
+        "verdict": "supported",
+        "source": "Sec 2.2.3: 'invalidates the affected edges by setting their t_invalid to the t_valid of the invalidating edge'"
+      },
+      {
+        "line": 139,
+        "type": "method",
+        "claim": "Same fact extracted between several entity pairs models multi-entity facts as hyper-edges",
+        "verdict": "supported",
+        "source": "Sec 2.2.2: 'the same fact can be extracted multiple times between different entities ... hyper-edges'"
+      },
+      {
+        "line": 158,
+        "type": "method",
+        "claim": "Label propagation over Leiden for straightforward dynamic extension, delaying full refreshes",
+        "verdict": "supported",
+        "source": "Sec 2.3: 'label propagation's straightforward dynamic extension ... delaying the need for complete community refreshes'"
+      }
+    ],
+    "outside_sample": [
+      "L202 'five' rerankers (paper says 'such as')",
+      "L115 generalised design rationale ('각 단계마다 LLM의 자유도를 줄여')",
+      "L304 opinion stated as fact",
+      "L226 20 retrieved items for DMR, paper's Sec 4.2 says top 10",
+      "L143-146 empty '근거' column"
+    ]
+  },
+  "checklist": {
+    "repeated": 0,
+    "avoided": 6,
+    "na": 0,
+    "repeated_ids": [],
+    "items": [
+      {
+        "id": "inline-math-delimiters",
+        "result": "avoided",
+        "evidence": "No \\( \\) or \\[ \\] in the post; inline math is $$...$$ (e.g. L50, L82)"
+      },
+      {
+        "id": "longmemeval-tldr-relative",
+        "result": "avoided",
+        "evidence": "L30 '정확도는 전체 컨텍스트 방식의 60.2%에서 71.2%로 올랐습니다'; L31 '55.4%에서 63.8%로'; no %포인트 anywhere"
+      },
+      {
+        "id": "longmemeval-results-relative",
+        "result": "avoided",
+        "evidence": "Table L261-264 gives 55.4/63.8 and 60.2/71.2; L266 '저자들은 이를 상대 기준 18.5% 향상으로 보고합니다'; no '%포인트' (15.2% omitted)"
+      },
+      {
+        "id": "longmemeval-baseline-misattributed",
+        "result": "avoided",
+        "evidence": "L30 'LongMemEval ... gpt-4o 설정에서 정확도는 전체 컨텍스트 방식의 60.2%에서'; L266 '두 모델 모두에서 Zep이 앞섰고'"
+      },
+      {
+        "id": "longmemeval-185-arithmetic",
+        "result": "avoided",
+        "evidence": "L266 pairs 18.5% with 60.2->71.2 as '저자들은 ... 보고합니다' (the paper's stated figure); no claim that 71.2/60.2 equals 18.5%; the ~18.3% computed ratio is not given"
+      },
+      {
+        "id": "missing-description",
+        "result": "avoided",
+        "evidence": "L8 starts 'Zep은', 140 characters, numbers 60.2/71.2/28.9/2.58 (TL;DR L30) and 94.8 (L32)"
+      }
+    ]
+  },
+  "extras": {
+    "absence_claims_and_source_sentences": "All correct: L50 'φ*는 논문에서 따로 정의하지 않지만' (true; Sec 2 uses φ* undefined), marked as a reading; L66 no episode-episode or community-community edges defined (true per the subgraph definitions); L162 '논문에 있는 식은 아닙니다' (true); L228 MemGPT gpt-4o-mini not reproducible (Sec 4.2); L310 MemGPT not compared on LongMemEval (Sec 4.3.1); L312 no benchmark for conversation plus business data (Sec 5); L314 '추정만 할 수 있습니다' (paper gives no cause). Omitted: Sec 4.2's 'top 10' for DMR versus L226's 20. No pipeline meta language ('이 근거', '제공된 자료') found.",
+    "edit_leaks": "L143-146 empty '근거' column; L117-123 second graph definition; L220 paragraph restating L216; L148 '가상의 고객 지원 대화에서 ... 해 보겠습니다' re-introducing the running example; L162 '여기서 $$\\mathcal{N}_{s}$$는 의미 엔티티 노드 집합입니다' re-defining a symbol from L55; L70 section pointer sentence.",
+    "unsupported_causal": "L115 'LLM의 자유도를 줄여 ... 일관성을 지키는 방향으로 설계' (generalised design rationale); L304 '지연 감소가 정확도 향상보다 더 결정적' (opinion as fact); L272 '정확도와 비용 중 하나를 포기하고 얻은 결과가 아닙니다' (fine, from Table 2). The v5 causal claims (L297 assistant drop, L287 preference mechanism) are gone or hedged (L314).",
+    "repetition": "115k x6 + 115,000 x3 (L30, L31, L247, L251, L261, L263, L268, L272, L294); 1.6k x6; 60.2->71.2 four times (L8, L30, L263-264, L266); 28.9->2.58 four times (L8, L30, L263, L270); 184% three times (L31, L278, L282); 94.8 four times; single-session-assistant drop four prose places (L32, L296, L309, L314); periodic refresh three times (L172, L178, L308); graph definition twice; '앞서 본' x10. Running example: 부산 8 and 서울 4 lines in 10 paragraphs.",
+    "table_cells": "Result tables verbatim; L143 empty '근거' column; reranker RRF/MMR cells '기존 기법' are not criteria",
+    "front_matter": "subtitle, paper_author 'Zep AI', paper_doi, two-level categories, use_math true, no author key; description 140 chars",
+    "tags_note": "7 tags; 'Agentic-AI' and 'Knowledge-Graph' generic alongside specific ones"
+  },
+  "top_issues": [
+    "Edit residue: L143-146 table carries an empty '근거' column; the graph definition and its three tiers are given twice (L46-56, L117-123); L220 restates L216; L148 re-introduces the running example",
+    "Unsupported claims: L202 'five' rerankers (paper: 'such as RRF and MMR'), L76 '가장 크게 다른 점' (paper: 'A key differentiating feature'), L32 places the LongMemEval single-session-assistant drop in the DMR bullet, L115 generalised design rationale",
+    "Restatement and pointer tic: 115k/115,000 nine times, 1.6k six, '앞서 본' ten times; setup omits the graph-construction and embedding models and DMR's scale, and drops the paper's 'top 10' for DMR"
+  ]
+}
