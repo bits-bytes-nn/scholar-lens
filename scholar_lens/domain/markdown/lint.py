@@ -816,7 +816,8 @@ def _paper_id(source: str) -> str:
 
 
 def drop_unknown_images(markdown: str, known_sources: set[str]) -> str:
-    """Remove image links whose source is not a known figure.
+    """Remove image links whose source is not a known figure, and every
+    repeat of a figure already shown (a post shows each figure once).
 
     ``known_sources`` holds the artifact's real figure paths/URLs; a link is
     kept when its source is in that set, or when its file name is and it is a
@@ -833,20 +834,30 @@ def drop_unknown_images(markdown: str, known_sources: set[str]) -> str:
             (_host(source), _paper_id(source)), source
         )
     keep = _in_prose(markdown)
+    shown: set[str] = set()
+
+    def once(source: str, image: str) -> str:
+        if source in shown:
+            logger.warning("Dropping a repeat of image %r", source[:100])
+            return ""
+        shown.add(source)
+        return image
 
     def repl(m: re.Match[str]) -> str:
         src = m.group(2)
-        if not keep(m.start()) or src in known_sources:
+        if not keep(m.start()):
             return m.group(0)
+        if src in known_sources:
+            return once(src, m.group(0))
         origins = known_names.get(_file_name(src))
         if origins is not None and not _host(src):
-            return m.group(0)
+            return once(src, m.group(0))
         known = (origins or {}).get((_host(src), _paper_id(src)))
         if known is not None:
             # The same figure under another version or path: point at the
             # source that was actually fetched (another one may 404).
             head, sep, tail = m.group(0).partition("](")
-            return head + sep + tail.replace(src, known, 1)
+            return once(known, head + sep + tail.replace(src, known, 1))
         logger.warning("Dropping image with unknown source: %r", src[:100])
         return ""
 
@@ -1082,36 +1093,6 @@ _POLITE = re.compile(
 _PREDICATE_BEFORE_DA = frozenset(
     "이하되않없같있었았였했겠렵롭답많좋낫닿크쉽깊높낮옳르리"
 )
-# Nouns (loanwords, names) whose last syllables read like a predicate
-# ending: those that are no verb form match as word endings ("아나콘다",
-# "카메라와 라이다"); those that are also common verb endings ("간다", "판다")
-# match only as the whole word.
-_NOUN_ENDINGS_LIKE_DA = (
-    "콘다",
-    "젠다",
-    "라이다",
-    "레이다",
-    "에이다",
-    "플로리다",
-    "보르다",
-    "코르다",
-)
-_NOUNS_LIKE_DA = frozenset(
-    {
-        "판다",
-        "간다",
-        "란다",
-        "완다",
-        "사이다",
-        "우간다",
-        "르완다",
-        "베란다",
-        "미란다",
-        "프로파간다",
-    }
-)
-# A compound that ends in a noun of the set ("레서판다", "자이언트판다").
-_COMPOUND_NOUNS_LIKE_DA = ("판다",)
 
 
 def _declarative(word: str) -> bool:
@@ -1119,13 +1100,7 @@ def _declarative(word: str) -> bool:
     final ㄴ (present tense: "한다", "만든다"), after "니" ("합니다"), or
     after a predicate stem or tense mark."""
     word = word.rstrip(".!?")
-    if (
-        len(word) < 2
-        or not word.endswith("다")
-        or word in _NOUNS_LIKE_DA
-        or word.endswith(_NOUN_ENDINGS_LIKE_DA)
-        or (len(word) > 2 and word.endswith(_COMPOUND_NOUNS_LIKE_DA))
-    ):
+    if len(word) < 2 or not word.endswith("다"):
         return False
     before = word[-2]
     if not "가" <= before <= "힣":
@@ -1133,19 +1108,6 @@ def _declarative(word: str) -> bool:
     final = (ord(before) - ord("가")) % 28
     # A final ㄴ (present tense) or ㅆ (past tense: "바꿨다").
     return final in (4, 20) or before == "니" or before in _PREDICATE_BEFORE_DA
-
-
-# Endings of a word before a verb: a subject or object particle or a
-# connective ("데이터를 판다", "옮겨 간다"), not a noun's company ("카메라와").
-# Particles (subject, object, topic, direction, place) and connectives
-# (nouns that end like one are listed apart).
-_BEFORE_A_VERB = re.compile(
-    r"(?:[을를이가은는도로에]|에서|[고게겨워해려쳐져혀돼봐줘아어서])$"
-)
-# Nouns that end in 아/어/서 like a connective ("아시아 판다").
-_NOUNS_LIKE_CONNECTIVES = frozenset(
-    {"아시아", "소프트웨어", "하드웨어", "미들웨어", "펌웨어", "레서", "미디어"}
-)
 
 
 def _question_in_nga(word: str) -> bool:
@@ -1158,20 +1120,24 @@ def _question_in_nga(word: str) -> bool:
 
 
 def _is_sentence_heading(text: str) -> bool:
+    """Whether a heading reads as a Korean sentence: a polite ending
+    ("~니다", "~요", "~죠"), a "~ㄴ가?" question (a TL;DR's question headings
+    are its own), or a declarative "~다" ending a heading of more than one
+    word ("배치를 다시 짠다", "성격이 다른 작업이다") or in the past tense
+    ("바꿨다"). A lone word that may be a noun ("판다", "우간다") is left to
+    the section review, which reads the heading in context."""
     words = text.split()
     if not words:
         return False
     last = words[-1]
-    if _POLITE.search(last) or _declarative(last) or _question_in_nga(last):
+    bare = last.rstrip(".!")
+    if _POLITE.search(last) or bare.endswith("니다") or _question_in_nga(last):
         return True
-    # A word that is a noun or a verb ending ("간다", "판다") reads as the verb
-    # after a particle or connective.
-    return (
-        last.rstrip(".!") in _NOUNS_LIKE_DA
-        and len(words) > 1
-        and bool(_BEFORE_A_VERB.search(words[-2]))
-        and words[-2] not in _NOUNS_LIKE_CONNECTIVES
-    )
+    if not _declarative(last):
+        return False
+    before = bare[-2]
+    past = (ord(before) - ord("가")) % 28 == 20  # a final ㅆ: "바꿨다"
+    return past or len(words) > 1
 
 
 def ends_in_plain_declarative(text: str) -> bool:

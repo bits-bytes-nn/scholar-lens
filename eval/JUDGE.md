@@ -1,6 +1,18 @@
 # Judge instructions for the evaluation set
 
-The same instructions score the current generator (baseline) and the redesigned one, so results compare. Run the judge on a model other than the writer, and for comparisons run it three times and take the median.
+The same instructions score the current generator (baseline) and a changed one, so results compare. Run the judge on a model other than the writer.
+
+## 0. Comparing two versions (the decision protocol)
+
+A change of a default (an engine, a prompt rule, a check) is decided this way (ADR 0002):
+
+1. Items: the `confirm` items of `eval/sets/baseline.yaml` (never generated before they joined the set). `dev` items may guide work but do not decide.
+2. Generation: each version writes every item; both versions share the reading cache, so they differ in what they write, not in what they read.
+3. Blinding: for each item the two posts are copied to `X.md` and `Y.md` in a random order recorded in `blind-mapping.json`, kept from the judges.
+4. Judging: three independent judge sessions per pair (separate agents, no shared context, none sees the mapping or the other judgments). Each writes the result JSON below plus a pairwise `preference`.
+5. Decision: `python -m eval.compare <run dir>` unblinds and counts. A version wins an item when at least two of its three sessions prefer it; it wins the comparison when it wins more items than it loses and no item is lost on criterion F (no hallucination). Anything else is "no measurable difference": the default stays.
+
+Record every run under `eval/runs/<name>/` (judge JSON and `blind-mapping.json`; posts are not committed) and its conclusion in `eval/RESULTS.md`, with the generation's code commit, the judge model and the cost.
 
 Inputs:
 - the post (Markdown);
@@ -44,11 +56,14 @@ For each `check` in the item's checklist, record whether the post repeats the de
 
 ## Output
 
-Return a JSON object followed by a short summary:
+Return a JSON object followed by a short summary. A pairwise judgment holds one such object per post under `X` and `Y` and a preference:
 
 ```
-{"item": ..., "scores": {"A": n, ..., "F": n}, "principles": {...},
- "claims": {"checked": 15, "unsupported": n, "wrong": n, "examples": [...]},
- "checklist": {"repeated": n, "avoided": n, "na": n, "repeated_ids": [...]},
- "extras": {...}, "top_issues": ["...", "..."]}
+{"item": ..., "judge_model": ..., "session": ...,
+ "X": {"scores": {"A": {"score": n, "reason": ...}, ...}, "principles": {...},
+       "claims": {"checked": n, "unsupported": n, "wrong": n, "error_rate": r, "items": [...]},
+       "checklist": {"repeated": n, "avoided": n, "na": n, "repeated_ids": [...]},
+       "structure_defects": n, "top_issues": ["...", "..."]},
+ "Y": {...},
+ "preference": {"overall": "X" | "Y" | "tie", "per_criterion": {"A": "X", ...}, "reason": ...}}
 ```

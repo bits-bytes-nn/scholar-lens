@@ -10,6 +10,7 @@ and taxonomy.
 """
 
 from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
+from scholar_lens.domain.prompts.rules import DESCRIPTION_CHARS
 
 _SURVEY_GOAL = """
 The survey is a long-form blog post in the style of Lilian Weng's blog: it
@@ -173,7 +174,8 @@ You file a finished survey blog post into the blog's taxonomy and write its
 search description. Choose only from the lists you are given.
 """
 
-    human_prompt_template: str = """
+    human_prompt_template: str = (
+        """
 <title>{title}</title>
 <survey_outline>
 {outline}
@@ -190,7 +192,9 @@ search description. Choose only from the lists you are given.
 - keywords: up to 5 short reusable topic tags in English (1-4 words each)
   naming methods and ideas the survey covers; never restate the title.
 - description: the post's search snippet, one plain text paragraph of
-  120-160 characters in {language}: no math, Markdown, links or tags. It
+  """
+        + DESCRIPTION_CHARS
+        + """ in {language}: no math, Markdown, links or tags. It
   names the topic and the lineages the survey traces, and may end with what
   the post covers ("… 계보별로 정리합니다."). Numbers only from
   <survey_outline>. In Korean, natural prose in the "입니다" register, not
@@ -203,3 +207,4 @@ Respond in exactly this format:
 <keywords>Keyword One, Keyword Two</keywords>
 <description>...</description>
 """
+    )

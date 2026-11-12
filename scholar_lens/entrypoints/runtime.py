@@ -31,7 +31,7 @@ from scholar_lens.adapters.aws.storage import (
 )
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.adapters.github.publisher import PostAssetError
-from scholar_lens.application.run import PipelineOutcome
+from scholar_lens.application.run import PipelineOutcome, run_notes
 from scholar_lens.application.use_cases.publish import (
     RESULT_KINDS,
     SavedPostError,
@@ -278,7 +278,7 @@ def record_error(
     input, a post the blog rules or its images blocked (its rejected copy's
     paths kept), or a failure. The run's blocking problems are kept as on a
     finished run."""
-    result.blocking = list(getattr(error, "run_blocking", []))
+    notes, result.blocking = run_notes(error)
     if isinstance(error, rejected_errors):
         if _is_fetch_outage(error):  # the source exists but could not be reached
             result.error = f"{type(error).__name__}: {error}"
@@ -293,18 +293,18 @@ def record_error(
         result.violations = [str(v) for v in error.violations]
         result.markdown_path = error.rejected_path
         result.s3_uri = error.rejected_s3_uri
-        result.warnings = list(getattr(error, "run_notes", []))
+        result.warnings = notes
         logger.error("Post failed validation: %s", error)
     elif isinstance(error, PostAssetError):
         # A paper figure could not be stored: nothing was published.
         result.error = f"{type(error).__name__}: {error}"
         result.markdown_path = error.rejected_path
         result.s3_uri = error.rejected_s3_uri
-        result.warnings = list(getattr(error, "run_notes", []))
+        result.warnings = notes
         logger.error("Post blocked by its images: %s", error)
     else:
         result.error = f"{type(error).__name__}: {error}"
-        result.warnings = list(getattr(error, "run_notes", []))
+        result.warnings = notes
         logger.error("Run failed: %s", error, exc_info=error)
 
 

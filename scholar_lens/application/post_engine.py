@@ -100,6 +100,7 @@ from scholar_lens.domain.evidence_draft import (
     cited_ids,
     copied_sentences,
     free_numbers,
+    named_versions,
     prose_length,
     prose_sentences,
     section_heading,
@@ -142,11 +143,6 @@ from scholar_lens.domain.usage_context import usage_stage
 from scholar_lens.domain.verifiers import Problem, VerifierSet, as_problems
 
 logger = logging.getLogger(__name__)
-
-# The soft outline checks plan() asks again for (key targets, sentence
-# titles, source sections a review leaves out): part of the outline stage's
-# key, raised when one is added or changed.
-OUTLINE_CHECKS_VERSION = 2
 
 StageT = TypeVar("StageT")
 
@@ -824,6 +820,13 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         stages (:meth:`staged`); the chain starts at the outline, whose key
         holds the ledger and the key targets."""
         self._upstream = ""
+        # A version the sources write after a name ("Llama 3.1") may name a
+        # model in any sentence.
+        if versions := named_versions(
+            (f"{e.quote} {e.claim}" for e in ledger if e.kind != "number"),
+            (f"{e.quote} {e.claim} {e.cell}" for e in ledger if e.kind == "number"),
+        ):
+            self.free = self.free.with_names(versions)
         outline = await self.staged(
             "outline",
             [
@@ -835,9 +838,6 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 self.run.outline_repairs,
                 self.spec.empty_sections,
                 self.spec.evidence.same_code_language,
-                # What plan() asks again for beyond the spec's rules: an
-                # outline saved before a check existed is not reused.
-                OUTLINE_CHECKS_VERSION,
                 [d.paper_id for d in self.covered_documents()],
             ],
             lambda: self.planned(ledger),
@@ -1141,7 +1141,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         def kind(markdown: str) -> list[Problem]:
             return as_problems(section.kind, self.extra_problems(ctx, markdown))
 
-        return VerifierSet(section.title, (shared, kind), frozenset(figures))
+        return VerifierSet((shared, kind), frozenset(figures))
 
     # ---- whole post -------------------------------------------------------------
 
@@ -1160,7 +1160,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         steps = self.spec.post_passes
         if not written:
             return written
-        reads = [n for n in steps.names if n in self.pass_systems]
+        reads = list(self.pass_systems)
         with usage_stage("review"):
             answers = await asyncio.gather(
                 *(
@@ -1182,7 +1182,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         for name, review in reviews:
             if review.trace:
                 logger.info("Post review %s trace: %s", name, review.trace[:600])
-        program = steps.code_trace and "consistency" in steps.names
+        program = steps.code_trace
         found = self.program_findings(written) if program else []
         # The code is run only when it reads clean: a block the static check
         # flags fails the run the same way.
@@ -1231,8 +1231,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 ran = await self.run_program(fixed)
             if ran is not None:
                 self.program_run_notes(ran)
-        if "coverage" in steps.names:
-            self.coverage_notes(outline, fixed)
+        self.coverage_notes(outline, fixed)
         return fixed
 
     def pass_prompt(
@@ -1362,13 +1361,11 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 + " | ".join(f"{f.section}: {f.problem}"[:240] for f in ran.findings)
             )
         elif ran.limited:
-            note = f"The sandbox check of the code examples was partial: {ran.limited}"
-            if "the run ended" not in ran.limited:
-                note += (
-                    "; later blocks were checked for imports, module attributes "
-                    "and call signatures only"
-                )
-            self.notes.append(note[:400])
+            self.notes.append(
+                f"The sandbox check of the code examples was partial: {ran.limited}"[
+                    :400
+                ]
+            )
 
     def program_findings(
         self, written: Sequence[tuple[SectionT, str]]
@@ -1492,7 +1489,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
             draft,
             title=tldr.title,
             review_context=tldr.review_context,
-            verifiers=VerifierSet(tldr.title, (shared, kind), frozenset()),
+            verifiers=VerifierSet((shared, kind), frozenset()),
             ledger=ledger,
             own=context,
             earlier=(),

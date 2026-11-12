@@ -24,6 +24,7 @@ from scholar_lens.adapters.files import LocalOrS3Files
 from scholar_lens.adapters.github import publisher
 from scholar_lens.application import run as runtime
 from scholar_lens.application.ports import PaperInputs
+from scholar_lens.application.run import run_notes
 from scholar_lens.application.use_cases import guide as guide_pipeline
 from scholar_lens.application.use_cases import paper as paper_pipeline
 from scholar_lens.configs import Config
@@ -587,7 +588,7 @@ async def test_guide_budget_abort_keeps_the_generator_notes(
             JobRequest(kind="guide", urls=["https://docs.vllm.ai/en/latest/"]),
             TokenUsageTracker(),
         )
-    assert caught.value.run_notes == FakeGenerator().notes  # type: ignore[attr-defined]
+    assert run_notes(caught.value)[0] == FakeGenerator().notes  # type: ignore[attr-defined]
 
 
 async def test_fresh_on_the_sections_engine_is_noted(

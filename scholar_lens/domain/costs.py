@@ -64,10 +64,7 @@ def _parts(record: RunRecord, by: GroupBy) -> list[tuple[str, int, int, float]]:
         (
             key,
             t.calls,
-            t.input_tokens
-            + t.output_tokens
-            + t.cache_read_tokens
-            + t.cache_write_tokens,
+            t.total_tokens,
             t.cost_usd,
         )
         for key, t in groups.items()
@@ -81,8 +78,7 @@ def _calls(record: RunRecord) -> int:
 def _tokens(record: RunRecord) -> int:
     if record.usage is None:
         return 0
-    t = record.usage.total
-    return t.input_tokens + t.output_tokens + t.cache_read_tokens + t.cache_write_tokens
+    return record.usage.total.total_tokens
 
 
 def cost_report(

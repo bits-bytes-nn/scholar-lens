@@ -158,7 +158,7 @@ def _headings(markdown: str) -> list[Problem]:
     return [Problem("subheading", "no ### headings")] if "\n### " in markdown else []
 
 
-VERIFIERS = VerifierSet("test", (_numbers, _headings))
+VERIFIERS = VerifierSet((_numbers, _headings))
 
 
 def test_a_problem_key_drops_its_position_and_digits() -> None:
@@ -253,7 +253,7 @@ def test_only_a_sections_own_figure_is_protected(
     revision = transact(
         section,
         [("![다른 절의 그림](https://x/f.png)\n\n", "")],
-        verifiers=VerifierSet("구조", (), owned),
+        verifiers=VerifierSet((), owned),
         max_prose_cut=Limits().max_prose_cut,
     )
     assert revision.taken is taken
@@ -355,7 +355,7 @@ def _deep_checks(limits: Limits) -> VerifierSet:
             limits=limits,
         )
 
-    return VerifierSet("사용법", (shared,))
+    return VerifierSet((shared,))
 
 
 OTHER = "| 모델 | 속도 |\n| --- | --- |\n| 작은 것 | 빠름 |"
@@ -418,7 +418,7 @@ def test_a_removal_without_copies_elsewhere_is_held_to_the_visuals_minimum(
     base = _deep_checks(Limits())
     # The section owns no figure: a figure may go, so only the visuals
     # minimum can hold it.
-    verifiers = VerifierSet(base.name, base.checks, frozenset())
+    verifiers = VerifierSet(base.checks, frozenset())
     assert not any(p.kind == "visuals" for p in verifiers.run(text))
     revision = transact(text, edits, verifiers=verifiers, max_prose_cut=CUT, rest=rest)
     assert revision.applied and not revision.taken
@@ -478,7 +478,7 @@ def _program_set(later: str) -> VerifierSet:
     def whole(markdown: str) -> list[Problem]:
         return program_problems([("앞", markdown, True), ("뒤", later, True)])
 
-    return VerifierSet("앞", (whole,))
+    return VerifierSet((whole,))
 
 
 def test_a_block_rewritten_with_the_same_fault_adds_no_program_problem() -> None:
@@ -545,7 +545,7 @@ def test_a_cutting_fix_that_leaves_the_section_short_is_not_taken() -> None:
     target = 1_000
     sentences = [f"{SENTENCE[:-1]} {k}번입니다." for k in range(30)]
     text = _section(" ".join(sentences))
-    verifiers = VerifierSet("사용법", (lambda md: _length_problems(md, target),))
+    verifiers = VerifierSet((lambda md: _length_problems(md, target),))
     assert not _short(verifiers.run(text))
     cut = [(" ".join(sentences[3:]), "")]
     revision = transact(text, cut, verifiers=verifiers, max_prose_cut=1.0)
@@ -602,7 +602,7 @@ def _section_set(target: int = 0) -> VerifierSet:
             target_chars=target,
         )
 
-    return VerifierSet("구조", (check,))
+    return VerifierSet((check,))
 
 
 def test_an_edit_near_an_existing_rule_slip_adds_no_problem() -> None:
@@ -698,7 +698,7 @@ def _listing_verifiers(
             "",
         )
 
-    return VerifierSet("사용법", (shared, unknown_flags), frozenset(figures))
+    return VerifierSet((shared, unknown_flags), frozenset(figures))
 
 
 def _listing_section(

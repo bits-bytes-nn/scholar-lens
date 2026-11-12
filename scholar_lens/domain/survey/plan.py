@@ -23,7 +23,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 
 from scholar_lens.domain.ids import (
     ARXIV_ID_BODY,
+    arxiv_id_from_doi,
     arxiv_id_from_reference,
+    bare_doi,
+    doi_from_link,
     paper_link_key,
     paper_url,
 )
@@ -42,9 +45,6 @@ MAX_EXCLUDED = 10
 # Authors named before "et al.".
 MAX_AUTHORS = 3
 
-_DOI = re.compile(r"^10\.\d{4,9}/\S+$")
-_DOI_PREFIX = re.compile(r"^(?:https?://(?:dx\.)?doi\.org/|doi:)", re.IGNORECASE)
-_ARXIV_DOI = re.compile(r"^10\.48550/arxiv\.(.+)$", re.IGNORECASE)
 _JSON_FENCE = re.compile(r"^```(?:json)?\s*|\s*```$")
 # An arXiv id written out in a page's text ("arXiv:2305.18290").
 _TEXT_ARXIV_ID = re.compile(rf"\barXiv:\s?({ARXIV_ID_BODY})\b", re.IGNORECASE)
@@ -77,21 +77,17 @@ def survey_slug(topic: str) -> str:
 
 
 def normalize_doi(value: str | None) -> str | None:
-    """The bare, lower-cased DOI in ``value`` (``https://doi.org/`` or
-    ``doi:`` prefix stripped), or None when it is not a DOI."""
-    if not value:
-        return None
-    doi = _DOI_PREFIX.sub("", value.strip()).lower()
-    return doi if _DOI.match(doi) else None
+    """The bare, lower-cased DOI in ``value`` (a ``doi.org`` link, percent-
+    encoding decoded, or a ``doi:`` prefix stripped), or None when it is not
+    a DOI (:func:`~scholar_lens.domain.ids.bare_doi`)."""
+    doi = doi_from_link(value) or bare_doi(value)
+    return doi.lower() if doi else None
 
 
 def unversioned_arxiv_id(value: str | None) -> str | None:
     """The arXiv id in an id, ``arXiv:`` reference, arXiv URL or arXiv DOI,
     without its version."""
-    doi = normalize_doi(value)
-    if doi and (match := _ARXIV_DOI.match(doi)):
-        value = match.group(1)
-    arxiv_id = arxiv_id_from_reference(value)
+    arxiv_id = arxiv_id_from_doi(value) or arxiv_id_from_reference(value)
     return re.sub(r"v\d+$", "", arxiv_id) if arxiv_id else None
 
 

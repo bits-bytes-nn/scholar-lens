@@ -75,24 +75,17 @@ class MetricsEmitter:
         if not self._client:
             return
         try:
-            # Emit each metric TWICE: once with the Mode dimension (per-pipeline
-            # breakdown) and once with NO dimensions (a stack-wide aggregate). A
-            # CloudWatch alarm can only watch a single time series — it can't
-            # SEARCH/SUM across dimensions — so the dimensionless copy is what the
-            # cost/error alarms actually alarm on.
+            # Each metric per Mode; the cost once more without dimensions,
+            # the stack-wide series the cost alarm watches (an alarm watches
+            # one series and cannot sum across dimensions).
             self._client.put_metric_data(
                 Namespace=self.namespace,
                 MetricData=[
-                    entry
-                    for name, value in metrics.items()
-                    for entry in (
-                        {
-                            "MetricName": name,
-                            "Value": float(value),
-                            "Dimensions": dims,
-                        },
-                        {"MetricName": name, "Value": float(value)},
-                    )
+                    *(
+                        {"MetricName": name, "Value": float(value), "Dimensions": dims}
+                        for name, value in metrics.items()
+                    ),
+                    {"MetricName": COST_METRIC_NAME, "Value": float(cost)},
                 ],
             )
         except Exception as e:  # noqa: BLE001 - metric emission must not fail the job
@@ -115,13 +108,7 @@ class MetricsEmitter:
             for stage, totals in usage.by_stage.items()
             for name, value in (
                 ("StageCostUSD", totals.cost_usd),
-                (
-                    "StageTokens",
-                    totals.input_tokens
-                    + totals.output_tokens
-                    + totals.cache_read_tokens
-                    + totals.cache_write_tokens,
-                ),
+                ("StageTokens", totals.total_tokens),
                 ("StageCalls", totals.calls),
                 ("StageFailedCalls", totals.failed_calls),
             )

@@ -381,7 +381,9 @@ def cite_papers(markdown: str, ledger: EvidenceLedger) -> str:
         # A marker that cites nothing ([[EX]]) goes with the space before it.
         return f"{m.group('space')}{keys}" if keys else ""
 
-    out = re.sub(r"(?P<space>[ \t]*)" + MARKER.pattern, repl, markdown, flags=re.I)
+    out = re.sub(
+        r"(?P<space>[ \t]*)(?:" + MARKER.pattern + ")", repl, markdown, flags=re.I
+    )
     # The same paper cited twice in a row reads as a slip.
     out = re.sub(r"(\[@[^\]]+\])(\s*\1)+", r"\1", out)
     return _one_citation_per_run(out)

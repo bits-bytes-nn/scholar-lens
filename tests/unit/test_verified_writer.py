@@ -356,7 +356,7 @@ def _subheadings(markdown: str) -> list[Problem]:
 def test_a_whole_post_fix_runs_the_sections_verifier_set() -> None:
     sentences = _sentences(5)
     draft = _section(sentences)
-    verifiers = VerifierSet("캐시", (_subheadings,))
+    verifiers = VerifierSet((_subheadings,))
     model = Model()
     writer = _writer(model)
     md = _verify(writer, draft, verifiers=verifiers)
@@ -462,7 +462,7 @@ def test_a_whole_post_fix_that_adds_a_problem_of_a_kind_the_section_has_is_not_t
 ) -> None:
     sentences = _sentences(5)
     foreign = "다른 절의 사실입니다 [[E9]]."
-    verifiers = VerifierSet("캐시", (_foreign,))
+    verifiers = VerifierSet((_foreign,))
     model = Model()
     writer = _writer(model)
     md = _verify(writer, _section(sentences, foreign), verifiers=verifiers)
@@ -599,7 +599,7 @@ def test_review_problems_no_taken_fix_addressed_reach_the_notes(outcome: str) ->
     }[outcome]
     edits = [] if outcome == "unparsed" else [Edit(find=sentences[0], replace=replace)]
     writer = _writer(_Reviewed(sentences[0], edits))
-    _verify(writer, _section(sentences), verifiers=VerifierSet("캐시", (_subheadings,)))
+    _verify(writer, _section(sentences), verifiers=VerifierSet((_subheadings,)))
     noted = [n for n in writer.notes if "review problems no fix addressed" in n]
     assert bool(noted) is (outcome != "taken")
     assert all(sentences[0][:20] in n for n in noted)
@@ -766,7 +766,7 @@ def _min_prose(chars: int) -> VerifierSet:
         length = len(" ".join(prose_sentences(markdown)))
         return [Problem(TOO_SHORT_PROBLEM, "too short")] if length < chars else []
 
-    return VerifierSet("캐시", (short,))
+    return VerifierSet((short,))
 
 
 @pytest.mark.parametrize("narrowed", [True, False])
@@ -819,7 +819,7 @@ def test_a_narrowing_that_leaves_the_section_short_is_kept_and_noted() -> None:
             limits=limits,
         )
 
-    verifiers = VerifierSet("캐시", (checked,))
+    verifiers = VerifierSet((checked,))
     # The draft is at its minimum; the narrowed one is below it.
     assert checked(draft) == []
     narrowed_draft = draft.replace(bad, narrowed)

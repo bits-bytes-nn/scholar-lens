@@ -1167,7 +1167,7 @@ def test_settling_one_of_the_guides_listed_items_adds_no_problem(dropped: int) -
         identifier_check=lambda md: [f for f in flags if f in md],
     )
     ctx: Any = SimpleNamespace(outline=SimpleNamespace(code_language="python"))
-    verifiers = VerifierSet("A", (lambda md: engine.extra_problems(ctx, md),))
+    verifiers = VerifierSet((lambda md: engine.extra_problems(ctx, md),))
     sdk = ["python", "typescript", "java", "go"]
 
     def section(kept: list[str]) -> str:
@@ -1192,7 +1192,9 @@ def test_settling_one_of_the_guides_listed_items_adds_no_problem(dropped: int) -
 
 # ---- the code run in the sandbox -------------------------------------------------
 
-_TYPO = "client.rnu()"
+# A product module stands in for the product (json): a call of a name it
+# does not have is the post's mistake.
+_TYPO = "json.dumpz(payload)"
 
 
 class _TypoFix:
@@ -1207,7 +1209,9 @@ class _TypoFix:
             return PostReview()
         if schema is SectionEdits:
             self.fixes.append(prompt)
-            edits = [Edit(find=_TYPO, replace="client.run()")] if self.fix_it else []
+            edits = (
+                [Edit(find=_TYPO, replace="json.dumps(payload)")] if self.fix_it else []
+            )
             return SectionEdits(edits=edits)
         if schema is FixedSection:  # the fix that gives up keeps the section
             return FixedSection(section="")
@@ -1253,8 +1257,7 @@ def _typo_post(engine: EvidenceGuideEngine, ledger: EvidenceLedger) -> list[Any]
         (
             define,
             "## 클라이언트 만들기\n\n`max_batch_size` 기본값은 10입니다 [[E2]].\n\n"
-            "```python\nclass Client:\n    def run(self):\n        return 1\n\n"
-            "client = Client()\n```\n",
+            "```python\nimport json\n\npayload = {'a': 1}\n```\n",
         ),
         (
             use,
@@ -1276,7 +1279,7 @@ def _run_engine(model: Any, runner: Any) -> EvidenceGuideEngine:
         program_runs=ProgramRuns(
             runner,
             pins=(),
-            modules=frozenset({"pkg"}),
+            modules=frozenset({"json"}),
             block_timeout_s=10,
             total_timeout_s=60,
         ),
@@ -1290,7 +1293,7 @@ def test_a_block_that_fails_in_the_sandbox_is_fixed_and_run_again() -> None:
     written = _typo_post(engine, ledger)
     assert engine.program_check(written) == []  # the static check reads it clean
     out = asyncio.run(engine.review_post(_outline(), ledger, written))
-    assert "client.run()" in out[1][1]
+    assert "json.dumps(payload)" in out[1][1]
     assert any("AttributeError" in p for p in model.fixes)
     assert len(runner.programs) == 2
     assert not [n for n in engine.notes if "sandbox" in n or "examples" in n]
@@ -1329,7 +1332,7 @@ class _RepetitionEditsCode(_TypoFix):
         if schema is SectionEdits:
             self.fixes.append(prompt)
             return SectionEdits(
-                edits=[Edit(find="client.run()", replace="client.go()")]
+                edits=[Edit(find="json.dumps(payload)", replace="json.dumpz(payload)")]
             )
         return await super().structured(
             system=system, prompt=prompt, schema=schema, **kw
@@ -1341,7 +1344,7 @@ def test_code_another_fix_changes_is_run_again() -> None:
     engine = _run_engine(model, runner)
     ledger = _ledger()
     written = _typo_post(engine, ledger)
-    written[1] = (written[1][0], written[1][1].replace(_TYPO, "client.run()"))
+    written[1] = (written[1][0], written[1][1].replace(_TYPO, "json.dumps(payload)"))
     asyncio.run(engine.review_post(_outline(), ledger, written))
     assert len(runner.programs) == 2
     assert [n for n in engine.notes if n.startswith("Code that fails when run")]
@@ -1367,7 +1370,7 @@ class _NameFix(_TypoFix):
         if schema is SectionEdits:
             self.fixes.append(prompt)
             return SectionEdits(
-                edits=[Edit(find="clinet.run()", replace="client.run()")]
+                edits=[Edit(find="jsno.dumps(payload)", replace="json.dumps(payload)")]
             )
         return await super().structured(prompt=prompt, schema=schema, **kw)
 
@@ -1377,8 +1380,25 @@ def test_code_the_static_fix_cleans_is_run_after_it() -> None:
     engine = _run_engine(model, runner)
     ledger = _ledger()
     written = _typo_post(engine, ledger)
-    written[1] = (written[1][0], written[1][1].replace(_TYPO, "clinet.run()"))
+    written[1] = (written[1][0], written[1][1].replace(_TYPO, "jsno.dumps(payload)"))
     assert engine.program_check(written)
     out = asyncio.run(engine.review_post(_outline(), ledger, written))
-    assert "client.run()" in out[1][1]
-    assert len(runner.programs) == 1 and "client.run()" in runner.programs[0]
+    assert "json.dumps(payload)" in out[1][1]
+    assert len(runner.programs) == 1 and "json.dumps(payload)" in runner.programs[0]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Install it with `pip install strands-agents`.",
+        "`pip install strands-agents`",
+        "!pip install strands-agents",
+        "(.venv) $ pip install strands-agents",
+        "- pip install strands-agents",
+    ],
+)
+def test_a_docs_pages_pip_command_is_read_in_any_usual_form(line: str) -> None:
+    from scholar_lens.domain.guide.evidence_guide import install_requirements
+
+    assert install_requirements(line) == [("strands-agents", frozenset())]
+    assert install_requirements("Run pip install the SDK if needed.") == []

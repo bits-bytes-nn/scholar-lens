@@ -49,7 +49,6 @@ class TokenUsageTracker(BaseCallbackHandler):
     input_tokens: int = 0
     output_tokens: int = 0
     call_count: int = 0
-    per_model: dict[str, dict[str, int]] = field(default_factory=dict)
     # Priced per call, so tiered (long-prompt) rates apply to the right calls.
     cost_usd: float = 0.0
     events: list[UsageEvent] = field(default_factory=list)
@@ -81,23 +80,7 @@ class TokenUsageTracker(BaseCallbackHandler):
     ) -> None:  # noqa: ANN401
         """Count and price a response the model returned (and billed)."""
         usage = _extract_usage(response)
-        # The budget counts every token the model read, cached or not.
-        read = usage.input_tokens + usage.cache_read_tokens + usage.cache_write_tokens
-        self.input_tokens += read
-        self.output_tokens += usage.output_tokens
-        self.call_count += 1
-        bucket = self.per_model.setdefault(
-            usage.model_id, {"input_tokens": 0, "output_tokens": 0, "calls": 0}
-        )
-        bucket["input_tokens"] += read
-        bucket["output_tokens"] += usage.output_tokens
-        bucket["calls"] += 1
-        cost = event_cost_usd(usage)
-        self.cost_usd += cost
-        self._record(
-            usage.model_copy(update={"cost_usd": round(cost, 6), "outcome": outcome}),
-            run_id,
-        )
+        self._count(usage.model_copy(update={"outcome": outcome}), run_id)
 
     def on_llm_error(self, error: BaseException, **kwargs: Any) -> None:
         # A response cut at its output limit was returned and billed: its
@@ -128,19 +111,19 @@ class TokenUsageTracker(BaseCallbackHandler):
     def record(self, event: UsageEvent) -> None:
         """A call made outside LangChain (the Strands engine): priced and
         counted like a callback's."""
-        read = event.input_tokens + event.cache_read_tokens + event.cache_write_tokens
-        self.input_tokens += read
+        self._count(event, None)
+
+    def _count(self, event: UsageEvent, run_id: Any) -> None:  # noqa: ANN401
+        """Count and price a call the model answered (and billed); the
+        budget counts every token the model read, cached or not."""
+        self.input_tokens += (
+            event.input_tokens + event.cache_read_tokens + event.cache_write_tokens
+        )
         self.output_tokens += event.output_tokens
         self.call_count += 1
-        bucket = self.per_model.setdefault(
-            event.model_id, {"input_tokens": 0, "output_tokens": 0, "calls": 0}
-        )
-        bucket["input_tokens"] += read
-        bucket["output_tokens"] += event.output_tokens
-        bucket["calls"] += 1
         cost = event_cost_usd(event)
         self.cost_usd += cost
-        self._record(event.model_copy(update={"cost_usd": round(cost, 6)}), None)
+        self._record(event.model_copy(update={"cost_usd": round(cost, 6)}), run_id)
 
     def run_usage(self) -> RunUsage:
         return RunUsage.of(self.events, PRICE_VERSION)

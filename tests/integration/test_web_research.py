@@ -182,7 +182,7 @@ class _StubProvider(NullSearchProvider):
         self._content = content
         self.supports_search = True
 
-    def search(self, query: str, *, count: int = 5) -> list[SearchResult]:
+    def search(self, query: str, *, count: int = 5, **_: object) -> list[SearchResult]:
         self.seen.append(query)
         return [
             SearchResult(
@@ -225,7 +225,7 @@ class TestRunSearches:
         )
         result_url = "https://docs.example.com/page"
         provider = _StubProvider(content="")
-        provider.search = lambda q, *, count=5: [  # type: ignore[method-assign]
+        provider.search = lambda q, *, count=5, **_: [  # type: ignore[method-assign]
             SearchResult(title="T", url=result_url)
         ]
         researcher = _researcher(
@@ -239,7 +239,7 @@ class TestRunSearches:
     def test_fetch_top_takes_results_round_robin_across_queries(self) -> None:
         # One query's results must not fill the whole fetch budget.
         class Provider(_StubProvider):
-            def search(self, query, *, count=5, domains=None):  # type: ignore[no-untyped-def,override]
+            def search(self, query, *, count=5, domains=None, exclude=()):  # type: ignore[no-untyped-def,override]
                 return [
                     SearchResult(
                         title=f"{query}{i}", url=f"https://{query}.x/{i}", content="c"
@@ -255,7 +255,7 @@ class TestRunSearches:
     def test_fetch_top_dedupes_against_existing_pages(self) -> None:
         # A result URL already present as a seed page is not added again.
         provider = _StubProvider(content="body")
-        provider.search = lambda q, *, count=5: [  # type: ignore[method-assign]
+        provider.search = lambda q, *, count=5, **_: [  # type: ignore[method-assign]
             SearchResult(title="T", url="https://x/1", content="body")
         ]
         researcher = _researcher({}, search_provider=provider)
@@ -265,7 +265,7 @@ class TestRunSearches:
 
     def test_fetch_top_caps_at_n(self) -> None:
         provider = _StubProvider(content="body")
-        provider.search = lambda q, *, count=5: [  # type: ignore[method-assign]
+        provider.search = lambda q, *, count=5, **_: [  # type: ignore[method-assign]
             SearchResult(title=f"T{i}", url=f"https://x/{i}", content="body")
             for i in range(10)
         ]
@@ -1205,7 +1205,7 @@ class TestReferenceMaterialAndPapers:
             "scholar_lens.adapters.web.research.is_url_public", lambda url: True
         )
         provider = _StubProvider(content="abstract only")
-        provider.search = lambda q, *, count=5: [  # type: ignore[method-assign]
+        provider.search = lambda q, *, count=5, **_: [  # type: ignore[method-assign]
             SearchResult(
                 title="T",
                 url="https://arxiv.org/abs/2309.06180",
@@ -1389,7 +1389,7 @@ class TestPaperDedup:
             "scholar_lens.adapters.web.research.is_url_public", lambda u: True
         )
         provider = _StubProvider()
-        provider.search = lambda q, *, count=5: [  # type: ignore[method-assign]
+        provider.search = lambda q, *, count=5, **_: [  # type: ignore[method-assign]
             SearchResult(title="T", url=url, content="")
         ]
         researcher = _researcher({}, search_provider=provider)
@@ -1406,7 +1406,7 @@ class TestPaperDedup:
 
     def test_a_result_that_lands_on_a_held_page_is_skipped(self) -> None:
         provider = _StubProvider()
-        provider.search = lambda q, *, count=5: [  # type: ignore[method-assign]
+        provider.search = lambda q, *, count=5, **_: [  # type: ignore[method-assign]
             SearchResult(title="T", url="https://x.dev/old", content="")
         ]
         researcher = _researcher({}, search_provider=provider)
@@ -1481,14 +1481,14 @@ def test_fallback_search_uses_the_second_backend_after_a_failure() -> None:
     class Spent(WebSearchProvider):
         calls = 0
 
-        def search(self, query, *, count=5, domains=()):  # type: ignore[no-untyped-def]
+        def search(self, query, *, count=5, domains=(), exclude=()):  # type: ignore[no-untyped-def]
             self.calls += 1
             self.failed_searches += 1
             self.exhausted = True
             return []
 
     class Works(WebSearchProvider):
-        def search(self, query, *, count=5, domains=()):  # type: ignore[no-untyped-def]
+        def search(self, query, *, count=5, domains=(), exclude=()):  # type: ignore[no-untyped-def]
             return [SearchResult(title=query, url="https://x.dev", description="")]
 
     primary = Spent()
@@ -1614,7 +1614,7 @@ def test_fallback_search_paths() -> None:
             self.answers = answers
             self.calls = 0
 
-        def search(self, query, *, count=5, domains=()):  # type: ignore[no-untyped-def]
+        def search(self, query, *, count=5, domains=(), exclude=()):  # type: ignore[no-untyped-def]
             self.calls += 1
             answer = self.answers.pop(0)
             if answer == "fail":

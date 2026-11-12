@@ -157,10 +157,14 @@ def description_markup(description: str) -> bool:
     return bool(_DESCRIPTION_MARKUP.search(description))
 
 
-def description_problems(description: str, sources: str) -> list[str]:
+def description_problems(
+    description: str, sources: str, *, page_title: str = ""
+) -> list[str]:
     """What a writer must fix in a generated ``description``: plain text of
     the right length whose every number is in ``sources`` (what the post's
-    description may draw on: its TL;DR, or its body and sources)."""
+    description may draw on: its TL;DR, or its body and sources), and longer
+    than ``page_title`` when one is given (the blog fails a description no
+    longer than a paper post's page title, :func:`paper_page_title`)."""
     if not description:
         return ["description is empty"]
     problems = []
@@ -173,6 +177,11 @@ def description_problems(description: str, sources: str) -> list[str]:
         problems.append(
             f"description has {len(description)} characters; write "
             f"{DESCRIPTION_LENGTH.start}-{DESCRIPTION_LENGTH.stop - 1}"
+        )
+    if page_title and len(description) <= len(page_title):
+        problems.append(
+            f"description has {len(description)} characters, no more than the "
+            f"page title's {len(page_title)}; write a longer one"
         )
     if missing := unsourced_numbers(description, sources):
         problems.append(
@@ -1360,6 +1369,12 @@ def _check_description(lines: Lines, offset: int, add: Add) -> None:
         return
 
 
+# What is left of an evidence marker in any shape a writer gives it
+# ("[[E12]]", "[[E4], [E14]]", "[E12]]"): the engine strips the markers it
+# knows; one it does not know must not reach the blog.
+_EVIDENCE_LEFTOVER = re.compile(r"\[\[\s*\[?E(?:\d+|X)\b|\bE(?:\d+|X)\]\]")
+
+
 def _check_text(lines: Lines, offset: int, add: Add) -> None:
     for i, line in lines:
         prose = BLOG_CODE_SPAN.sub("", line)
@@ -1371,6 +1386,13 @@ def _check_text(lines: Lines, offset: int, add: Add) -> None:
                 "envelope",
                 offset + i,
                 "internal figure marker leaked into the post",
+            )
+        if _EVIDENCE_LEFTOVER.search(prose):
+            add(
+                "error",
+                "envelope",
+                offset + i,
+                "an evidence marker leaked into the post",
             )
 
 

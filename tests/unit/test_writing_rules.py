@@ -809,15 +809,20 @@ def test_a_fence_opener_glued_to_prose_moves_to_its_own_line() -> None:
         ("왜 RAG가 필요할까요?", True),
         ("어떻게 동작하나요?", True),
         ("무엇이 다른가?", True),
-        ("소프트웨어 판다", False),
+        # A heading of more than one word ending in "~다" reads as a sentence,
+        # a noun phrase that ends alike too: the rule keeps no noun lists
+        # (no such heading occurs in these posts; sentence headings do).
+        ("소프트웨어 판다", True),
         ("플로리다 데이터센터", False),
+        # A lone word may be a noun: left to the section review.
         ("레서판다", False),
-        ("아시아 판다", False),
-        ("라이브러리 미란다", False),
-        ("카메라와 라이다", False),
+        ("판다", False),
+        ("아시아 판다", True),
+        ("라이브러리 미란다", True),
+        ("카메라와 라이다", True),
         ("아나콘다 환경", False),
-        ("귀여운 판다", False),
-        ("향후 연구 어젠다", False),
+        ("귀여운 판다", True),
+        ("향후 연구 어젠다", True),
         ("정규화 계수 람다", False),
         ("모델 아키텍처 개요", False),
     ],
@@ -828,3 +833,10 @@ def test_sentence_headings_follow_predicate_endings(
     from scholar_lens.domain.markdown.lint import sentence_headings
 
     assert bool(sentence_headings(f"## {heading}\n")) is sentence
+
+
+def test_a_subsection_of_one_indented_list_item_is_not_thin() -> None:
+    from scholar_lens.domain.evidence_draft import thin_subsections
+
+    md = "## Top\n\n본문입니다.\n\n### Sub\n\n  - 들여쓴 항목 하나입니다.\n"
+    assert thin_subsections(md) == []

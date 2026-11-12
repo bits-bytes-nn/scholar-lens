@@ -14,7 +14,7 @@ from scholar_lens import bootstrap
 from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
 from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.adapters.github.publisher import Publisher
-from scholar_lens.application.run import RunContext
+from scholar_lens.application.run import RunContext, run_notes
 from scholar_lens.application.use_cases import guide as guide_pipeline
 from scholar_lens.application.use_cases.guide import guide_branch_id, guide_title
 from scholar_lens.configs import Github
@@ -341,7 +341,7 @@ async def test_the_evidence_engine_gets_the_request_and_failures_keep_the_notes(
     assert isinstance(seen["generator"], Generator)
     cfg = Config().tech_guide
     assert seen["generator_kwargs"]["max_research_queries"] == cfg.max_research_queries  # type: ignore[index]
-    assert failed.value.run_notes == [  # type: ignore[attr-defined]
+    assert run_notes(failed.value)[0] == [  # type: ignore[attr-defined]
         "Reference material that could not be read",
         "Search fell back to Brave",
     ]

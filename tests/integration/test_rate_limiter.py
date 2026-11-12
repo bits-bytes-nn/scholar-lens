@@ -170,3 +170,40 @@ def test_a_429_in_the_message_alone_is_not_a_rate_limit() -> None:
     limited = Exception("rate limited")
     limited.response = SimpleNamespace(headers={}, status_code=429)  # type: ignore[attr-defined]
     assert arxiv_retry_after_seconds(limited) == 30.0
+
+
+async def test_acquire_async_waits_on_the_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    clock = _FakeClock()
+    limiter = _limiter_with_clock(clock, rate=1.0, per=2.0, name="t")
+    waits: list[float] = []
+
+    async def fake_sleep(seconds: float) -> None:
+        waits.append(seconds)
+        clock.now += seconds
+
+    monkeypatch.setattr(asyncio, "sleep", fake_sleep)
+    await limiter.acquire_async()
+    await limiter.acquire_async()
+    assert waits == [pytest.approx(2.0)]
+
+
+def test_an_asset_429_holds_the_api_limiter_too(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import scholar_lens.adapters.http.rate_limit as rl
+
+    clock = _FakeClock()
+    api = _limiter_with_clock(clock, rate=1.0, per=3.0, name="api")
+    assets = _limiter_with_clock(clock, rate=4.0, per=1.0, name="assets")
+    monkeypatch.setattr(rl, "ARXIV_RATE_LIMITER", api)
+    monkeypatch.setattr(rl, "ARXIV_ASSET_LIMITER", assets)
+    rl.arxiv_asset_penalty(30.0)
+    start = clock.now
+    api.acquire()
+    assert clock.now - start >= 30.0
+    start = clock.now
+    clock.now = start - 30.0  # rewind: the asset limiter waits the same 30 s
+    assets.acquire()
+    assert clock.now >= start

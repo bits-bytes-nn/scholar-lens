@@ -14,6 +14,7 @@ from urllib.parse import urljoin
 import boto3
 import httpx
 import pymupdf
+import tenacity
 from bs4 import BeautifulSoup, Tag
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable
@@ -29,14 +30,16 @@ from scholar_lens.adapters.documents.html import (
 from scholar_lens.adapters.documents.images import is_svg, svg_to_png
 from scholar_lens.adapters.http.pinned_transport import PinnedAsyncHTTPTransport
 from scholar_lens.adapters.http.rate_limit import (
+    ARXIV_ASSET_LIMITER,
     ARXIV_RATE_LIMITER,
     ARXIV_RETRIES,
     RateLimiter,
+    arxiv_asset_penalty,
     arxiv_retry_after_seconds,
     arxiv_retry_hold,
     is_retryable_status,
 )
-from scholar_lens.adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
+from scholar_lens.adapters.http.url_guard import UnsafeUrlError
 from scholar_lens.adapters.retry import (
     RetryableBase,
     is_transient_error,
@@ -48,6 +51,7 @@ from scholar_lens.domain.constants import (
     LanguageModelId,
     LocalPaths,
 )
+from scholar_lens.domain.ids import is_arxiv_host
 from scholar_lens.domain.paper.models import Content, Figure
 from scholar_lens.domain.usage_context import staged
 
@@ -141,16 +145,13 @@ class FigureReader(RetryableBase):
         image_bytes: bytes
 
         if path.startswith(("http://", "https://")):
-            # Figure URLs can originate from untrusted paper/page content; run
-            # them through the SSRF guard before fetching server-side.
+            # Figure URLs come from untrusted page content: the pinned
+            # transport validates every hop against the SSRF guard. arXiv's
+            # figures keep arXiv's pace for static files.
+            arxiv = is_arxiv_host(path)
             try:
-                assert_url_is_public(path)
-            except UnsafeUrlError as e:
-                raise FigureParseError(f"Unsafe image URL '{path}': {e}") from e
-            try:
-                # PinnedAsyncHTTPTransport pins the connection to the validated
-                # IP (no DNS-rebinding window after the assert_url_is_public check
-                # above, and any redirect hop is re-validated).
+                if arxiv:
+                    await ARXIV_ASSET_LIMITER.acquire_async()
                 async with httpx.AsyncClient(
                     timeout=DEFAULT_TIMEOUT, transport=PinnedAsyncHTTPTransport()
                 ) as client:
@@ -160,6 +161,8 @@ class FigureReader(RetryableBase):
             except UnsafeUrlError as e:
                 raise FigureParseError(f"Unsafe image URL '{path}': {e}") from e
             except httpx.HTTPError as e:
+                if arxiv and isinstance(e, httpx.HTTPStatusError):
+                    arxiv_asset_penalty(arxiv_retry_after_seconds(e))
                 raise FigureParseError(f"HTTP error for image '{path}': {e}") from e
         else:
             try:
@@ -580,6 +583,12 @@ def _caption_text(caption: Tag) -> str:
     return " ".join(extract_text_from_html(str(caption)).split())
 
 
+def _transient_parse_error(exc: BaseException) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return is_retryable_status(exc.response.status_code)
+    return isinstance(exc, (httpx.ConnectError, httpx.RemoteProtocolError))
+
+
 class PDFParser(RichParser):
     FIGURE_CATEGORIES = frozenset({"chart", "figure"})
 
@@ -689,21 +698,34 @@ class PDFParser(RichParser):
         except (OSError, json.JSONDecodeError) as e:
             raise ContentParseError(f"Failed to load cached response: {e}") from e
 
+    @tenacity.retry(
+        # A 429, a 5xx or a dropped connection is asked again, twice; a read
+        # timeout is not (the parse may simply take longer, and every try is
+        # billed): the text-only fallback follows.
+        retry=tenacity.retry_if_exception(_transient_parse_error),
+        stop=tenacity.stop_after_attempt(3),
+        wait=tenacity.wait_exponential_jitter(multiplier=2, max=20),
+        reraise=True,
+    )
+    async def _post_document(self, name: str, data: bytes) -> dict[str, Any]:
+        """The parse API's answer; a transient failure is asked again, so one
+        blip does not cost the figures."""
+        response = await self.async_client.post(
+            AppConstants.External.UPSTAGE_DOCUMENT_PARSE.value,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            files={"document": (name, data, "application/pdf")},
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def _request_document_parse(self, pdf_path: Path) -> dict[str, Any]:
-        headers = {"Authorization": f"Bearer {self.api_key}"}
         try:
-            with open(pdf_path, "rb") as f:
-                files = {"document": (pdf_path.name, f.read(), "application/pdf")}
-                response = await self.async_client.post(
-                    AppConstants.External.UPSTAGE_DOCUMENT_PARSE.value,
-                    headers=headers,
-                    files=files,
-                )
-                response.raise_for_status()
-                return response.json()
+            data = pdf_path.read_bytes()
         except OSError as e:
             raise ContentParseError(f"Cannot read PDF file '{pdf_path}': {e}") from e
-        except httpx.HTTPError as e:
+        try:
+            return await self._post_document(pdf_path.name, data)
+        except (httpx.HTTPError, OSError) as e:
             raise ContentParseError(f"Document parsing API request failed: {e}") from e
         except ValueError as e:
             # response.json() raises JSONDecodeError (a ValueError) on a non-JSON

@@ -33,6 +33,7 @@ from scholar_lens.application.run import (
     RunContext,
     check_post_type,
     find_published_post,
+    keep_run_notes,
     load_translation_guideline,
     publish_artifact,
 )
@@ -136,10 +137,7 @@ async def run_guide(
         )
     except Exception as e:
         # Keep the generator's notes (e.g. unreadable references) on a failed run.
-        e.run_notes = [  # type: ignore[attr-defined]
-            *generator.notes,
-            *researcher.search_notes(),
-        ]
+        keep_run_notes(e, [*generator.notes, *researcher.search_notes()])
         raise
     finally:
         researcher.close()

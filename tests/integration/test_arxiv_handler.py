@@ -240,8 +240,24 @@ class TestFetchMetadataBatch:
     def test_a_failing_request_raises_after_the_retries(self) -> None:
         waits: list[float] = []
         handler = _handler_with(MagicMock(), max_attempts=2, sleep=waits.append)
-        handler.client.results = MagicMock(side_effect=OSError("connection reset"))
+        handler.client.results = MagicMock(
+            side_effect=ConnectionResetError("connection reset")
+        )
         with pytest.raises(arxiv_handler.ArxivPaperError):
             handler.fetch_metadata_batch(["1706.03762"])
         assert handler.client.results.call_count == 2
         assert len(waits) == 1
+
+    @pytest.mark.parametrize(
+        ("status", "calls"), [(400, 1), (404, 1), (429, 3), (503, 3)]
+    )
+    def test_only_a_transient_status_is_retried(self, status: int, calls: int) -> None:
+        import arxiv
+
+        handler = _handler_with(MagicMock(), max_attempts=3, sleep=lambda _s: None)
+        handler.client.results = MagicMock(
+            side_effect=arxiv.HTTPError("https://export.arxiv.org", 0, status)
+        )
+        with pytest.raises(arxiv_handler.ArxivPaperError):
+            handler.fetch_metadata_batch(["1706.03762"])
+        assert handler.client.results.call_count == calls

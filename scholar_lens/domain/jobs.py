@@ -116,7 +116,8 @@ class JobRequest(BaseModel):
                 or self.until_year
             ):
                 raise ValueError(
-                    "A survey_write request takes 'plan' and 'create_pr' only."
+                    "A survey_write request takes 'plan', 'create_pr', 'fresh' "
+                    "and 'max_cost_usd' only."
                 )
             return self
         if self.kind == "survey_plan":
@@ -212,6 +213,8 @@ class JobResult(BaseModel):
     violations: list[str] = Field(default_factory=list)
     job_id: str | None = None
     duration_seconds: float = 0.0
+    # Every token the models read (cache reads and writes included, as the
+    # run's budget counts them) and wrote; ``usage`` splits them.
     input_tokens: int = 0
     output_tokens: int = 0
     estimated_cost_usd: float = 0.0

@@ -45,7 +45,9 @@ from scholar_lens.adapters.documents.images import (
 from scholar_lens.adapters.github.blog_sync import BlogBranchSync, GithubSettings
 from scholar_lens.adapters.http.pinned_transport import PinnedHTTPTransport
 from scholar_lens.adapters.http.rate_limit import (
+    ARXIV_ASSET_LIMITER,
     ARXIV_RATE_LIMITER,
+    arxiv_asset_penalty,
     arxiv_retry_after_seconds,
 )
 from scholar_lens.adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
@@ -136,7 +138,15 @@ def download_image(url: str) -> bytes:
     """Fetch an image over the SSRF-pinned transport, with timeouts, a total
     deadline and a size cap. Every redirect hop is re-validated by the
     transport."""
-    return _download(url, _MAX_IMAGE_BYTES, _IMAGE_DOWNLOAD_DEADLINE_SECONDS)
+    if not is_arxiv_host(url):
+        return _download(url, _MAX_IMAGE_BYTES, _IMAGE_DOWNLOAD_DEADLINE_SECONDS)
+    # A survey checks every figure of its papers: arXiv's pace for files.
+    ARXIV_ASSET_LIMITER.acquire()
+    try:
+        return _download(url, _MAX_IMAGE_BYTES, _IMAGE_DOWNLOAD_DEADLINE_SECONDS)
+    except httpx.HTTPStatusError as e:
+        arxiv_asset_penalty(arxiv_retry_after_seconds(e))
+        raise
 
 
 def download_source(url: str) -> bytes:

@@ -22,10 +22,15 @@ from scholar_lens.domain.quality_gate import rule_issues
 from scholar_lens.domain.validation import unsourced_numbers
 from scholar_lens.domain.verifiers import Problem, item_problems
 
-# An evidence marker ("[[E12]]", "[[E12, E15]]") or the illustration mark
-# below; code removes both before publishing.
+# An evidence marker ("[[E12]]", "[[E12, E15]]", and the "[[E12], [E15]]" a
+# writer sometimes writes) or the illustration mark below; code removes both
+# before publishing.
+_MARK_ID = r"(?:E\d+|EX)"
 MARKER = re.compile(
-    r"\[\[\s*((?:E\d+|EX)(?:\s*,\s*(?:E\d+|EX))*)\s*\]\]", re.IGNORECASE
+    # The ids as one group either way, brackets paired.
+    rf"\[\[\s*({_MARK_ID}(?:\s*,\s*{_MARK_ID})*)\s*\]\]"
+    rf"|\[(\[{_MARK_ID}\](?:\s*,\s*\[{_MARK_ID}\])+)\]",
+    re.IGNORECASE,
 )
 
 
@@ -147,7 +152,7 @@ def claim_units(markdown: str) -> list[str]:
 
 def cited_ids(sentence: str) -> list[str]:
     return [
-        i.upper() for m in MARKER.finditer(sentence) for i in _ID.findall(m.group(1))
+        i.upper() for m in MARKER.finditer(sentence) for i in _ID.findall(m.group(0))
     ]
 
 
@@ -160,15 +165,69 @@ def is_illustration(sentence: str) -> bool:
     return bool(_EXAMPLE_MARK.search(sentence))
 
 
-def free_numbers(extra: Iterable[object] = ()) -> str:
+class FreeNumbers(str):
+    """Numbers a sentence may state without evidence (the string the checks
+    read), and the name-version pairs the sources write (``names``,
+    lower-cased "llama 3.1"): such a pair in a sentence names a model or a
+    library, it states no number."""
+
+    names: frozenset[str] = frozenset()
+
+    def with_names(self, names: Iterable[str]) -> FreeNumbers:
+        out = FreeNumbers(self)
+        out.names = self.names | {n.lower() for n in names}
+        return out
+
+
+def free_numbers(extra: Iterable[object] = ()) -> FreeNumbers:
     """Numbers a sentence may state without evidence: small counts (0-10)
     and ``extra`` (a survey's publication years)."""
-    return " ".join([*(str(n) for n in range(11)), *(str(x) for x in extra)])
+    return FreeNumbers(
+        " ".join([*(str(n) for n in range(11)), *(str(x) for x in extra)])
+    )
+
+
+# Numbers glued into a name, not a stated quantity: digits joined to a
+# Latin word (ResNet-50, GPT-4o, T5, Llama-3.1-8B). A spaced version
+# ("Llama 3.1") is told from a score ("MMLU 86.4") by the sources:
+# :func:`named_versions`.
+_NAMED_NUMBER = re.compile(
+    r"\b(?:[A-Za-z]{2,}[A-Za-z0-9]*-?|[A-Z])\d[\w.]*(?:-[A-Za-z0-9.]+)*"
+)
+# A capitalised Latin name and the dotted version after it, as sources
+# write models and libraries ("Llama 3.1", "Python 3.12").
+_NAME_VERSION = re.compile(r"\b[A-Z][A-Za-z]+ \d+\.\d+(?:\.\d+)?\b")
+
+
+def named_versions(texts: Iterable[str], results: Iterable[str] = ()) -> list[str]:
+    """The name-version pairs the sources write ("Llama 3.1"): a sentence
+    that writes the same pair names that model; the version alone, or the
+    pair's number elsewhere, is still a stated number. ``texts`` are the
+    non-number evidence; ``results`` the number evidence (quote, claim and
+    cell), whose numbers are scores ("MMLU 86.4", "MT-Bench 8.46 대 8.17"):
+    a pair with one of them is never exempt."""
+    scores = {n for text in results for n in re.findall(r"\d+(?:\.\d+)?", text)}
+    found: dict[str, None] = {}
+    for text in texts:
+        for m in _NAME_VERSION.finditer(text):
+            if m.group(0).rsplit(" ", 1)[1] not in scores:
+                found.setdefault(m.group(0), None)
+    return list(found)
+
+
+def _claim_text(sentence: str, free: str = "") -> str:
+    """``sentence`` as its numbers are checked: markers, keys, glued names
+    and the sources' name-version pairs (``free.names``) out."""
+    text = _NAMED_NUMBER.sub(" ", _plain(sentence))
+    for name in getattr(free, "names", ()):
+        text = re.sub(rf"(?i)\b{re.escape(name)}(?!\d|\.\d)", " ", text)
+    return text
 
 
 def stated_numbers(sentence: str, free: str) -> list[str]:
-    """The numbers a sentence states beyond ``free`` (years, small counts)."""
-    return unsourced_numbers(_plain(sentence), free)
+    """The numbers a sentence states beyond ``free`` (years, small counts),
+    names left out (:func:`_claim_text`)."""
+    return unsourced_numbers(_claim_text(sentence, free), free)
 
 
 # A table cell a writer left blank: fill it from the evidence or drop the
@@ -178,7 +237,7 @@ _BLANK_CELL = re.compile(r"\|\s*(?:—|–|-|N/A|n/a)?\s*(?=\|)")
 
 # A marker written as a word of its sentence ("근거는 [[E3]]입니다"): removing it
 # breaks the sentence.
-_MARKER_AS_WORD = re.compile(MARKER.pattern + r"(?=[^\W\d_])")
+_MARKER_AS_WORD = re.compile("(?:" + MARKER.pattern + r")(?=[^\W\d_])")
 
 
 # A parameter count names a model ("Llama 2 7B", "350M"), not a result; a
@@ -368,7 +427,7 @@ def section_problems(
         elif numbers and not example:
             support = _support(ids, ledger, passages)
             if missing := unsourced_numbers(
-                _plain(sentence), f"{support} {free_numbers}"
+                _claim_text(sentence, free_numbers), f"{support} {free_numbers}"
             ):
                 each(
                     "numbers_not_in_evidence",
@@ -540,7 +599,9 @@ def unsourced_number_sentences(
         if not numbers or is_illustration(sentence):
             continue
         support = _support(cited_ids(sentence), ledger, passages)
-        if unsourced_numbers(_plain(sentence), f"{support} {free_numbers}"):
+        if unsourced_numbers(
+            _claim_text(sentence, free_numbers), f"{support} {free_numbers}"
+        ):
             found.append(sentence)
     return found
 
@@ -777,7 +838,7 @@ def structure_lost(
 # citation or evidence marker, inline code or math, or a Korean sentence
 # ending written without its period.
 _COMPLETE_END = re.compile(r"(?:[.!?。:)\]」』\"'*`$]|\]\]|(?:다|요|죠|까))\s*$")
-_LIST_ITEM = re.compile(r"^(?:[-*+]|\d+[.)])\s")
+_LIST_LINE = re.compile(r"^(?:[-*+]|\d+[.)])\s")
 
 
 def ends_mid_sentence(markdown: str) -> bool:
@@ -788,7 +849,7 @@ def ends_mid_sentence(markdown: str) -> bool:
         bare = line.strip()
         if not bare:
             continue
-        if bare.startswith(("#", "|", "!", "<", "- - -")) or _LIST_ITEM.match(bare):
+        if bare.startswith(("#", "|", "!", "<", "- - -")) or _LIST_LINE.match(bare):
             return False
         return not _COMPLETE_END.search(bare)
     return False

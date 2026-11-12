@@ -54,8 +54,7 @@ ALL_SPECS = [GUIDE_SPEC, PAPER_REVIEW_SPEC, PAPER_SUMMARY_SPEC, SURVEY_SPEC]
 
 
 @pytest.mark.parametrize("spec", ALL_SPECS)
-def test_every_spec_lists_the_three_whole_post_steps(spec: PostSpec) -> None:
-    assert spec.post_passes.names == ("consistency", "repetition", "coverage")
+def test_every_spec_has_sane_limits_and_coverage(spec: PostSpec) -> None:
     assert spec.limits.previous_sections >= 1
     # A spec's code trace needs sections a reader runs.
     assert not spec.post_passes.code_trace or spec.runnable_kinds

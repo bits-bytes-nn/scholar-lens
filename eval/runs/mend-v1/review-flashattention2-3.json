@@ -1,0 +1,553 @@
+{
+  "item": "review-flashattention2",
+  "session": 3,
+  "judge_model": "us.anthropic.claude-opus-5-5",
+  "X": {
+    "scores": {
+      "A": {
+        "score": 8.0,
+        "reason": "Clean front matter and math. Deductions: an orphan sentence with nothing after it, L302 '컨텍스트 길이에 따라 결과가 크게 달라집니다.'; L300 '같은 설정에서 미사용 기준은 80 TFLOPs/s여서...' sits right after the table with no antecedent; L148 '### 인과 마스크와 함께 보면' is one sentence and then a callout."
+      },
+      "B": {
+        "score": 7.5,
+        "reason": "Fluent, but formulaic and repeated framing: '예를 들어 가상의' at L57, L90, L94, L118, L130, L144, L166, L196 (L196 reads '예를 들어 가상으로 벤치마크 설정 중'); repeated hedges L166 and L176 '...것이 이 글의 해석입니다', L229 '이 해석은 글의 추측입니다'. L174 '...쓰는 셈입니다' is a formulaic ending."
+      },
+      "C": {
+        "score": 7.0,
+        "reason": "L196 '헤드 차원과 head 수는 앞서 소개한 두 조합을 씁니다' points back to combinations never given (32/16 heads appear nowhere). The L300/L302 seam after the end-to-end table. The A100 section repeats itself: L227 restates L223 (83 vs 203), and L257 restates L239 ('69~73')."
+      },
+      "D": {
+        "score": 8.5,
+        "reason": "Strong worked example of the deferred rescale with numbers (L94: scores [1,2],[3], ℓ=1.368→1.503, L=3.41, all correct), plus split-K tile arithmetic (L166) and FLOPs arithmetic (L196). Over-explains the figures: L219-L255 walk bar by bar through values read off charts."
+      },
+      "E": {
+        "score": 7.0,
+        "reason": "Tables are good (speedups L206, H100 L281, end-to-end L293). But 11 benchmark bar charts (L221-L279), each with a paragraph of numbers read off its bars, is redundant; a single table would carry it. The two table blocks repeat the same H100 ranges as the prose (L273/L277 vs L283-L285)."
+      },
+      "F": {
+        "score": 8.0,
+        "reason": "Paper numbers are accurate (Table 1 cell for cell, 30-50/25-35/80-90, 230 TFLOPs/s 73%, 63%, 335, 1.5-2x, 1.7-3.0x, etc.). Deductions: L110 repeats the paper's 'strictly less' typo as fact ('행 인덱스가 열 인덱스보다 확실히 작은 블록에는 마스크 연산 자체가 필요 없습니다'), which is logically backwards because those blocks are the fully masked ones; L81 says diag(ℓ(1))^-1 O(1) is '정규화 이전 상태의 누적값으로 되돌린 것', but multiplying by ℓ^-1 does not un-normalize. Many figure-read values (L219-L277) cannot be verified from the text."
+      },
+      "G": {
+        "score": 9.0,
+        "reason": "use_math set, description is 145 characters and opens with the method, numbers come from the TL;DR, and no Liquid. Nit: the description's '50-73%' is right but sits next to 225 without its setting."
+      },
+      "X1": {
+        "score": 7.5,
+        "reason": "'IO-Aware-Exact-Attention' is FlashAttention-1's contribution, not this paper's. 'Parallelized-Attention-Backward-Pass' is long and title-like. Six tags, several of which overlap ('Work-Partitioning' and 'Warp-Level-Work-Partitioning')."
+      },
+      "R1": {
+        "score": 8.5,
+        "reason": "Covers all three tweaks, causal skipping, MQA/GQA, FLOPs accounting, A100/H100 and end-to-end. Causal masking is only a paragraph (L110), with the typo, and is not treated as a mechanism of its own."
+      },
+      "R2": {
+        "score": 8.5,
+        "reason": "Builds from intuition to formula to numbers for the rescale and for split-K. The 16k running example is consistent (T_c=128 at L90, 128 row blocks at L130)."
+      },
+      "R3": {
+        "score": 8.5,
+        "reason": "TL;DR is concrete and its numbers are scoped (8×A100, 1.3B/2.7B). The closing assessment is specific (kernel vs end-to-end 2x at L324, FLOPs-convention caveat at L326, portability at L328) and is marked as the writer's own view."
+      }
+    },
+    "principles": {
+      "claim_headings": "met; every H2 is a claim (L39, L61, L112, ...)",
+      "running_example": "met; a hypothetical 16k/batch-1/d=128 example at L57, L90, L130, L196",
+      "mechanism_reason_formula_example": "met for the rescale (L65-L104); partly met for causal masking (L110, prose only)",
+      "facts_once": "partly met; L227 repeats L223, L257 repeats L239, and the 1.5-2x H100 claim appears at L287 and again at L319",
+      "numbers_scoped": "met; mostly scoped with head dim, mask and length",
+      "nothing_invented": "partly met; repeats the paper's mask typo (L110) and mis-explains a term (L81)",
+      "own_assessment_end": "met; L324-L328",
+      "length_fit": "partly met; the A100 figure tour (L217-L257) is long for what it adds",
+      "type_shape": "met",
+      "korean_style": "partly met; repetitive '예를 들어 가상의…', and hedges repeated"
+    },
+    "claims": {
+      "checked": 24,
+      "unsupported": 0,
+      "wrong": 1,
+      "error_rate": 0.042,
+      "items": [
+        {
+          "line": 18,
+          "claim": "FlashAttention forward 30-50%, backward 25-35% of theoretical max on A100",
+          "status": "supported",
+          "source": "'forward pass only reaches 30-50%'... 'only 25-35% of maximum throughput on A100'"
+        },
+        {
+          "line": 53,
+          "claim": "optimized GEMM reaches 80-90%",
+          "status": "supported",
+          "source": "'optimized GEMM can reach up to 80-90%'"
+        },
+        {
+          "line": 51,
+          "claim": "FlashAttention 2-4x wall-clock speedup",
+          "status": "supported",
+          "source": "'2-4× wall-clock time speedup over optimized baselines'"
+        },
+        {
+          "line": 63,
+          "claim": "matmul throughput up to 16x non-matmul",
+          "status": "supported",
+          "source": "'each non-matmul FLOP is 16× more expensive'"
+        },
+        {
+          "line": 70,
+          "claim": "FA1 update O(2)=diag(ℓ1/ℓ2)^-1 O1 + diag(ℓ2)^-1 e^{S2-m2} V2",
+          "status": "supported",
+          "source": "Section 3.1.1 formula"
+        },
+        {
+          "line": 78,
+          "claim": "un-scaled Õ(2)=diag(ℓ1)^-1 O1 + e^{S2-m2} V2",
+          "status": "supported",
+          "source": "Section 3.1.1"
+        },
+        {
+          "line": 81,
+          "claim": "diag(ℓ(1))^-1 O(1) returns the accumulator to its pre-normalization state",
+          "status": "wrong",
+          "source": "multiplying a normalized O by ℓ^-1 does not undo the normalization; the paper's own restatement uses diag(e^{m1-m2})^-1 Õ(1)"
+        },
+        {
+          "line": 101,
+          "claim": "store only logsumexp L=m+log ℓ",
+          "status": "supported",
+          "source": "'We only need to store the logsumexp L(j)=m(j)+log(ℓ(j))'"
+        },
+        {
+          "line": 108,
+          "claim": "exact output, O(N^2 d) FLOPs, O(N) extra memory",
+          "status": "supported",
+          "source": "Section 3.1 claim on correctness, runtime and memory"
+        },
+        {
+          "line": 110,
+          "claim": "causal attention is about 1.7-1.8x faster than no mask",
+          "status": "supported",
+          "source": "'around 1.7-1.8× speedup compared to attention without the causal mask'"
+        },
+        {
+          "line": 110,
+          "claim": "blocks whose row indices are strictly less than the column indices need no mask",
+          "status": "supported",
+          "source": "matches the paper's wording verbatim, which is a typo (those blocks are fully masked); X repeats it without comment"
+        },
+        {
+          "line": 142,
+          "claim": "dQ is the only shared computation, combined with atomic adds",
+          "status": "supported",
+          "source": "'We use atomic adds to communicate between different thread blocks to update dQ'"
+        },
+        {
+          "line": 164,
+          "claim": "the FA1 scheme is called split-K and slows the forward pass through shared memory reads and writes",
+          "status": "supported",
+          "source": "'This is referred to as the split-K scheme'"
+        },
+        {
+          "line": 182,
+          "claim": "the backward pass avoids split-K but still needs some synchronization",
+          "status": "supported",
+          "source": "Section 3.3 backward"
+        },
+        {
+          "line": 188,
+          "claim": "MQA/GQA by manipulating head indices; dK and dV summed across heads",
+          "status": "supported",
+          "source": "'implicitly manipulate the indices into the head'"
+        },
+        {
+          "line": 192,
+          "claim": "forward FLOPs = 4·seqlen²·head dim·heads; backward 2.5x; causal divided by 2",
+          "status": "supported",
+          "source": "Section 4.1"
+        },
+        {
+          "line": 196,
+          "claim": "hidden dimension 2048",
+          "status": "supported",
+          "source": "'We set hidden dimension to 2048'"
+        },
+        {
+          "line": 200,
+          "claim": "A100 80GB SXM4; up to 73% forward and 63% backward",
+          "status": "supported",
+          "source": "Section 4.1"
+        },
+        {
+          "line": 208,
+          "claim": "speedups: FA 1.7-3.0x, Triton 1.3-2.5x (fwd 1.3-1.5x, bwd 2x), xformers 2x, PyTorch 3-10x",
+          "status": "supported",
+          "source": "Section 4.1"
+        },
+        {
+          "line": 215,
+          "claim": "peak 230 TFLOPs/s = 73%",
+          "status": "supported",
+          "source": "'reaches up to 230 TFLOPs/s, 73%'"
+        },
+        {
+          "line": 261,
+          "claim": "H100 up to 335 TFLOPs/s with no special instructions; run on H100 80GB SXM5",
+          "status": "supported",
+          "source": "'using no special instructions... up to 335 TFLOPs/s'; the SXM5 variant is not in the HTML body text (unverifiable part)"
+        },
+        {
+          "line": 295,
+          "claim": "Table 1 cells 142/189/196, 72/170/220, 149/189/205, 80/175/225",
+          "status": "supported",
+          "source": "Table 1"
+        },
+        {
+          "line": 34,
+          "claim": "225 TFLOPs/s at 72% MFU; up to 1.3x over FA and 2.8x over no-FA",
+          "status": "supported",
+          "source": "abstract and Section 4.2"
+        },
+        {
+          "line": 319,
+          "claim": "future work: TMA, 4th-gen Tensor Cores, fp8, AMD, local/dilated/block-sparse, compilers",
+          "status": "supported",
+          "source": "Section 5"
+        }
+      ]
+    },
+    "checklist": {
+      "repeated": 0,
+      "avoided": 0,
+      "na": 0,
+      "repeated_ids": []
+    },
+    "structure_defects": 22,
+    "structure_defect_detail": {
+      "broken_seams": [
+        "L300 '같은 설정에서 미사용 기준은 80 TFLOPs/s여서 약 2.8배 차이가 나고' (no setting named before it)",
+        "L302 '컨텍스트 길이에 따라 결과가 크게 달라집니다.' (the next paragraph never develops it)"
+      ],
+      "references_back_never_stated": [
+        "L196 '헤드 차원과 head 수는 앞서 소개한 두 조합을 씁니다' (the 64/32 and 128/16 combinations are never introduced)"
+      ],
+      "one_sentence_subsections": [
+        "L146-L148 '### 인과 마스크와 함께 보면' → '마스크가 있으면 행 블록마다, 열 블록마다 실제로 계산할 칸 수가 다릅니다.'"
+      ],
+      "sentence_shaped_headings": 18,
+      "sentence_shaped_heading_lines": [
+        39,
+        61,
+        96,
+        112,
+        116,
+        122,
+        132,
+        154,
+        158,
+        168,
+        180,
+        184,
+        198,
+        217,
+        259,
+        263,
+        271,
+        289
+      ]
+    },
+    "top_issues": [
+      "Repeats the paper's 'strictly less' causal-block typo as fact (L110), and mis-explains diag(ℓ1)^-1 O1 (L81)",
+      "Over-long figure tour: 11 benchmark charts each with bar-read numbers (L217-L279); facts repeated (L227, L257)",
+      "Seams around the end-to-end table (L300, L302), and a back-reference to benchmark combinations never stated (L196)"
+    ]
+  },
+  "Y": {
+    "scores": {
+      "A": {
+        "score": 7.5,
+        "reason": "Internal evidence-ledger markers leak into the body: L53 '[[E4], [E14]]' renders as stray bracket text. The numbered list at L87-L97 is broken by display math and a sentence at L91-L95 before '4.'. The H100 table at L312 repeats 'head 차원 128' in both the header and the rows."
+      },
+      "B": {
+        "score": 8.0,
+        "reason": "Natural, compact prose. Nits: L111 '...덜어냈다는 점이 이 수정의 핵심입니다' (noun frame); L319 'H100에서 나온 수치는 하드웨어의 상한이 아닙니다. 이 작업은 향후 과제로 남겨 두었습니다.' is abrupt; L362 '...항목은 다음과 같습니다.' is formulaic."
+      },
+      "C": {
+        "score": 7.5,
+        "reason": "L319: '이 작업' refers to new-instruction work that the subsection body never states (only the heading at L317 has 1.5-2x). L294 '앞서 본 Q 기준 워프 분할과 시퀀스 길이 병렬화는 ... 개선입니다.' dangles and is never tied to H100. L171 repeats L143 word for word. '서론에서' at L141 and L179 refers to an 'introduction' the post does not name as such."
+      },
+      "D": {
+        "score": 9.0,
+        "reason": "The 8k/B=128 running example carries through the rescale (L81), causal blocks (L129: 4096 tiles, 2016 skipped, 64 diagonal, all correct), sequence parallelism (L153: 16→1024 blocks), warps (L201: warp 3 = rows 65-96) and GQA (L217: floor(h/4)). The paper's mask typo is flagged and corrected (L124)."
+      },
+      "E": {
+        "score": 8.0,
+        "reason": "Seven figures, each placed where it is discussed, with figure-read values gathered into compact tables (L278-L284, L312-L315) and Table 1 copied exactly (L327). Minor: the L312 table header repeats a setting the rows already state."
+      },
+      "F": {
+        "score": 8.5,
+        "reason": "All checked numbers match (312 vs 19.5 TFLOPs/s, 10-20x memory, Table 1, 230/73%, 63%, 335, 1.5-2x, 2k gains of 4% and 8% computed correctly). Speculation is labelled (L133, L373). Small deductions: L334 equates the 72% MFU with the kernel's 73% forward peak as '거의 같은 수준' (an interpretive comparison across different FLOPs conventions, which the post itself warns against at L237); figure-read values (L268, L276, L302, L310) cannot be verified from the text."
+      },
+      "G": {
+        "score": 9.0,
+        "reason": "use_math set, description is 142 characters, opens with the method, and its numbers (225, MFU 72%, ~2x) are all in the TL;DR. The [[E4]] leak may trip link lint."
+      },
+      "X1": {
+        "score": 8.0,
+        "reason": "The tags are the paper's own mechanisms ('Sequence-Length-Parallelism', 'Non-Matmul-FLOPs-Reduction', 'Causal-Masking', 'Warp-Level-Partitioning'). 'Causal-Masking' is generic but is a real section of the paper."
+      },
+      "R1": {
+        "score": 9.0,
+        "reason": "Gives causal block skipping its own section with the three block types (L119-L125); covers the A100 non-matmul cost, block-size trade-off, GQA, both FLOPs conventions, and the 2k vs 8k end-to-end analysis (L336-L342)."
+      },
+      "R2": {
+        "score": 9.0,
+        "reason": "Layers each mechanism from execution model (L179) to shape argument (L187, L197) to running numbers (L201). The length suits the paper."
+      },
+      "R3": {
+        "score": 8.5,
+        "reason": "TL;DR is concrete (MFU 72%, GPT3-2.7B 8k). The closing assessment is specific and grounded (2k gain is small at L373, backward 63% vs 73% at L377, fp8/sparse change exactness at L379). The 'atomic add cost' pointer (L377) is the writer's guess, but it is labelled as such."
+      }
+    },
+    "principles": {
+      "claim_headings": "met; H2s are claims",
+      "running_example": "met; a consistent 8k, B_r=B_c=128 example (L81, L129, L153, L167, L201)",
+      "mechanism_reason_formula_example": "met for the rescale, causal masking, sequence parallelism and warp split",
+      "facts_once": "partly met; L171 repeats L143; the FLOPs convention is restated at L352 after L235",
+      "numbers_scoped": "met",
+      "nothing_invented": "met; corrects the paper typo (L124) with a disclaimer",
+      "own_assessment_end": "met; L371-L379",
+      "length_fit": "met",
+      "type_shape": "met",
+      "korean_style": "mostly met; minor noun frames"
+    },
+    "claims": {
+      "checked": 25,
+      "unsupported": 0,
+      "wrong": 0,
+      "error_rate": 0.0,
+      "items": [
+        {
+          "line": 18,
+          "claim": "FA forward 30-50%, backward 25-35%, GEMM 80-90%",
+          "status": "supported",
+          "source": "Section 1"
+        },
+        {
+          "line": 41,
+          "claim": "FA 2-4x faster with 10-20x memory saving",
+          "status": "supported",
+          "source": "'2-4× wall-clock time speedup..., up to 10-20× memory saving'"
+        },
+        {
+          "line": 47,
+          "claim": "A100: 312 TFLOPs/s FP16/BF16 matmul vs 19.5 non-matmul FP32; 16x",
+          "status": "supported",
+          "source": "Section 3.1"
+        },
+        {
+          "line": 66,
+          "claim": "FA1 update formula with diag(ℓ1/ℓ2)^-1",
+          "status": "supported",
+          "source": "Section 3.1.1"
+        },
+        {
+          "line": 76,
+          "claim": "un-scaled Õ(2) formula",
+          "status": "supported",
+          "source": "Section 3.1.1"
+        },
+        {
+          "line": 104,
+          "claim": "store only the logsumexp L=m+log ℓ",
+          "status": "supported",
+          "source": "Section 3.1.1"
+        },
+        {
+          "line": 111,
+          "claim": "exact output, O(N^2 d) FLOPs, O(N) extra memory",
+          "status": "supported",
+          "source": "Section 3.1"
+        },
+        {
+          "line": 123,
+          "claim": "blocks with all column indices greater than row indices are skipped; about half of the blocks for long sequences",
+          "status": "supported",
+          "source": "Section 3.1 causal masking"
+        },
+        {
+          "line": 124,
+          "claim": "the paper says 'strictly less', which likely means the below-diagonal blocks",
+          "status": "supported",
+          "source": "the paper's wording is 'row indices are guaranteed to be strictly less than the column indices'; Y's reading is the logically correct one"
+        },
+        {
+          "line": 133,
+          "claim": "1.7-1.8x speedup from causal masking",
+          "status": "supported",
+          "source": "Section 3.1"
+        },
+        {
+          "line": 163,
+          "claim": "dQ_i ← dQ_i + dS_i^(j) K_j; atomic adds between thread blocks",
+          "status": "supported",
+          "source": "Section 3.2"
+        },
+        {
+          "line": 183,
+          "claim": "FA1 splits K and V across 4 warps ('split-K')",
+          "status": "supported",
+          "source": "Section 3.3"
+        },
+        {
+          "line": 213,
+          "claim": "block sizes {64,128}×{64,128}, chosen by hand; auto-tuning is future work",
+          "status": "supported",
+          "source": "Section 3.3 tuning block sizes"
+        },
+        {
+          "line": 217,
+          "claim": "MQA/GQA through implicit head-index manipulation; dK and dV summed",
+          "status": "supported",
+          "source": "Section 3.1"
+        },
+        {
+          "line": 227,
+          "claim": "forward FLOPs formula, backward 2.5x (2 vs 5 matmuls)",
+          "status": "supported",
+          "source": "Section 4.1"
+        },
+        {
+          "line": 232,
+          "claim": "Megatron-LM formula; second term not halved, for consistency",
+          "status": "supported",
+          "source": "Section 4.2"
+        },
+        {
+          "line": 245,
+          "claim": "A100 80GB SXM4; seqlen 512-16k; 16k total tokens; head dim 64 → 32 heads, 128 → 16 heads",
+          "status": "supported",
+          "source": "Section 4.1"
+        },
+        {
+          "line": 251,
+          "claim": "speedup table (FA 1.7-3.0, xformers 2, Triton 1.3-2.5 / 1.3-1.5 / 2, PyTorch 3-10)",
+          "status": "supported",
+          "source": "Section 4.1"
+        },
+        {
+          "line": 264,
+          "claim": "up to 230 TFLOPs/s = 73%; range 50-73%",
+          "status": "supported",
+          "source": "Section 4.1 and abstract"
+        },
+        {
+          "line": 272,
+          "claim": "backward max 63%",
+          "status": "supported",
+          "source": "Section 4.1"
+        },
+        {
+          "line": 294,
+          "claim": "H100 up to 335 TFLOPs/s with no TMA or 4th-gen Tensor Core instructions",
+          "status": "supported",
+          "source": "Section 4.1"
+        },
+        {
+          "line": 329,
+          "claim": "Table 1 cells",
+          "status": "supported",
+          "source": "Table 1"
+        },
+        {
+          "line": 334,
+          "claim": "225 TFLOPs/s = 72% MFU, GPT3-2.7B 8k",
+          "status": "supported",
+          "source": "Section 4.2"
+        },
+        {
+          "line": 358,
+          "claim": "16k context for the price of 8k; finetuning and inference faster",
+          "status": "supported",
+          "source": "Section 5"
+        },
+        {
+          "line": 364,
+          "claim": "future work: TMA, 4th-gen Tensor Cores, fp8; AMD; local/dilated/block-sparse; compilers",
+          "status": "supported",
+          "source": "Section 5"
+        }
+      ]
+    },
+    "checklist": {
+      "repeated": 0,
+      "avoided": 0,
+      "na": 0,
+      "repeated_ids": []
+    },
+    "structure_defects": 30,
+    "structure_defect_detail": {
+      "broken_seams": [
+        "L319 '이 작업은 향후 과제로 남겨 두었습니다.' ('this work' refers to new-instruction work the paragraph never states)"
+      ],
+      "references_back_never_stated": [],
+      "one_sentence_subsections": [],
+      "sentence_shaped_headings": 29,
+      "sentence_shaped_heading_lines": [
+        35,
+        51,
+        99,
+        109,
+        113,
+        119,
+        135,
+        139,
+        145,
+        155,
+        173,
+        177,
+        181,
+        189,
+        207,
+        211,
+        215,
+        219,
+        239,
+        243,
+        247,
+        262,
+        270,
+        292,
+        296,
+        304,
+        317,
+        321,
+        336
+      ],
+      "other": [
+        "L53 leaked evidence-ledger markers '[[E4], [E14]]'",
+        "L294 dangling sentence not tied to the H100 argument",
+        "L171 repeats L143"
+      ]
+    },
+    "top_issues": [
+      "Internal evidence markers leak into the published body (L53 '[[E4], [E14]]')",
+      "H100 subsection seam: '이 작업' (L319) with the 1.5-2x claim only in the heading; dangling L294",
+      "Small repetitions (L171 = L143) and a broken numbered list around display math (L87-L97)"
+    ]
+  },
+  "preference": {
+    "overall": "Y",
+    "per_criterion": {
+      "A": "X",
+      "B": "Y",
+      "C": "Y",
+      "D": "Y",
+      "E": "Y",
+      "F": "Y",
+      "G": "tie",
+      "X1": "Y",
+      "R1": "Y",
+      "R2": "Y",
+      "R3": "tie"
+    },
+    "reason": "Both posts are accurate on every paper number checked and share the same skeleton. Y is the better review. It gives causal block skipping its own worked section and flags and fixes the paper's 'strictly less' typo, where X repeats it as fact. Y carries one consistent 8k example from the rescale through warps and GQA, and it condenses the benchmark figures into tables instead of narrating 11 bar charts. X's main strengths are the numeric softmax example and slightly cleaner Markdown. Y's leaked '[[E4], [E14]]' markers are a real publishing defect (hence A goes to X), but they are a markup leak, not a factual error. They do not outweigh Y's advantages in depth, correctness and flow."
+  }
+}

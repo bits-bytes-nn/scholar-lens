@@ -4,6 +4,8 @@ or cell; a quoted table row keeps its header for later checks."""
 
 from __future__ import annotations
 
+import pytest
+
 from scholar_lens.domain.evidence import (
     Evidence,
     EvidenceLedger,
@@ -110,3 +112,140 @@ def test_cached_evidence_without_a_header_still_loads() -> None:
         "anchor": "S1",
     }
     assert Evidence.model_validate(cached).table_header == ""
+
+
+# What the sources write: names with versions, and one real score.
+_SOURCES = [
+    "We fine-tune Llama 3.1 and compare with Qwen 2.5, Gemini 1.5 and Claude 3.5 "
+    "Sonnet; experiments run on Python 3.12 (see Section 4.2). Our model "
+    "reaches 88.7% on MMLU.",
+]
+
+
+@pytest.mark.parametrize(
+    ("sentence", "stated"),
+    [
+        # Glued names, whatever the sources.
+        ("ResNet-50과 T5, Llama-3.1-8B를 비교했다.", []),
+        # A version the sources write after a name, with or without a particle.
+        ("이 논문은 Llama 3.1을 기반 모델로 쓴다.", []),
+        ("Qwen 2.5는 오픈 가중치 모델이다.", []),
+        ("Gemini 1.5의 긴 문맥을 활용한다.", []),
+        ("Claude 3.5 Sonnet을 판정 모델로 쓴다.", []),
+        ("Python 3.12에서 실행한다.", []),
+        # A score is stated (the sources never write it after the name).
+        ("GPT-4o는 MMLU 86.4%를 기록했다.", ["86.4"]),
+        ("HumanEval 85.4 Pass@1을 얻었다.", ["85.4"]),
+        ("BLEU 28.4를 얻었다.", ["28.4"]),
+        ("Llama 3.1 70B와 128K 문맥을 쓴다.", ["70B", "128K"]),
+        # A pair's number elsewhere is still stated (Section 4.2 is no licence
+        # for a 4.2% claim).
+        ("정확도가 4.2% 올랐다.", ["4.2"]),
+    ],
+)
+def test_a_version_in_a_name_is_no_stated_number(
+    sentence: str, stated: list[str]
+) -> None:
+    from scholar_lens.domain.evidence_draft import (
+        free_numbers,
+        named_versions,
+        stated_numbers,
+    )
+
+    free = free_numbers().with_names(named_versions(_SOURCES))
+    assert stated_numbers(sentence, free) == stated
+
+
+def test_a_cited_sentence_naming_a_versioned_model_is_not_cut() -> None:
+    from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
+    from scholar_lens.domain.evidence_draft import (
+        free_numbers,
+        named_versions,
+        unsourced_number_sentences,
+    )
+
+    doc = SourceDocument.from_markdown(
+        "p", "t", "full_text", "## 4 Results\n\nOur model reaches 88.7% on MMLU.\n"
+    )
+    ledger = EvidenceLedger()
+    ledger.add(
+        doc,
+        kind="number",
+        claim="c",
+        quote="Our model reaches 88.7% on MMLU",
+        anchor=doc.sections[0].anchor,
+        scope="MMLU",
+        cell="MMLU 88.7%",
+    )
+    free = free_numbers().with_names(named_versions(_SOURCES))
+    draft = (
+        "## 결과\n\nClaude 3.5 Sonnet과 비교해 MMLU에서 88.7%를 기록했습니다 [[E1]].\n"
+    )
+    assert unsourced_number_sentences(draft, ledger, free, {}) == []
+
+
+def test_a_marker_with_bracketed_ids_is_read_and_stripped() -> None:
+    from scholar_lens.domain.evidence_draft import MARKER, cited_ids
+
+    sentence = "출력 값은 그대로 두고 행렬곱 외 연산만 덜어냅니다 [[E4], [E14]]."
+    assert cited_ids(sentence) == ["E4", "E14"]
+    assert "[[" not in MARKER.sub("", sentence)
+
+
+def test_a_recorded_score_is_never_a_name() -> None:
+    from scholar_lens.domain.evidence_draft import (
+        free_numbers,
+        named_versions,
+        stated_numbers,
+    )
+
+    sources = ["Ours reaches MMLU 86.4, built on Llama 3.1."]
+    free = free_numbers().with_names(named_versions(sources, ["MMLU 86.4"]))
+    assert stated_numbers("GPT-4는 MMLU 86.4를 기록했다.", free) == ["86.4"]
+    assert stated_numbers("Llama 3.1을 기반으로 한다.", free) == []
+
+
+def test_every_score_a_number_record_quotes_stays_a_number() -> None:
+    from scholar_lens.domain.evidence_draft import (
+        free_numbers,
+        named_versions,
+        stated_numbers,
+    )
+
+    # A number record's cell holds one score; its quote holds the others.
+    results = ["MT-Bench 8.46 대 8.17, Chat-Arena-Hard 29.1 대 22.4 길이제어 승률 31.3"]
+    sources = ["We compare on MT-Bench 8.46 and Chat-Arena-Hard 29.1 using Llama 3.1."]
+    free = free_numbers().with_names(named_versions(sources, results))
+    assert stated_numbers("MT-Bench 8.46을 기록했다.", free) == ["8.46"]
+    assert stated_numbers("Hard 29.1로 앞선다.", free) == ["29.1"]
+    assert stated_numbers("We fine-tune Llama 3.1.", free) == []
+
+
+def test_a_marker_inside_link_text_keeps_the_link() -> None:
+    from scholar_lens.domain.evidence_draft import MARKER
+
+    assert MARKER.sub("", "[FlashAttention [[E4]]](https://x)") == (
+        "[FlashAttention ](https://x)"
+    )
+
+
+def test_every_pattern_built_on_the_marker_reads_both_shapes() -> None:
+    from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
+    from scholar_lens.domain.evidence_draft import _MARKER_AS_WORD
+    from scholar_lens.domain.guide.evidence_guide import strip_markers
+    from scholar_lens.domain.survey.evidence_post import cite_papers
+
+    doc = SourceDocument.from_markdown(
+        "2401.00001", "t", "full_text", "## 1 A\n\nq q q q q.\n"
+    )
+    ledger = EvidenceLedger()
+    ledger.add(
+        doc, kind="finding", claim="c", quote="q q q q q", anchor=doc.sections[0].anchor
+    )
+    ledger.add(
+        doc, kind="finding", claim="d", quote="q q q q q", anchor=doc.sections[0].anchor
+    )
+    for text in ("결과입니다 [[E1, E2]].", "결과입니다 [[E1], [E2]]."):
+        assert cite_papers(text, ledger) == "결과입니다 [@2401.00001]."
+        assert strip_markers(text).strip() == "결과입니다."
+        assert not _MARKER_AS_WORD.search(text)

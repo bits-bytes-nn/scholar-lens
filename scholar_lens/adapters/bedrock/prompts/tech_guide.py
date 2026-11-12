@@ -3,6 +3,7 @@ planning, the relevance gate and the finished guide's taxonomy (the evidence
 engine's prompts are in ``prompts/guide_evidence.py``)."""
 
 from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
+from scholar_lens.domain.prompts.rules import DESCRIPTION_CHARS
 
 
 class TechGuideResearchPlanPrompt(BasePrompt):
@@ -121,7 +122,8 @@ class TechGuideTaxonomyPrompt(BasePrompt):
     You file technical blog posts into a fixed taxonomy. Choose only from the lists you are given.
     """
 
-    human_prompt_template: str = """
+    human_prompt_template: str = (
+        """
     Classify this technical guide for the blog.
 
     <title>{title}</title>
@@ -140,7 +142,9 @@ class TechGuideTaxonomyPrompt(BasePrompt):
       "Container Orchestration"); name techniques and tools the guide teaches, never restate the title.
     - seo_title: only when the title is longer than {title_max_length} characters, a version of at most {title_max_length} characters that keeps
       the product or technique name first; otherwise leave empty.
-    - description: the post's search snippet, one plain text paragraph of 120-160 characters in {language}: no math,
+    - description: the post's search snippet, one plain text paragraph of """
+        + DESCRIPTION_CHARS
+        + """ in {language}: no math,
       Markdown, links or tags. It opens with the product or technique name, says what the guide teaches, and may end
       with what it covers ("… 구조와 설정을 정리합니다."). Numbers only from <guide_outline>. In Korean, natural prose
       in the "입니다" register, not a translation.
@@ -153,3 +157,4 @@ class TechGuideTaxonomyPrompt(BasePrompt):
     <seo_title></seo_title>
     <description>...</description>
     """
+    )

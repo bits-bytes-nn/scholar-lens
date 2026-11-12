@@ -123,6 +123,7 @@ class PaperReviewStack(Stack):
         s3_prefix: str = "",
         bedrock_region_name: str | None = None,
         environment_vars: dict[str, str] | None = None,
+        cost_alarm_usd: float,
         **kwargs: Any,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -132,6 +133,7 @@ class PaperReviewStack(Stack):
         self.s3_bucket_name = s3_bucket_name
         self.s3_prefix = s3_prefix
         self.bedrock_region_name = bedrock_region_name
+        self.cost_alarm_usd = cost_alarm_usd
         # Keep encryption keys and logs when a prod stack is deleted.
         self.removal_policy = (
             RemovalPolicy.RETAIN if stage == "prod" else RemovalPolicy.DESTROY
@@ -690,7 +692,7 @@ class PaperReviewStack(Stack):
                 statistic="Sum",
                 period=Duration.hours(1),
             ),
-            threshold=50,
+            threshold=self.cost_alarm_usd,
             evaluation_periods=1,
             comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_THRESHOLD,
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
@@ -739,6 +741,23 @@ class BedrockProfilesStack(Stack):
                     ),
                 )
                 Tags.of(profile).add("Kind", kind)
+
+
+def cost_alarm_usd(config: Config) -> float:
+    """The hourly cost alarm's threshold: two runs at the largest per-run
+    ceiling in one hour (one run up to its own ceiling is expected spend);
+    $120 when no ceiling is set."""
+    ceilings = [
+        c
+        for c in (
+            config.explanation.max_cost_usd,
+            config.summary.max_cost_usd,
+            config.tech_guide.max_cost_usd,
+            config.survey.write_max_cost_usd,
+        )
+        if c is not None
+    ]
+    return 2 * max(ceilings) if ceilings else 120.0
 
 
 def configured_system_profiles(config: Config) -> list[str]:
@@ -823,6 +842,7 @@ def main() -> None:
             s3_prefix=resources.s3_prefix,
             bedrock_region_name=resources.bedrock_region_name,
             environment_vars=env_vars,
+            cost_alarm_usd=cost_alarm_usd(config),
             env=core.Environment(
                 account=account_id, region=resources.default_region_name
             ),

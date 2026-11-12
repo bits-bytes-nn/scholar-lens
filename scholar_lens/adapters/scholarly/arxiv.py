@@ -22,6 +22,7 @@ from scholar_lens.adapters.http.rate_limit import (
     RateLimiter,
     arxiv_retry_after_seconds,
 )
+from scholar_lens.adapters.retry import is_transient_error
 from scholar_lens.adapters.scholarly.pdf import CHUNK_BYTES, save_pdf
 from scholar_lens.domain.ids import normalize_arxiv_id
 from scholar_lens.domain.titles import title_similarity, titles_match
@@ -120,6 +121,20 @@ class ArxivMetadata(BaseModel):
         if published is not None:
             return published
         raise ValueError("Both 'updated' and 'published' are None")
+
+
+def _transient_arxiv_error(exc: BaseException) -> bool:
+    """Whether a wrapped arXiv failure may succeed when retried: a 429 or
+    5xx, an empty page (arXiv's API returns one under load), or a transient
+    transport error. A 4xx, a malformed record or a "not found" is final."""
+    if not isinstance(exc, ArxivPaperError) or isinstance(exc, ArxivNotFoundError):
+        return False
+    cause = exc.__cause__
+    if isinstance(cause, arxiv.HTTPError):
+        return cause.status == 429 or cause.status >= 500
+    if isinstance(cause, arxiv.UnexpectedEmptyPageError):
+        return True
+    return cause is not None and is_transient_error(cause)
 
 
 class ArxivHandler:
@@ -252,15 +267,12 @@ class ArxivHandler:
         # never retry a genuine "not found" — that is terminal.
         return tenacity.Retrying(
             wait=tenacity.wait_exponential_jitter(
-                initial=_ARXIV_FETCH_INITIAL_WAIT, max=_ARXIV_FETCH_MAX_WAIT
+                multiplier=_ARXIV_FETCH_INITIAL_WAIT, max=_ARXIV_FETCH_MAX_WAIT
             ),
             stop=tenacity.stop_after_attempt(self._max_attempts),
             # Retry transient API errors but NOT a genuine "not found"
             # (ArxivNotFoundError subclasses ArxivPaperError, so exclude it).
-            retry=tenacity.retry_if_exception(
-                lambda e: isinstance(e, ArxivPaperError)
-                and not isinstance(e, ArxivNotFoundError)
-            ),
+            retry=tenacity.retry_if_exception(_transient_arxiv_error),
             before_sleep=lambda s: logger.warning(
                 "arXiv fetch for %s failed (attempt %d); retrying...",
                 label,

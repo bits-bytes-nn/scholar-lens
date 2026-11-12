@@ -103,6 +103,24 @@ class RunContext:
         return [t for t in tags if counts[t] >= 2][:limit]
 
 
+def keep_run_notes(
+    error: BaseException, notes: Sequence[str], blocking: Sequence[str] = ()
+) -> None:
+    """Keep a failed run's notes and blocking problems on ``error`` for the
+    run's result (:func:`run_notes`); the error itself is raised unchanged,
+    so callers still tell its kind."""
+    error.__dict__["scholar_lens_run_notes"] = list(notes)
+    error.__dict__["scholar_lens_run_blocking"] = list(blocking)
+
+
+def run_notes(error: BaseException) -> tuple[list[str], list[str]]:
+    """(notes, blocking problems) :func:`keep_run_notes` kept on ``error``."""
+    return (
+        list(error.__dict__.get("scholar_lens_run_notes", [])),
+        list(error.__dict__.get("scholar_lens_run_blocking", [])),
+    )
+
+
 @dataclass
 class PipelineOutcome:
     """What a use case produced; folded into the run's job result."""
@@ -231,11 +249,11 @@ async def publish_artifact(
     except Exception as e:
         # The generators' notes (skipped sections, degraded parts) still
         # belong on the failed run's result.
-        e.run_notes = [  # type: ignore[attr-defined]
-            *blocking_notes(request.blocking),
-            *request.review_notes,
-        ]
-        e.run_blocking = list(request.blocking)  # type: ignore[attr-defined]
+        keep_run_notes(
+            e,
+            [*blocking_notes(request.blocking), *request.review_notes],
+            request.blocking,
+        )
         raise
     outcome = PipelineOutcome(
         title=request.title,

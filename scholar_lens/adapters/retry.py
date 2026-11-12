@@ -228,7 +228,7 @@ class RetryableBase:
             # Exponential backoff with jitter so concurrent retries against a
             # rate-limited API don't stampede.
             wait=tenacity.wait_exponential_jitter(
-                initial=RETRY_MULTIPLIER, max=RETRY_MAX_WAIT
+                multiplier=RETRY_MULTIPLIER, max=RETRY_MAX_WAIT
             ),
             stop=_should_stop,
             retry=tenacity.retry_if_exception(is_transient_error),

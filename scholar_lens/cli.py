@@ -39,11 +39,12 @@ import os
 import signal
 import sys
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, get_args
 
 from pydantic import BaseModel, ValidationError
 
 from scholar_lens.domain.jobs import (
+    ArtifactKind,
     JobAlreadyFinished,
     JobRequest,
     JobResult,
@@ -86,9 +87,6 @@ _WORKER_EXIT_BY_STATUS = {
     "failed": WORKER_REPORTED_FAILED,
     "rejected": WORKER_REPORTED_REJECTED,
 }
-
-# The cost allocation tag on every stack resource (scripts/deploy_infra.py).
-# The stack tags its resources ProjectName=<resources.project_name>.
 
 # How long `status --wait` polls before returning the current state: one
 # 3-hour Batch attempt plus queueing time.
@@ -602,8 +600,7 @@ def _raw_kind(raw: str) -> Any:
         kind = json.loads(raw).get("kind")
     except (ValueError, AttributeError):
         return None
-    kinds = {"review", "summarize", "guide", "survey_plan", "survey_write"}
-    return kind if kind in kinds else None
+    return kind if kind in get_args(ArtifactKind) else None
 
 
 def _report_worker_failure(result: JobResult) -> int:

@@ -185,6 +185,38 @@ async def test_pinned_async_transport_restores_hostname(
     assert str(response.url) == "https://docs.example.com/guide/"
 
 
+async def test_pinned_async_lookup_does_not_wait_for_a_busy_default_pool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+
+    import httpx
+
+    import scholar_lens.adapters.http.pinned_transport as pt
+
+    monkeypatch.setattr(pt, "resolve_validated_ip", lambda url: "93.184.216.34")
+    monkeypatch.setattr(pt, "_RESOLVE_TIMEOUT_S", 1.0)
+
+    async def fake_send(self, request):  # type: ignore[no-untyped-def]
+        return httpx.Response(200, request=request, text="ok")
+
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", fake_send)
+    loop = asyncio.get_running_loop()
+    busy = ThreadPoolExecutor(max_workers=1)
+    loop.set_default_executor(busy)
+    release = threading.Event()
+    held = loop.run_in_executor(None, release.wait)
+    try:
+        async with httpx.AsyncClient(transport=pt.PinnedAsyncHTTPTransport()) as c:
+            response = await c.get("https://docs.example.com/guide/")
+        assert response.status_code == 200
+    finally:
+        release.set()
+        await held
+
+
 def test_pinned_requests_adapter_sni_and_url(monkeypatch: pytest.MonkeyPatch) -> None:
     import requests
     from requests.adapters import HTTPAdapter

@@ -952,3 +952,15 @@ def test_overrides_a_kind_cannot_take_are_rejected(fields: dict) -> None:
 
     with pytest.raises(ValidationError):
         JobRequest(**fields)
+
+
+def test_every_kind_has_a_label_and_a_raw_kind() -> None:
+    from typing import get_args
+
+    from scholar_lens import cli
+    from scholar_lens.domain.jobs import ArtifactKind
+    from scholar_lens.entrypoints import runtime
+
+    for kind in get_args(ArtifactKind):
+        assert kind in runtime._KIND_LABELS
+        assert cli._raw_kind(f'{{"kind": "{kind}"}}') == kind

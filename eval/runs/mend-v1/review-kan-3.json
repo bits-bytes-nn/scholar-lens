@@ -1,0 +1,201 @@
+{
+  "item": "review-kan",
+  "session": 3,
+  "judge_model": "us.anthropic.claude-opus-5-5",
+  "X": {
+    "scores": {
+      "A": {"score": 8.0, "reason": "Coherent arc (motivation -> layer -> theorem -> grid/sparsify -> experiments -> LAN -> limits), valid front matter and $$ math. Deductions: register break in heading L358 'MAAM: 수동 개입의 양이 단순성을 정한다'; `\\cancel{}` in L353 depends on the MathJax cancel extension; trailing whitespace lines L251, L316."},
+      "B": {"score": 8.0, "reason": "Mostly natural 입니다 register with established terms. Deductions: L358 heading '~정한다' register break; L42 '가상의 함수 exp(sin(πx)+y²)' calls the paper's own toy function hypothetical; L54 one long sentence stacking '이렇게 ... 푼 구조가 ... 이며, 바깥은 ...'; L217 '캡션은 이 부분을 따로 다루지 않습니다' reads like a note to the editor."},
+      "C": {"score": 9.0, "reason": "Running example exp(sin(πx)+y²) threads through L42, L98, L155, L197, L404; back-references ('앞서 본 [4,2,1,1] 예시' L151, '앞서 본 언어 모델링' L398) all resolve. Deduction: L217 refers to a caption the reader never sees."},
+      "D": {"score": 8.5, "reason": "Telescoping residual explained in plain words (L118), C^m norm defined (L126), Pareto frontier defined (L223), rapidity derivation for velocity addition (L251). Little worked arithmetic for entropy or grid extension. L132 gives one numeric example."},
+      "E": {"score": 8.5, "reason": "Scaling-theory table (L138-143), special-function table (L229-235), knot table (L293-296), MAAM table (L362-366); 10 figures, each discussed. Deduction: the MAAM table (L362-366) drops the theory row (98.6%) and the [4,3,1,1] 98.4% step, so 'pruned 97.7%' L365 has nothing to compare with; L249 the figure description is just '볼 곳은 실선으로 그린 테스트 곡선입니다'."},
+      "F": {"score": 8.5, "reason": "All checked numbers match. Deductions: L217 '저자들은 그 원인을 손실 지형이 나빠졌기 때문으로 추정합니다' attaches a cause to the 4D plateau that the paper text does not state in that form (the paper says the G=1000 slowdown is 'specific to the use of the LBFGS optimizer with line search'), and the sentence is a caption critique; L360 '먼저 [4,2,1,1]로 가지치기해도 97.7%가 유지됩니다' implies 97.7% was the prior value, but the prior step was 98.4% (or 97.1% auto)."},
+      "G": {"score": 8.5, "reason": "use_math true with $$ present, description 120-160 chars, opens with KAN, numbers from TL;DR. Risk: `\\cancel` (L353) needs the cancel extension."},
+      "R1": {"score": 8.0, "reason": "Covers method, theorem with proof sketch, grid extension, sparsification, pruning, symbolic snapping, all experiment families, LAN and limits. Thinner than Y on Feynman results (no per-equation numbers), knot formulas A-E, MAAM theory/98.4% steps and the Section 4.1 interpretability toys."},
+      "R2": {"score": 8.5, "reason": "Intuition (two missing halves, L38-42) -> formula -> [2,1,1] mapping L98 -> recovery figure L197; theorem layered as premise -> per-layer bound -> m=0 -> comparison table. Few numeric worked examples beyond L132."},
+      "R3": {"score": 8.5, "reason": "TL;DR answers the four questions with the Poisson numbers and α=4. Closing assessment (L404-406) is specific and grounded (Feynman parity, Georgia Tech counterexample, seed dependence). Deduction: L217 critiques a caption."},
+      "X1": {"score": 5.0, "reason": "Category 'Language-Models' does not fit a function-approximation/AI+Science paper; tag 'Alignment' (L10) is a technique the paper does not use."}
+    },
+    "principles": {
+      "claim_headings": "met (H2/H3 headings state findings, e.g. L106, L199)",
+      "running_example": "met (exp(sin(πx)+y²) at L42, L98, L155, L197, L404)",
+      "mechanism_reason_formula_example": "met (edge function L86-92, grid extension L159-175)",
+      "facts_said_once": "partly met (Poisson numbers in TL;DR and re-referenced at L271 without repetition; LBFGS-only caveat repeated L209 and L395)",
+      "numbers_with_variant_scope_unit": "met (Poisson MSE/params with widths/depths L30; knot table with shapes)",
+      "nothing_invented": "partly met (L217 cause attribution)",
+      "own_assessment_at_end": "met (L402-406)",
+      "length_fitted": "met",
+      "type_specific_shape": "met",
+      "korean_style": "partly met (L358 register break, L217 editor-note tone)"
+    },
+    "claims": {
+      "checked": 22,
+      "unsupported": 1,
+      "wrong": 0,
+      "error_rate": 0.045,
+      "items": [
+        {"claim": "L30 2-layer width-10 KAN 100x more accurate than 4-layer width-100 MLP, 1e-7 vs 1e-5 MSE", "verdict": "supported", "source": "'A 2-Layer width-10 KAN is 100 times more accurate than a 4-Layer width-100 MLP (10^-7 vs 10^-5 MSE)'"},
+        {"claim": "L30 100x fewer parameters, 1e2 vs 1e4", "verdict": "supported", "source": "'100 times more parameter efficient (10^2 vs 10^4 parameters)'"},
+        {"claim": "L31 cubic spline gives α=k+1=4", "verdict": "supported", "source": "Section 2.3 / 3.1"},
+        {"claim": "L96 KAN params O(N^2L(G+k)) ~ O(N^2LG)", "verdict": "supported", "source": "Section 2.2"},
+        {"claim": "L140-143 Sharma&Kaplan (k+1)/d, Michaud (k+1)/2, Poggio m/2, KAN k+1", "verdict": "supported", "source": "Section 2.3 scaling-theory comparison"},
+        {"claim": "L173 [2,5,1] has 15G params, 1000 samples, predicted G≈67, observed ~50", "verdict": "supported", "source": "'G = 1000/15 ≈ 67 ... roughly agrees with ... G ~ 50'"},
+        {"claim": "L175 [2,1,1] test RMSE ~G^-3, median gives closer to G^-4", "verdict": "supported", "source": "'a [2,1,1] KAN scales roughly as test RMSE ∝ G^-3' + median statement"},
+        {"claim": "L185 μ1=μ2=1 default; entropy needed beyond L1", "verdict": "supported", "source": "Section 2.5.1"},
+        {"claim": "L189 pruning threshold θ=1e-2 default", "verdict": "supported", "source": "'default threshold θ = 10^-2'"},
+        {"claim": "L207 4D function represented by depth-3 KAN", "verdict": "supported", "source": "'can be represented by a [4,4,2,1] KAN'"},
+        {"claim": "L215 [4,9,1] much worse than [4,2,2,1]", "verdict": "supported", "source": "Section 3.1"},
+        {"claim": "L217 authors attribute 4D plateau to bad loss landscape", "verdict": "unsupported", "source": "Paper attributes G=1000 slowdown to 'LBFGS optimizer with line search'; no 'loss landscape' cause located"},
+        {"claim": "L223 G from 3 to {3,5,10,20,50,100,200}, every 200 steps, 3 seeds; Feynman MLP width 5 depth 2-6 Tanh/ReLU/SiLU", "verdict": "supported", "source": "Section 3.2/3.3 setup"},
+        {"claim": "L231 lpmv [2,2,1] 5.25e-5 vs MLP 1.74e-2", "verdict": "supported", "source": "Table 1"},
+        {"claim": "L233 sph_harm(1,2) [2,2,1,1] 1.50e-5 vs 1.84e-3", "verdict": "supported", "source": "Table 1"},
+        {"claim": "L234-235 kv [2,2,1] 2.52e-5 vs 1.67e-4; ellipj [2,3,2,1,1,1] 1.33e-4 vs 6.48e-4", "verdict": "supported", "source": "Table 1"},
+        {"claim": "L269 n_i=10000, n_b=800, α=0.01", "verdict": "supported", "source": "Section 3.4"},
+        {"claim": "L277 KAN training typically 10x slower", "verdict": "supported", "source": "'typically 10x slower than MLPs to train'"},
+        {"claim": "L295-296 DeepMind 4-layer width-300 ~3e5 params 78%; KAN [17,1,14] ~200 params 81.6%", "verdict": "supported", "source": "Section 4.3"},
+        {"claim": "L298 Georgia Tech 60-parameter MLP 80% (public but unpublished)", "verdict": "supported", "source": "Section 4.3"},
+        {"claim": "L300-304 [3,1,14] 78.2%; μr alone 65.0%, μi alone 43.8%; formula F 77.8%", "verdict": "supported", "source": "Section 4.3"},
+        {"claim": "L356-366 GAAM theory 99.2% vs KAN 99.0%; MAAM auto 97.1%, pruned 97.7%, quadratic 95.4%", "verdict": "supported", "source": "Section 4.4 / Table 5"}
+      ]
+    },
+    "checklist": {"repeated": 0, "avoided": 0, "na": 0, "repeated_ids": []},
+    "structure_defects": 20,
+    "structure_defect_details": {
+      "broken_seams": [],
+      "references_never_stated": ["L217 '캡션은 이 부분을 따로 다루지 않습니다' (caption never shown to reader)"],
+      "one_sentence_subsections": [],
+      "sentence_shaped_headings": [
+        "L36 '스플라인과 MLP는 서로 다른 절반을 놓치고, ... 후보였습니다'",
+        "L56 'KAN 층은 ... 노드는 더하기만 합니다'",
+        "L60 '층을 정의해야 깊게 쌓을 수 있습니다'",
+        "L84 '각 엣지 함수는 silu와 B-스플라인의 합입니다'",
+        "L106 '근사 오차가 차원과 무관하게 줄고, ... 4입니다'",
+        "L110 '오차를 층마다 잘라서 봅니다'",
+        "L128 '$$m=0$$이 스케일링 지수를 줍니다'",
+        "L153 '격자를 촘촘히 옮기면 정확해지고, ... 수식이 나옵니다'",
+        "L157 '격자 확장: ... 옮깁니다'",
+        "L177 '희소화: L1에 엔트로피 정규화를 더합니다'",
+        "L187 '가지치기: ... 봅니다'",
+        "L191 '기호화: ... 맞춥니다'",
+        "L199 '다섯 장난감 함수에서 KAN은 ... 정체합니다'",
+        "L219 '특수함수에서는 ... 비슷합니다'",
+        "L257 '푸아송 방정식에서 ... 망각을 피합니다'",
+        "L285 '매듭 서명 분류에서 ... 보여 줍니다'",
+        "L324 '앤더슨 국소화에서 ... 복원합니다'",
+        "L358 'MAAM: 수동 개입의 양이 단순성을 정한다'",
+        "L374 '활성화를 학습 가능하게 만드는 것만으로는 해석성이 생기지 않습니다'"
+      ]
+    },
+    "top_issues": [
+      "Tag 'Alignment' and category 'Language-Models' misfile the paper (L9-10)",
+      "L217 caption critique with an unsupported cause ('손실 지형')",
+      "MAAM table L362-366 omits theory 98.6% and [4,3,1,1] 98.4%, making '97.7%가 유지' L360 misleading",
+      "Less depth than Y on Feynman per-equation results and knot formulas A-E"
+    ]
+  },
+  "Y": {
+    "scores": {
+      "A": {"score": 7.0, "reason": "Arc is coherent but has publishing defects: L449 leaks internal evidence IDs '[[E120], [E128]]'; L426 image and paragraph on one line ('...논문 구성도](...png) 저자들은 ...'); register breaks in headings L36 '...다시 꺼내다', L104 '전제: 매끄러운 표현이 이미 존재한다'; figure dumps L242-244 and L265-267 with no or one-sentence discussion."},
+      "B": {"score": 8.0, "reason": "Natural 입니다 prose overall. Deductions: L36/L104 heading register; L146 'UAT' used without ever being introduced as an acronym; 'Deepmind' spelling throughout (L31, L299) instead of DeepMind; L240 '수학적으로 의외의 일이지만' is a loose paraphrase."},
+      "C": {"score": 7.5, "reason": "L74 '왼쪽 그림은 입력 2개, 은닉 노드 5개 ... 같은 그림 오른쪽에서는 ... 3차 B-스플라인' describes a figure that is not shown; the figure at L78 is the MLP-vs-KAN comparison. L335 '뒤에서 설명할 비지도 정식화로' uses the method before it is explained (it comes at L392-400, in a later section). L394 uses exp(sin(πx1)+x2²) while L404 uses exp(sin(x1)+x2²)."},
+      "D": {"score": 9.0, "reason": "Well-timed numeric help: e^2≈7.39 at x=0.5,y=1 (L82), 2^-4 and the 10-D Sharma&Kaplan contrast with a 24% reduction (L136), 8→13 coefficients for G 5→10 (L162), entropy log4≈1.39 vs 0.17 (L172), SIREN overhead 5/128≈4% (L410). All arithmetic checks out."},
+      "E": {"score": 7.5, "reason": "Strong tables (special functions L232-238, Feynman L250-255, knot formulas A-F L322-329, full MAAM path L365-372). Deductions: 18 figures with several back-to-back dumps (L242-244, L265-267) and thin captions ('두 그림에서는 엣지마다 학습된 1차원 함수를 직접 볼 수 있습니다' L269); L74 describes a figure that is absent."},
+      "F": {"score": 9.0, "reason": "Every checked table cell and number matched the paper (Table 1 rows incl. iv, Feynman rows, formulas A-F, MAAM 98.4/98.6/97.1/97.7/96.9/95.4, 1800 LBFGS steps, [4,4,2,1]). Minor: L412 '정확도 순서는 KAN, LAN, MLP였습니다' reads as a measured ranking where the paper gives a qualitative statement; L240 '대부분 층 두세 개짜리' fits the minimal KANs, not the best-KAN shapes in its own table ([2,3,2,1,1,1], [2,4,3,2,1,1])."},
+      "G": {"score": 7.5, "reason": "use_math true, description length OK and its numbers (100x, 81.6%) appear in the TL;DR. Deductions: L449 '[[E120], [E128]]' renders as stray bracketed text; L426 inline image followed by text."},
+      "R1": {"score": 9.0, "reason": "Deepest coverage: theorem with explicit R_l definition (L121), full Feynman comparison, knot formula Pareto list, unsupervised mode, MAAM full path, Section 4.1 interpretability toys (L382-390), hyperparameter sensitivity (L420), grid-size instability limitation."},
+      "R2": {"score": 8.5, "reason": "Layers intuition -> formula -> worked numbers consistently (L82, L136, L162, L172). Order costs some layering: unsupervised method used at L335 before it is explained at L392."},
+      "R3": {"score": 8.0, "reason": "TL;DR is concrete (Poisson widths and MSE, knot 81.6% vs 78%). Closing assessment is specific (sensitivity to λ, G, seed; Georgia Tech counterexample). Deduction: the closing paragraph L449 carries leaked evidence IDs."},
+      "X1": {"score": 5.0, "reason": "Category 'Language-Models' misfits; tag 'Model-Serving' (L10) is unrelated to the paper's contribution."}
+    },
+    "principles": {
+      "claim_headings": "met",
+      "running_example": "met (exp(sin(πx)+y²) at L50, L82, L140, L186, L208, L386, L394, L420)",
+      "mechanism_reason_formula_example": "met (grid extension L154-162; entropy L166-172)",
+      "facts_said_once": "partly met (Georgia Tech point and the PDE caveats restated in limits and assessment; 'μi 쓰지 않음' repeated L316/L331)",
+      "numbers_with_variant_scope_unit": "met",
+      "nothing_invented": "met",
+      "own_assessment_at_end": "met (L441-449)",
+      "length_fitted": "partly met (long; many figures with little discussion)",
+      "type_specific_shape": "met",
+      "korean_style": "partly met (L36, L104 register; 'UAT' undefined)"
+    },
+    "claims": {
+      "checked": 24,
+      "unsupported": 0,
+      "wrong": 0,
+      "error_rate": 0.0,
+      "items": [
+        {"claim": "L31 2-layer width-10 KAN vs 4-layer width-100 MLP, 1e-7 vs 1e-5 MSE, 100x fewer params", "verdict": "supported", "source": "Section 3.4 abstract-level claim"},
+        {"claim": "L31 [17,1,14] KAN 81.6% vs DeepMind MLP 78%", "verdict": "supported", "source": "Section 4.3"},
+        {"claim": "L48 (2n+1)(n+1) univariate functions", "verdict": "supported", "source": "n(2n+1)+(2n+1); paper counts the same functions"},
+        {"claim": "L92 w_b Xavier initialisation; normalisation tried and worse", "verdict": "supported", "source": "Section 2.2 implementation details"},
+        {"claim": "L136 Sharma&Kaplan 4/10 for 10-D, doubling cuts ~24%", "verdict": "supported", "source": "2^-0.4=0.758 (arithmetic, labelled hypothetical)"},
+        {"claim": "L162 G 5->10 with k=3 gives 8->13 coefficients", "verdict": "supported", "source": "G+k basis functions (Section 2.4)"},
+        {"claim": "L176 visual transparency tanh(βA) with β=3", "verdict": "supported", "source": "Section 2.5.1"},
+        {"claim": "L200 4D function representable by [4,4,2,1]", "verdict": "supported", "source": "'can be represented by a [4,4,2,1] KAN'"},
+        {"claim": "L204 grid G={3,...,1000} every 200 steps; LBFGS 1800 steps", "verdict": "supported", "source": "'trained with LBFGS for 1800 steps in total'"},
+        {"claim": "L208 G≈67 predicted, ~50 observed, 15G params, 1000 samples", "verdict": "supported", "source": "Section 2.4"},
+        {"claim": "L210 G=1000 slowdown specific to LBFGS line search", "verdict": "supported", "source": "'specific to the use of the LBFGS optimizer with line search'"},
+        {"claim": "L226 KAN width 5 depth 2-6, 3 seeds, G up to 200", "verdict": "supported", "source": "Section 3.2"},
+        {"claim": "L234-236 lpmv/yv/sph_harm(1,2) rows", "verdict": "supported", "source": "Table 1"},
+        {"claim": "L237-238 ellipj and iv rows ([2,4,3,2,1,1] 9.28e-3 vs 1.07e-2)", "verdict": "supported", "source": "Table 1"},
+        {"claim": "L248 xy = (x+y)^2/4 - (x-y)^2/4 for human KAN", "verdict": "supported", "source": "Section 3.3"},
+        {"claim": "L252-255 Feynman I.6.2, I.29.16, I.30.3, II.11.7 human/pruned/MLP losses", "verdict": "supported", "source": "Table 2"},
+        {"claim": "L263 relativistic velocity addition: human KAN 5 layers, auto 2 layers", "verdict": "supported", "source": "'the auto-discovered KANs are only 2 layers deep'"},
+        {"claim": "L283 n_i=10000, n_b=800, α=0.01", "verdict": "supported", "source": "Section 3.4"},
+        {"claim": "L314-316 [3,1,14] 78.2%; μr 65.0%, μi 43.8%; DeepMind said μi", "verdict": "supported", "source": "Section 4.3"},
+        {"claim": "L324-329 formulas A 83.1, B 62.6, C 71.9, D 84.0, E 82.8, F 77.8", "verdict": "supported", "source": "Section 4.3 table"},
+        {"claim": "L359 GAAM 98.9% after snap, formula 99.0%, theory 99.2%", "verdict": "supported", "source": "Section 4.4"},
+        {"claim": "L363-372 MAAM [4,2,1,1]~75%, [4,3,1,1] 98.4%, theory 98.6%, auto 97.1%, pruned 97.7%, manual 97.7%, cosh 96.9%, quadratic 95.4%", "verdict": "supported", "source": "Section 4.4 text (Table 5 gives 96.6% for cosh; text 96.9%)"},
+        {"claim": "L384 auto KAN uses 2xy=(x+y)^2-(x^2+y^2)", "verdict": "supported", "source": "Section 4.1"},
+        {"claim": "L410 LAN params N^2L+NLG; SIREN G=5, ~4% overhead", "verdict": "supported", "source": "Appendix on LAN"}
+      ]
+    },
+    "checklist": {"repeated": 0, "avoided": 0, "na": 0, "repeated_ids": []},
+    "structure_defects": 25,
+    "structure_defect_details": {
+      "broken_seams": ["L74 '왼쪽 그림은 ... 같은 그림 오른쪽에서는 ...' refers to a figure not present at that point (L78 shows a different figure)"],
+      "references_never_stated": ["L146 '앞서 본 UAT의 한계' (acronym UAT never introduced)", "L449 '[[E120], [E128]]' internal evidence IDs"],
+      "one_sentence_subsections": [],
+      "sentence_shaped_headings": [
+        "L36 '버려졌던 콜모고로프-아놀드 정리를 깊이와 폭을 키워 다시 꺼내다'",
+        "L52 'KAN 층은 1차원 함수의 행렬이고, 노드는 더하기만 합니다'",
+        "L104 '전제: 매끄러운 표현이 이미 존재한다'",
+        "L148 '격자를 세밀하게 옮겨 정확도를 높이고, 가지를 쳐서 수식을 꺼냅니다'",
+        "L152 '그리드 확장: ... 최소제곱으로 맞춥니다'",
+        "L164 '희소화: L1만으로는 부족해 엔트로피를 더합니다'",
+        "L174 '가지치기와 시각화: 노드 단위로 자릅니다'",
+        "L178 '기호화: 아핀 파라미터를 맞춘 뒤 스냅합니다'",
+        "L192 '토이 함수에서 KAN은 ... 근접합니다'",
+        "L220 '특수함수에서는 ... 비슷합니다'",
+        "L246 'Feynman 방정식: 평균적으로 대등하고, 진 사례도 있습니다'",
+        "L271 '함수 피팅 밖에서도 국소 스플라인이 힘을 씁니다: PDE와 연속 학습'",
+        "L289 '연속 학습: 새 데이터가 먼 영역의 계수를 건드리지 않습니다'",
+        "L297 '매듭 이론: 200개 파라미터 KAN이 ... 읽을 수 있습니다'",
+        "L339 '앤더슨 국소화: KAN은 ... 단순해집니다'",
+        "L357 'GAAM: 사용되지 않은 변수가 먼저 답을 알려 줍니다'",
+        "L361 'MAAM: 사람이 고를수록 단순해지고 조금 덜 정확해집니다'",
+        "L378 '가지치기된 KAN은 ... 찾아냅니다'",
+        "L382 '지도 학습 토이 과제: 남은 엣지가 항등식을 드러냅니다'",
+        "L392 '비지도 발견: 출력 변수를 정하지 않고 관계를 찾습니다'",
+        "L406 '노드의 학습 가능한 활성화만으로는 해석 가능성이 나오지 않습니다'",
+        "L418 'KAN 안에서도 해석 결과는 설정에 따라 달라집니다'"
+      ]
+    },
+    "top_issues": [
+      "Leaked internal evidence IDs '[[E120], [E128]]' in the closing paragraph (L449)",
+      "L74 describes a figure that is not shown; the adjacent figure is a different one",
+      "Figure dumps (L242-244, L265-267) and an inline image glued to text (L426)",
+      "Unsupervised method used (L335) before it is explained (L392-400); 'UAT' never defined (L146)",
+      "Tag 'Model-Serving' and category 'Language-Models' misfile the paper"
+    ]
+  },
+  "preference": {
+    "overall": "X",
+    "per_criterion": {
+      "A": "X", "B": "X", "C": "X", "D": "Y", "E": "X", "F": "Y",
+      "G": "X", "R1": "Y", "R2": "tie", "R3": "X", "X1": "tie"
+    },
+    "reason": "Y is deeper and slightly more accurate: it has the Feynman per-equation table, formulas A-F, the full MAAM path, Section 4.1 toys and correct worked arithmetic, with 0/24 claim errors. But it would not publish as-is. It leaks internal evidence IDs (L449), describes an absent figure (L74), dumps figures with no discussion, glues an image to text (L426) and uses the unsupervised method before explaining it. X is one coherent, publishable document with an accurate running example. Its only factual weakness is one unsupported caption remark (L217) and a thinner MAAM table. The win is narrow: Y's depth advantage is real but outweighed by its rendering and coherence defects."
+  }
+}

@@ -74,7 +74,9 @@ Record evidence the post needs about this paper, in the survey's language for
   "GraphSAGE ogbn-products 정확도 78.5%"), in the survey's language; a relative gain
   says relative. Only the paper's own measured results are numbers: a figure
   it cites to set the scene (a product's user count, a market size, another
-  work's score) is no number record (a finding, if the survey needs it);
+  work's score) is no number record (a finding, if the survey needs it), and
+  neither is a setup value (training steps, learning rate, batch or data
+  size): record it as a finding with its quote if the survey needs it;
 - limitations the paper states or its own results show (limitation; `cell` a
   noun phrase): a weakness of this paper's own method or evaluation, never a
   finding about other methods and never about what the text does not

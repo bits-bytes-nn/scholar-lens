@@ -96,7 +96,7 @@ _META_REFRESH_URL = re.compile(
 MAX_REFERENCE_SEARCHES = 3
 MAX_REFERENCE_PAGES = 6
 _REFERENCE_LINK = re.compile(
-    r"(?:^|[/_.-])(?:cli|args?|arguments?|engine[_-]?args|config(?:uration)?|"
+    r"(?:^|[/_.-])(?:cli|args?|arguments?|config(?:uration)?|"
     r"metrics?|optimi[sz]ation|reference|parameters?|options?|settings?|env(?:ironment)?)"
     r"(?:$|[/_.-])",
     re.I,
@@ -177,23 +177,6 @@ class WebSearchProvider(ABC):
         ``exclude`` leaves those domains out where the backend can."""
 
 
-def _search(
-    provider: WebSearchProvider,
-    query: str,
-    *,
-    count: int = 5,
-    domains: Collection[str] = (),
-    exclude: Collection[str] = (),
-) -> list[SearchResult]:
-    """``provider.search``, passing only the arguments that are set, so a
-    provider written before a parameter keeps working."""
-    if exclude:
-        return provider.search(query, count=count, domains=domains, exclude=exclude)
-    if domains:
-        return provider.search(query, count=count, domains=domains)
-    return provider.search(query, count=count)
-
-
 class FallbackSearchProvider(WebSearchProvider):
     """``primary``, and ``secondary`` for a query ``primary`` answers with
     nothing because it failed; once ``primary`` reports its quota spent it is
@@ -214,14 +197,14 @@ class FallbackSearchProvider(WebSearchProvider):
     ) -> list[SearchResult]:
         if not self.primary.exhausted:
             before = self.primary.failed_searches
-            results = _search(
-                self.primary, query, count=count, domains=domains, exclude=exclude
+            results = self.primary.search(
+                query, count=count, domains=domains, exclude=exclude
             )
             if results or self.primary.failed_searches == before:
                 return results
         before = self.secondary.failed_searches
-        results = _search(
-            self.secondary, query, count=count, domains=domains, exclude=exclude
+        results = self.secondary.search(
+            query, count=count, domains=domains, exclude=exclude
         )
         if self.secondary.failed_searches > before:
             self.failed_searches += 1
@@ -645,7 +628,7 @@ class WebResearcher:
         ``exclude`` goes to the search backend.
         """
         per_query = [
-            _search(self.search_provider, query, exclude=exclude) for query in queries
+            self.search_provider.search(query, exclude=exclude) for query in queries
         ]
         for results in per_query:
             corpus.search_results.extend(results)
@@ -1032,8 +1015,8 @@ class WebResearcher:
         return self._get_page(abs_url)
 
     def _get_page(self, url: str) -> tuple[str, str] | None:
-        """:meth:`_get_page_once`, with a site that answers 429 or 503 (a
-        docs site behind a bot shield) asked again up to
+        """:meth:`_get_page_once`, with a site that answers 429 or a 5xx (a
+        docs site behind a bot shield, a gateway hiccup) asked again up to
         :data:`PAGE_RATE_LIMIT_RETRIES` times after its Retry-After (capped)
         or a growing wait. An arXiv 429 or 5xx is asked again
         :data:`ARXIV_RETRIES` times through the shared arXiv limiter, which
@@ -1050,7 +1033,10 @@ class WebResearcher:
                         self._arxiv_limiter.penalize(arxiv_retry_hold(e, attempt))
                     logger.info("'%s' answered %d; asking arXiv again.", url, status)
                     continue
-                if status not in (429, 503) or attempt == PAGE_RATE_LIMIT_RETRIES:
+                if (
+                    not is_retryable_status(status)
+                    or attempt == PAGE_RATE_LIMIT_RETRIES
+                ):
                     raise
                 hinted = "retry-after" in e.response.headers
                 wait = (

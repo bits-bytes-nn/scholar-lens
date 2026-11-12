@@ -31,7 +31,7 @@ from scholar_lens.adapters.files import LocalOrS3Files
 from scholar_lens.adapters.github import publisher as github_publisher
 from scholar_lens.adapters.github.publisher import Publisher
 from scholar_lens.adapters.scholarly.plan_index import PaperIndex
-from scholar_lens.application.run import RunContext
+from scholar_lens.application.run import RunContext, run_notes
 from scholar_lens.application.survey_engine import EvidenceSurvey
 from scholar_lens.application.use_cases import survey_write as survey_writer
 from scholar_lens.application.use_cases.survey_write import (
@@ -956,7 +956,7 @@ class TestStage:
         }
         # The supporting paper's abstract reaches the engine's documents.
         documents = engine.created[0]["documents"]
-        assert documents.abstracts == {"2203.02155": ABSTRACT.abstract}
+        assert documents.inner.abstracts == {"2203.02155": ABSTRACT.abstract}
 
     def test_post_passes_the_blog_lint(self, stage: dict[str, Any]) -> None:
         lint = BLOG / "script" / "lint-posts.rb"
@@ -1025,7 +1025,7 @@ class TestStage:
         stage["engine"].error = RuntimeError("engine down")
         with pytest.raises(RuntimeError, match="engine down") as failed:
             run_stage(stage)
-        assert any("citation edge" in n for n in failed.value.run_notes)
+        assert any("citation edge" in n for n in run_notes(failed.value)[0])
 
 
 class TestReferenceArticles:
@@ -1322,3 +1322,42 @@ def test_blocking_problems_lead_the_warnings_and_the_pr_body(
     assert body.index("- [ ] the claim check of 'x' did not run") > blocking
     assert blocking < body.index("### Review checklist")
     assert body.index("Section 'y' kept a flagged sentence.") > blocking
+
+
+def test_a_figure_that_cannot_be_downloaded_is_gone_before_reading() -> None:
+    import asyncio
+
+    from scholar_lens.application.use_cases.survey_write import ServableDocuments
+    from scholar_lens.domain.evidence import SourceDocument
+    from scholar_lens.domain.survey.plan import PlanPaper
+
+    doc = SourceDocument.from_markdown(
+        "p",
+        "t",
+        "full_text",
+        "## 1 Method\n\n![ok](https://arxiv.org/html/x/a.png)\n\n"
+        "![gone](https://arxiv.org/html/x/b.png)\n\n본문.\n",
+        [
+            ("https://arxiv.org/html/x/a.png", "ok"),
+            ("https://arxiv.org/html/x/b.png", "gone"),
+        ],
+    )
+
+    class Inner:
+        async def document(self, paper):  # type: ignore[no-untyped-def]
+            return doc
+
+        def notes(self) -> list[str]:
+            return []
+
+    class Figures:
+        async def unservable(self, urls: list[str]) -> list[str]:
+            return [u for u in urls if u.endswith("b.png")]
+
+    servable = ServableDocuments(Inner(), Figures())  # type: ignore[arg-type]
+    paper = PlanPaper.model_construct(id="p")
+    out = asyncio.run(servable.document(paper))
+    assert out is not None and [f.url for f in out.figures] == [
+        "https://arxiv.org/html/x/a.png"
+    ]
+    assert "b.png" in servable.notes()[0]

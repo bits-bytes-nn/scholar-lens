@@ -24,7 +24,7 @@ pymupdf = ">=1.25.1"
 python-dotenv = ">=1.0.1"
 pyyaml = ">=6.0.3"
 requests = ">=2.32.5"
-tenacity = ">=8.0.0"
+tenacity = ">=9.2.1"
 resvg-py = ">=0.5.0"
 strands-agents = "1.64.0"
 
@@ -58,6 +58,9 @@ pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "-ra --strict-markers"
+# A deprecation our own code triggers fails the suite; third-party ones
+# (SWIG types of PyMuPDF at import) do not.
+filterwarnings = ["error::DeprecationWarning:scholar_lens.*"]
 
 [tool.coverage.run]
 source = ["scholar_lens"]
@@ -156,43 +159,46 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "The application's ports import nothing else of the application"
+# The adapter and sections-engine contracts allow the ports: this keeps the
+# ports at the bottom, so no chain through them reaches the core. A new
+# application module fails here until it is listed.
+type = "layers"
+containers = ["scholar_lens.application"]
+layers = [
+    "checkpoints : evidence_writer : guide_engine : paper_engine : post_engine : run : survey_engine : use_cases",
+    "ports",
+]
+exhaustive = true
+
+[[tool.importlinter.contracts]]
 name = "The adapters import the domain and the application's ports only"
 type = "forbidden"
 source_modules = ["scholar_lens.adapters"]
+# The whole application except its ports: a new application module is
+# covered without listing it.
 forbidden_modules = [
-    "scholar_lens.application.checkpoints",
-    "scholar_lens.application.evidence_writer",
-    "scholar_lens.application.guide_engine",
-    "scholar_lens.application.paper_engine",
-    "scholar_lens.application.post_engine",
-    "scholar_lens.application.run",
-    "scholar_lens.application.survey_engine",
-    "scholar_lens.application.use_cases",
+    "scholar_lens.application",
     "scholar_lens.sections_engine",
     "scholar_lens.configs",
     "scholar_lens.bootstrap",
     "scholar_lens.entrypoints",
     "scholar_lens.cli",
 ]
+ignore_imports = ["scholar_lens.adapters.** -> scholar_lens.application.ports"]
 
 [[tool.importlinter.contracts]]
 name = "The sections engine imports the domain, the ports and the adapters only"
 type = "forbidden"
 source_modules = ["scholar_lens.sections_engine"]
 forbidden_modules = [
-    "scholar_lens.application.checkpoints",
-    "scholar_lens.application.evidence_writer",
-    "scholar_lens.application.guide_engine",
-    "scholar_lens.application.paper_engine",
-    "scholar_lens.application.post_engine",
-    "scholar_lens.application.run",
-    "scholar_lens.application.survey_engine",
-    "scholar_lens.application.use_cases",
+    "scholar_lens.application",
     "scholar_lens.configs",
     "scholar_lens.bootstrap",
     "scholar_lens.entrypoints",
     "scholar_lens.cli",
 ]
+ignore_imports = ["scholar_lens.sections_engine.** -> scholar_lens.application.ports"]
 
 [[tool.importlinter.contracts]]
 name = "Only the composition root imports the sections engine"
@@ -239,7 +245,6 @@ forbidden_modules = [
     "strands",
     "langchain_core",
     "langchain_aws",
-    "langchain_community",
     "langchain_text_splitters",
     "github",
 ]

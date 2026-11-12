@@ -8,6 +8,7 @@ terminology stay consistent across sections.
 from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
 from scholar_lens.domain.prompts.rules import (
     CITATION_KEY_RULES,
+    CLAIM_HEADING_RULE,
     DEPTH_RULES,
     EXCLUDED_CONTENT_RULES,
     HEADING_STRUCTURE_RULES,
@@ -90,7 +91,8 @@ class PaperPlanningPrompt(BasePrompt):
        budget is computed from these.
     2. Order sections the way that best teaches the paper — usually problem,
        background the reader lacks, core method, design choices, experiments,
-       analysis. Do not mirror the paper's sections one to one: merge thin
+       analysis. The TL;DR (written last) opens the post: no section retells
+       it or the headline results up front. Do not mirror the paper's sections one to one: merge thin
        parts, split dense ones, and fold material that is easy for the reader
        into a neighbouring section instead of giving it a section of its own.
        Do NOT plan a
@@ -224,6 +226,7 @@ class PaperSectionPrompt(BasePrompt):
     Structure and visuals:
     """
         + HEADING_STRUCTURE_RULES
+        + CLAIM_HEADING_RULE
         + VISUAL_RULES
         + TABLE_RULES
         + PAPER_TABLE_RULES

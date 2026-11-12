@@ -430,7 +430,10 @@ def _code_findings(
         for block in python_blocks(markdown):
             session = _session_code(block)
             code = block if session is None else session
-            report = checked and session is None
+            # An excerpt is marked as part of a larger file: neither its
+            # syntax nor its names are the reader's paste (its definitions
+            # still count for later blocks).
+            report = checked and session is None and not is_excerpt(code)
             try:
                 tree = ast.parse(code)
                 table = symtable.symtable(code, "<guide>", "exec")
@@ -451,7 +454,7 @@ def _code_findings(
                 for node in ast.walk(tree)
             ):
                 reliable = False
-            if report and not is_excerpt(code) and placeholder_lines(tree):
+            if report and placeholder_lines(tree):
                 passage = code.strip()[:120]
                 problems.append(
                     _CodeFinding(

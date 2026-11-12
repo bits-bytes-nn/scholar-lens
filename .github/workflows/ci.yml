@@ -41,9 +41,9 @@ jobs:
       - name: Install dependencies (locked dev tools)
         run: poetry install --no-interaction --with dev
       - name: Ruff (lint)
-        run: poetry run ruff check scholar_lens scripts tests
+        run: poetry run ruff check scholar_lens scripts tests eval
       - name: Black (format check)
-        run: poetry run black --check scholar_lens scripts tests
+        run: poetry run black --check scholar_lens scripts tests eval
       - name: Mypy (type check)
         run: poetry run mypy scholar_lens scripts
       - name: Mypy strict (domain and application)
@@ -82,7 +82,6 @@ jobs:
         run: >-
           poetry run pytest tests/
           -p no:cacheprovider
-          -W ignore::DeprecationWarning
           --cov=scholar_lens
           --cov=scripts
           --cov-report=term-missing

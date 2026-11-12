@@ -3,6 +3,14 @@ concern once; prompts compose the blocks they need."""
 
 from __future__ import annotations
 
+from scholar_lens.domain.validation import DESCRIPTION_LENGTH
+
+# The description length the blog checks (validation.DESCRIPTION_LENGTH),
+# as the prompts state it.
+DESCRIPTION_CHARS: str = (
+    f"{DESCRIPTION_LENGTH.start}-{DESCRIPTION_LENGTH.stop - 1} characters"
+)
+
 READER_PROFILE: str = """
 The reader is a general data scientist or ML engineer: fluent in standard deep
 learning (Transformers, attention, embeddings, Adam, cross-entropy, fine-tuning,
@@ -74,11 +82,23 @@ Context beyond the paper makes the text useful, but must be honest:
 """ + NUMBER_RULES
 
 
+# A review's section heading states its point (the evidence engine's rule,
+# PRINCIPLES); a summary keeps its fixed section names.
+CLAIM_HEADING_RULE: str = """
+- A heading states its point, not a label ("## 제안 방법").
+"""
+
+# The TL;DR opens the post: the body does not retell it.
+NO_RETELLING_RULE: str = """
+- After the TL;DR, never retell it, the abstract or the headline results up
+  front: start with the problem; each result goes where it is explained.
+"""
+
 HEADING_STRUCTURE_RULES: str = """
 - Never write an H1 (`#`) heading; the post title comes from the front matter.
   Top-level sections use `##`, then `###` and `####`; never skip a level.
-- Headings are descriptive noun phrases in the target language, never
-  numbered or sentences ("## 제안 방법", not "## 3. Method" or "~다"/"~요").
+- Headings are noun phrases, never numbered or sentences (not
+  "## 3. Method", not ending in "~다"/"~요").
 """
 
 

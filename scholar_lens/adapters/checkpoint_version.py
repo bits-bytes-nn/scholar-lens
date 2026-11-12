@@ -21,6 +21,7 @@ from scholar_lens.domain.constants import CHECKPOINT_AREA
 
 # The engine modules whose code shapes a stage's output, besides the domain.
 _ENGINE_MODULES = (
+    "checkpoints.py",
     "post_engine.py",
     "evidence_writer.py",
     "paper_engine.py",
