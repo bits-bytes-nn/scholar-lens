@@ -177,8 +177,14 @@ def package_source(
     total = 0
     complete = True
 
-    def keep(path: str, read: Callable[[], bytes]) -> None:
+    def keep(path: str, read: Callable[[], bytes], size: int) -> None:
         nonlocal total, complete
+        if size > max_chars:
+            # Never decompress a member larger than the whole budget (an
+            # archive bomb); a real source file is far smaller.
+            if path.endswith(".py"):
+                complete = False
+            return
         if _TOP_LEVEL.match(path):
             text = read().decode("utf-8", errors="replace")
             tops.update(t for t in text.split() if _IDENTIFIER.match(t))
@@ -203,7 +209,11 @@ def package_source(
             with zipfile.ZipFile(io.BytesIO(blob)) as zf:
                 for info in zf.infolist():
                     if not info.is_dir():
-                        keep(info.filename, functools.partial(zf.read, info))
+                        keep(
+                            info.filename,
+                            functools.partial(zf.read, info),
+                            info.file_size,
+                        )
         else:
             with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tf:
                 for member in tf:
@@ -211,7 +221,7 @@ def package_source(
                         continue
                     handle = tf.extractfile(member)
                     if handle is not None:
-                        keep(member.name, handle.read)
+                        keep(member.name, handle.read, member.size)
     except (zipfile.BadZipFile, tarfile.TarError, OSError) as e:
         logger.warning("Archive of %s could not be read: %s", name, e)
         return None

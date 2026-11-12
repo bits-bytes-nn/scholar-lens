@@ -17,12 +17,12 @@ from pydantic import (
     field_validator,
 )
 
-from scholar_lens.adapters.retry import is_transient_error
 from scholar_lens.adapters.http.rate_limit import (
     ARXIV_RATE_LIMITER,
     RateLimiter,
     arxiv_retry_after_seconds,
 )
+from scholar_lens.adapters.retry import is_transient_error
 from scholar_lens.adapters.scholarly.pdf import CHUNK_BYTES, save_pdf
 from scholar_lens.domain.ids import normalize_arxiv_id
 from scholar_lens.domain.titles import title_similarity, titles_match
