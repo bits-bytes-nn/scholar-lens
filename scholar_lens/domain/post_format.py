@@ -227,7 +227,7 @@ def build_post_meta(
     post's URL is built from both) and its ``lang``/``translation_id`` (the
     blog pairs translations by them), whatever the model proposes now.
 
-    Anything that still breaks a convention (no controlled tag, unknown topic)
+    Anything that still breaks a convention (an unknown topic, a retired tag)
     is left for the post validator to reject, never silently patched.
     """
     topic = published.topic if published else resolve_topic(proposed_topic, spec)

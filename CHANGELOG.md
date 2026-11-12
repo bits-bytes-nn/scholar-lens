@@ -2,6 +2,7 @@
 
 Notable changes, newest first. Undated entries predate November 2026. Design decisions are recorded in [docs/adr/](./docs/adr/) and measurement results in [eval/RESULTS.md](./eval/RESULTS.md).
 
+- 2026-11-12: a controlled tag is optional, as in the blog's lint: a post gets one only when one names its topic (a post with none shows no related reading, which beats wrong related reading). The taxonomy calls no longer ask again for a missing one, and the publish check no longer rejects a post without one.
 - 2026-11-12: a review-and-cleanup pass.
   - The guide sandbox check (`tech_guide.run_examples`) blames a post only for misusing the product's API: a wrong call signature of a name imported from the product, an import of a product name or submodule that does not exist, a product module's missing attribute, or an SDK's own parameter or service-name validation. Any other failure makes the check partial, shown as a PR note.
   - The sandbox blames only a failure the post's own code raised: one raised inside another installed package that uses the product (a plugin built for another version) is a partial-check note. A product name called through its module (`serve.deployment(...)`) or imported under another name counts as the product's. Option values of `pip`/`uv pip` (`--torch-backend cpu`) are no requirements, and a quoted requirement keeps its specifier.

@@ -181,7 +181,7 @@ class TestSummaryEndToEnd:
         assert fetched == [ARXIV_FIGURE]
         assert "](/assets/images/" in body and "arxiv.org/html" not in body
 
-    async def test_post_without_controlled_tag_is_blocked(
+    async def test_post_with_an_unknown_topic_is_blocked(
         self,
         pipeline_env,
         monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
@@ -204,7 +204,8 @@ class TestSummaryEndToEnd:
                 TokenUsageTracker(),
             )
         rules = {v.rule for v in info.value.violations}
-        assert {"tags", "categories"} <= rules
+        # The topic is a closed list; a controlled tag is optional.
+        assert "categories" in rules and "tags" not in rules
         work_dir = context.papers_dir / "2106_09685"
         assert not list(work_dir.glob("20*.md"))  # no post written
         assert list(work_dir.glob("*.rejected.md"))

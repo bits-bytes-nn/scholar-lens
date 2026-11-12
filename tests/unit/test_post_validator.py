@@ -164,8 +164,11 @@ class TestFrontMatter:
 
 
 class TestTags:
-    def test_controlled_tag_required(self) -> None:
-        assert "tags" in rules(make_post(front={"tags": '["Multi-Token-Prediction"]'}))
+    def test_a_controlled_tag_is_optional(self) -> None:
+        # None fits: better no related reading than wrong related reading.
+        assert "tags" not in rules(
+            make_post(front={"tags": '["Multi-Token-Prediction"]'})
+        )
 
     def test_retired_alias_rejected(self) -> None:
         assert "tags" in rules(

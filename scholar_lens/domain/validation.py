@@ -675,9 +675,9 @@ def _check_tags(tags: Any, spec: PostConventions, add: Add) -> None:
             add("error", "tags", 1, f"tag '{tag}' is retired; use '{replacement}'")
         elif problem := tag_problem(tag, spec.tags.lowercase_words):
             add("error", "tags", 1, problem)
+    # A controlled tag only when one fits (the blog's docs/writing.md): a
+    # post with none shows no related reading, a wrong one shows wrong ones.
     used = [t for t in map(str, tags) if t in controlled]
-    if not used:
-        add("error", "tags", 1, "at least one controlled tag is required")
     if len(used) > spec.tags.max_controlled:
         add(
             "warning",

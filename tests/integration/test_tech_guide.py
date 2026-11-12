@@ -441,9 +441,8 @@ class TestClassify:
         assert second["language"] == "English"
         assert guide.notes == []
 
-    async def test_classify_asks_again_without_a_controlled_tag(self) -> None:
+    async def test_classify_accepts_no_controlled_tag(self) -> None:
         from scholar_lens.domain.guide.models import TechGuide
-        from scholar_lens.domain.tags import NO_CONTROLLED_TAG
 
         good = (
             "Ray Serve deploys models as scalable online APIs; this guide covers "
@@ -452,18 +451,15 @@ class TestClassify:
         gen = _make_generator()
         gen.taxonomy_chain = MagicMock()
         gen.taxonomy_chain.ainvoke = AsyncMock(
-            side_effect=[
-                {"description": good, "controlled_tags": ""},
-                {"description": good, "controlled_tags": "B"},
-            ]
+            return_value={"description": good, "controlled_tags": ""}
         )
         guide = TechGuide(topic="Ray Serve", body="## Serve\n\nServing.")
         result = await gen.classify(
             guide, category_options=["A"], controlled_tags=["B", "C"]
         )
-        assert result["controlled_tags"] == "B"
-        second = gen.taxonomy_chain.ainvoke.await_args_list[1].args[0]
-        assert NO_CONTROLLED_TAG in second["repair_note"]
+        # None fits: no near-miss tag is forced, and the answer is not asked again.
+        assert result["controlled_tags"] == ""
+        assert gen.taxonomy_chain.ainvoke.await_count == 1
 
     async def test_a_description_still_marked_up_after_the_repair_is_dropped(
         self,
