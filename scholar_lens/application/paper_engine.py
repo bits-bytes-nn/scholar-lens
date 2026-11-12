@@ -61,7 +61,11 @@ from scholar_lens.domain.paper.evidence_paper import (
 from scholar_lens.domain.prompts import paper_evidence as prompts
 from scholar_lens.domain.specs.paper import PAPER_REVIEW_SPEC, paper_spec
 from scholar_lens.domain.usage_context import usage_stage
-from scholar_lens.domain.validation import description_problems, fit_description
+from scholar_lens.domain.validation import (
+    description_problems,
+    fit_description,
+    paper_page_title,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -468,7 +472,14 @@ class EvidencePaperEngine(PostEngine[PaperOutline, PaperSection, EvidencePaper])
                     schema=FinalText,
                 )
                 description = fit_description(" ".join(final.description.split()))
-                if not (problems := description_problems(description, tldr)):
+                problems = description_problems(
+                    description,
+                    tldr,
+                    page_title=paper_page_title(
+                        title, korean=self.settings.language == "Korean"
+                    ),
+                )
+                if not problems:
                     return final.model_copy(update={"description": description})
                 prompt = (
                     base

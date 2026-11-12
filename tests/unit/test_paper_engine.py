@@ -512,3 +512,17 @@ def test_the_minimum_total_is_in_the_posts_language(
     )
     engine.note_total_length(["## 절\n\n" + "가" * (chars - 1) + "."], None)
     assert bool(engine.notes) is short
+
+
+def test_a_description_no_longer_than_the_page_title_is_a_problem() -> None:
+    from scholar_lens.domain.validation import description_problems
+
+    description = "가" * 130
+    assert any(
+        "page title" in p
+        for p in description_problems(description, "", page_title="T" * 140)
+    )
+    assert not any(
+        "page title" in p
+        for p in description_problems(description, "", page_title="T" * 40)
+    )
