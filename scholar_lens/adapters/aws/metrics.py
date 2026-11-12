@@ -115,13 +115,7 @@ class MetricsEmitter:
             for stage, totals in usage.by_stage.items()
             for name, value in (
                 ("StageCostUSD", totals.cost_usd),
-                (
-                    "StageTokens",
-                    totals.input_tokens
-                    + totals.output_tokens
-                    + totals.cache_read_tokens
-                    + totals.cache_write_tokens,
-                ),
+                ("StageTokens", totals.total_tokens),
                 ("StageCalls", totals.calls),
                 ("StageFailedCalls", totals.failed_calls),
             )

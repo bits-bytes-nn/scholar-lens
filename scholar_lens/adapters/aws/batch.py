@@ -1,12 +1,6 @@
-"""Job contract shared by the CLI, the AWS Batch worker, and agent callers.
-
-A :class:`JobRequest` fully describes one artifact run. The CLI runs it locally
-or serialises it into the single ``request`` parameter of the Batch job
-definition (``worker --request Ref::request``), so the local and remote paths
-parse exactly the same object and cannot drift. Every run ends in a
-:class:`JobResult`, printed as JSON by the CLI and, for Batch runs, stored in S3
-so ``status`` can report it after the container is gone.
-"""
+"""The AWS Batch job queue: submit a :class:`~scholar_lens.domain.jobs.JobRequest`
+as the job definition's single ``request`` parameter, report a job's state
+with its stored result or last progress, and cancel a job."""
 
 from __future__ import annotations
 

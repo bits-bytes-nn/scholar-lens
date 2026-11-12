@@ -75,8 +75,7 @@ class TestOnLLMEnd:
         tracker.on_llm_end(
             _usage_metadata_response(1000, 1000, model_name="claude-opus-4-8")
         )
-        assert "unknown" not in tracker.per_model
-        assert "claude-opus-4-8" in tracker.per_model
+        assert {e.model_id for e in tracker.events} == {"claude-opus-4-8"}
         # Opus 4.8 list price $5 in + $25 out per MTok -> 0.03.
         assert tracker.estimated_cost_usd() == pytest.approx(0.03)
 

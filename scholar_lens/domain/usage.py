@@ -52,6 +52,15 @@ class UsageTotals(BaseModel):
     cache_write_tokens: int = 0
     cost_usd: float = 0.0
 
+    @property
+    def total_tokens(self) -> int:
+        return (
+            self.input_tokens
+            + self.output_tokens
+            + self.cache_read_tokens
+            + self.cache_write_tokens
+        )
+
     def add(self, event: UsageEvent) -> None:
         self.calls += 1
         self.failed_calls += event.outcome == "failed"
