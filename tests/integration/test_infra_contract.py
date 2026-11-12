@@ -320,3 +320,16 @@ def test_the_interpreter_name_fits_agentcore(
     project: str, stage: str, expected: str
 ) -> None:
     assert interpreter_name(project, stage) == expected
+
+
+def test_the_cost_alarm_follows_the_run_ceilings() -> None:
+    from scholar_lens.configs.config import Config
+    from scripts.deploy_infra import cost_alarm_usd
+
+    config = Config()
+    assert cost_alarm_usd(config) == 2 * max(
+        config.explanation.max_cost_usd or 0,
+        config.summary.max_cost_usd or 0,
+        config.tech_guide.max_cost_usd or 0,
+        config.survey.write_max_cost_usd or 0,
+    )

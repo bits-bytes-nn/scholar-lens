@@ -35,6 +35,7 @@ from scholar_lens.application.run import (
     RunContext,
     check_post_type,
     find_published_post,
+    keep_run_notes,
     load_translation_guideline,
     publish_artifact,
 )
@@ -346,7 +347,7 @@ async def run_survey_write(
         )
     except Exception as e:
         # Keep the plan's and the writer's notes on a failed run.
-        e.run_notes = [*plan_notes, *writer.notes]  # type: ignore[attr-defined]
+        keep_run_notes(e, [*plan_notes, *writer.notes])
         raise
     finally:
         reader.close()

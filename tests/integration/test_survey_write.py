@@ -31,7 +31,7 @@ from scholar_lens.adapters.files import LocalOrS3Files
 from scholar_lens.adapters.github import publisher as github_publisher
 from scholar_lens.adapters.github.publisher import Publisher
 from scholar_lens.adapters.scholarly.plan_index import PaperIndex
-from scholar_lens.application.run import RunContext
+from scholar_lens.application.run import RunContext, run_notes
 from scholar_lens.application.survey_engine import EvidenceSurvey
 from scholar_lens.application.use_cases import survey_write as survey_writer
 from scholar_lens.application.use_cases.survey_write import (
@@ -1025,7 +1025,7 @@ class TestStage:
         stage["engine"].error = RuntimeError("engine down")
         with pytest.raises(RuntimeError, match="engine down") as failed:
             run_stage(stage)
-        assert any("citation edge" in n for n in failed.value.run_notes)
+        assert any("citation edge" in n for n in run_notes(failed.value)[0])
 
 
 class TestReferenceArticles:

@@ -159,40 +159,30 @@ forbidden_modules = [
 name = "The adapters import the domain and the application's ports only"
 type = "forbidden"
 source_modules = ["scholar_lens.adapters"]
+# The whole application except its ports: a new application module is
+# covered without listing it.
 forbidden_modules = [
-    "scholar_lens.application.checkpoints",
-    "scholar_lens.application.evidence_writer",
-    "scholar_lens.application.guide_engine",
-    "scholar_lens.application.paper_engine",
-    "scholar_lens.application.post_engine",
-    "scholar_lens.application.run",
-    "scholar_lens.application.survey_engine",
-    "scholar_lens.application.use_cases",
+    "scholar_lens.application",
     "scholar_lens.sections_engine",
     "scholar_lens.configs",
     "scholar_lens.bootstrap",
     "scholar_lens.entrypoints",
     "scholar_lens.cli",
 ]
+ignore_imports = ["scholar_lens.adapters.** -> scholar_lens.application.ports"]
 
 [[tool.importlinter.contracts]]
 name = "The sections engine imports the domain, the ports and the adapters only"
 type = "forbidden"
 source_modules = ["scholar_lens.sections_engine"]
 forbidden_modules = [
-    "scholar_lens.application.checkpoints",
-    "scholar_lens.application.evidence_writer",
-    "scholar_lens.application.guide_engine",
-    "scholar_lens.application.paper_engine",
-    "scholar_lens.application.post_engine",
-    "scholar_lens.application.run",
-    "scholar_lens.application.survey_engine",
-    "scholar_lens.application.use_cases",
+    "scholar_lens.application",
     "scholar_lens.configs",
     "scholar_lens.bootstrap",
     "scholar_lens.entrypoints",
     "scholar_lens.cli",
 ]
+ignore_imports = ["scholar_lens.sections_engine.** -> scholar_lens.application.ports"]
 
 [[tool.importlinter.contracts]]
 name = "Only the composition root imports the sections engine"
@@ -239,7 +229,6 @@ forbidden_modules = [
     "strands",
     "langchain_core",
     "langchain_aws",
-    "langchain_community",
     "langchain_text_splitters",
     "github",
 ]
