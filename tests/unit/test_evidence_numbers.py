@@ -117,7 +117,8 @@ def test_cached_evidence_without_a_header_still_loads() -> None:
 # What the sources write: names with versions, and one real score.
 _SOURCES = [
     "We fine-tune Llama 3.1 and compare with Qwen 2.5, Gemini 1.5 and Claude 3.5 "
-    "Sonnet; experiments run on Python 3.12. Our model reaches 88.7% on MMLU.",
+    "Sonnet; experiments run on Python 3.12 (see Section 4.2). Our model "
+    "reaches 88.7% on MMLU.",
 ]
 
 
@@ -137,6 +138,9 @@ _SOURCES = [
         ("HumanEval 85.4 Pass@1을 얻었다.", ["85.4"]),
         ("BLEU 28.4를 얻었다.", ["28.4"]),
         ("Llama 3.1 70B와 128K 문맥을 쓴다.", ["70B", "128K"]),
+        # A pair's number elsewhere is still stated (Section 4.2 is no licence
+        # for a 4.2% claim).
+        ("정확도가 4.2% 올랐다.", ["4.2"]),
     ],
 )
 def test_a_version_in_a_name_is_no_stated_number(
@@ -148,7 +152,7 @@ def test_a_version_in_a_name_is_no_stated_number(
         stated_numbers,
     )
 
-    free = " ".join([free_numbers(), *named_versions(_SOURCES)])
+    free = free_numbers().with_names(named_versions(_SOURCES))
     assert stated_numbers(sentence, free) == stated
 
 
@@ -173,7 +177,7 @@ def test_a_cited_sentence_naming_a_versioned_model_is_not_cut() -> None:
         scope="MMLU",
         cell="MMLU 88.7%",
     )
-    free = " ".join([free_numbers(), *named_versions(_SOURCES)])
+    free = free_numbers().with_names(named_versions(_SOURCES))
     draft = (
         "## 결과\n\nClaude 3.5 Sonnet과 비교해 MMLU에서 88.7%를 기록했습니다 [[E1]].\n"
     )

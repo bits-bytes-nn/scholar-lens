@@ -160,46 +160,64 @@ def is_illustration(sentence: str) -> bool:
     return bool(_EXAMPLE_MARK.search(sentence))
 
 
-def free_numbers(extra: Iterable[object] = ()) -> str:
+class FreeNumbers(str):
+    """Numbers a sentence may state without evidence (the string the checks
+    read), and the name-version pairs the sources write (``names``,
+    lower-cased "llama 3.1"): such a pair in a sentence names a model or a
+    library, it states no number."""
+
+    names: frozenset[str] = frozenset()
+
+    def with_names(self, names: Iterable[str]) -> FreeNumbers:
+        out = FreeNumbers(self)
+        out.names = self.names | {n.lower() for n in names}
+        return out
+
+
+def free_numbers(extra: Iterable[object] = ()) -> FreeNumbers:
     """Numbers a sentence may state without evidence: small counts (0-10)
     and ``extra`` (a survey's publication years)."""
-    return " ".join([*(str(n) for n in range(11)), *(str(x) for x in extra)])
+    return FreeNumbers(
+        " ".join([*(str(n) for n in range(11)), *(str(x) for x in extra)])
+    )
 
 
 # Numbers glued into a name, not a stated quantity: digits joined to a
 # Latin word (ResNet-50, GPT-4o, T5, Llama-3.1-8B). A spaced version
-# ("Llama 3.1") is told from a score ("MMLU 86.4") by the sources instead:
+# ("Llama 3.1") is told from a score ("MMLU 86.4") by the sources:
 # :func:`named_versions`.
 _NAMED_NUMBER = re.compile(
     r"\b(?:[A-Za-z]{2,}[A-Za-z0-9]*-?|[A-Z])\d[\w.]*(?:-[A-Za-z0-9.]+)*"
 )
 # A capitalised Latin name and the dotted version after it, as sources
-# write models and libraries ("Llama 3.1", "Python 3.12", "Claude 3.5").
-_NAME_VERSION = re.compile(r"\b[A-Z][A-Za-z]+[ -](\d+\.\d+(?:\.\d+)?)\b")
+# write models and libraries ("Llama 3.1", "Python 3.12").
+_NAME_VERSION = re.compile(r"\b[A-Z][A-Za-z]+ \d+\.\d+(?:\.\d+)?\b")
 
 
 def named_versions(texts: Iterable[str]) -> list[str]:
-    """The versions the sources write after a name ("Llama 3.1" -> 3.1):
-    numbers a sentence may name a model or library with, not claims of its
-    own. A score after a benchmark name is a version only if the sources
-    write it so, and then it is sourced anyway."""
+    """The name-version pairs the sources write ("Llama 3.1"): a sentence
+    that writes the same pair names that model; the version alone, or the
+    pair's number elsewhere, is still a stated number."""
     found: dict[str, None] = {}
     for text in texts:
         for m in _NAME_VERSION.finditer(text):
-            found.setdefault(m.group(1), None)
+            found.setdefault(m.group(0), None)
     return list(found)
 
 
-def _claim_text(sentence: str) -> str:
-    """``sentence`` as its numbers are checked: markers, keys and glued
-    names out."""
-    return _NAMED_NUMBER.sub(" ", _plain(sentence))
+def _claim_text(sentence: str, free: str = "") -> str:
+    """``sentence`` as its numbers are checked: markers, keys, glued names
+    and the sources' name-version pairs (``free.names``) out."""
+    text = _NAMED_NUMBER.sub(" ", _plain(sentence))
+    for name in getattr(free, "names", ()):
+        text = re.sub(rf"(?i)\b{re.escape(name)}(?![\d.])", " ", text)
+    return text
 
 
 def stated_numbers(sentence: str, free: str) -> list[str]:
-    """The numbers a sentence states beyond ``free`` (years, small counts,
-    the sources' named versions), glued names left out."""
-    return unsourced_numbers(_claim_text(sentence), free)
+    """The numbers a sentence states beyond ``free`` (years, small counts),
+    names left out (:func:`_claim_text`)."""
+    return unsourced_numbers(_claim_text(sentence, free), free)
 
 
 # A table cell a writer left blank: fill it from the evidence or drop the
@@ -399,7 +417,7 @@ def section_problems(
         elif numbers and not example:
             support = _support(ids, ledger, passages)
             if missing := unsourced_numbers(
-                _claim_text(sentence), f"{support} {free_numbers}"
+                _claim_text(sentence, free_numbers), f"{support} {free_numbers}"
             ):
                 each(
                     "numbers_not_in_evidence",
@@ -571,7 +589,9 @@ def unsourced_number_sentences(
         if not numbers or is_illustration(sentence):
             continue
         support = _support(cited_ids(sentence), ledger, passages)
-        if unsourced_numbers(_claim_text(sentence), f"{support} {free_numbers}"):
+        if unsourced_numbers(
+            _claim_text(sentence, free_numbers), f"{support} {free_numbers}"
+        ):
             found.append(sentence)
     return found
 

@@ -823,7 +823,7 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         # A version the sources write after a name ("Llama 3.1") may name a
         # model in any sentence.
         if versions := named_versions(f"{e.quote} {e.claim}" for e in ledger):
-            self.free = " ".join([self.free, *versions])
+            self.free = self.free.with_names(versions)
         outline = await self.staged(
             "outline",
             [
