@@ -3,6 +3,14 @@ concern once; prompts compose the blocks they need."""
 
 from __future__ import annotations
 
+from scholar_lens.domain.validation import DESCRIPTION_LENGTH
+
+# The description length the blog checks (validation.DESCRIPTION_LENGTH),
+# as the prompts state it.
+DESCRIPTION_CHARS: str = (
+    f"{DESCRIPTION_LENGTH.start}-{DESCRIPTION_LENGTH.stop - 1} characters"
+)
+
 READER_PROFILE: str = """
 The reader is a general data scientist or ML engineer: fluent in standard deep
 learning (Transformers, attention, embeddings, Adam, cross-entropy, fine-tuning,

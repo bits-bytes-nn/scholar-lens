@@ -18,11 +18,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from scholar_lens.domain.conventions import load_local_conventions
+from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.domain.markdown.front_matter import split_front_matter
 from scholar_lens.domain.markdown.lint import undefined_macros
 from scholar_lens.domain.validation import ArtifactKind, validate_post
-from scholar_lens.src.section_loop import prose_chars
+from scholar_lens.sections_engine.section_loop import prose_chars
 
 _FENCE = re.compile(r"^(`{3,}|~{3,}).*?^\1[ \t]*$", re.M | re.S)
 _SECTION = re.compile(r"^## (.+)$", re.M)
@@ -69,7 +69,8 @@ def _fact_numbers(text: str) -> set[str]:
 
 def measure(markdown: str, kind: ArtifactKind) -> dict[str, Any]:
     front, body, _ = split_front_matter(markdown)
-    violations = validate_post(markdown, load_local_conventions(), kind)
+    conventions = load_local_conventions()
+    violations = validate_post(markdown, conventions, kind)
     sections = _sections(body)
     owners: dict[str, set[str]] = defaultdict(set)
     for title, text in sections.items():
@@ -83,7 +84,11 @@ def measure(markdown: str, kind: ArtifactKind) -> dict[str, Any]:
     k = max(prose, 1) / 1000
     images = _IMAGE.findall(body)
     math = _DISPLAY_MATH.findall(body)
-    macros = {m for m in undefined_macros() if any(f"\\{m}" in x for x in math)}
+    macros = {
+        m
+        for m in undefined_macros(conventions.math.defined_macros)
+        if any(f"\\{m}" in x for x in math)
+    }
     return {
         "prose_chars": prose,
         "errors": sum(v.level == "error" for v in violations),

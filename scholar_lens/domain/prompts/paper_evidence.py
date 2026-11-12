@@ -9,6 +9,7 @@ from scholar_lens.domain.prompts.rules import (
     CLAIM_SCOPE,
     COVERAGE_OUTLINE,
     COVERAGE_READING,
+    DESCRIPTION_CHARS,
     EARLIER_SECTIONS,
     ILLUSTRATION_MARK,
     MATH_RULES,
@@ -234,18 +235,23 @@ marker as it is. A claim the evidence does not support is narrowed to what
 the evidence says or deleted.
 """ + PRINCIPLES + MATH_RULES + SECURITY
 
-FINAL_SYSTEM = """
+FINAL_SYSTEM = (
+    """
 You write the framing of a finished post about a research paper, from its
 TL;DR and sections:
 - subtitle: the paper title translated into the post's language, keeping
   model and method names; if the language is the title's own, or the
   translation would equal the title, a short descriptive subtitle instead;
 - description: the post's search snippet, one plain-text paragraph of
-  120-160 characters in the post's language: no math, Markdown, links or
+  """
+    + DESCRIPTION_CHARS
+    + """ in the post's language: no math, Markdown, links or
   tags. It opens with the model or method name as the paper writes it, says
   what the paper does and its headline result; its numbers appear in the
   TL;DR.
-""" + SECURITY
+"""
+    + SECURITY
+)
 
 # The whole-post reads (prompts.rules composes them): what the post is, the
 # paper post's own consistency checks, and what every read ends with.

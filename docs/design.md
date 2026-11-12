@@ -308,7 +308,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 ### 4.4 리뷰·요약의 근거 장부 엔진
 
-`explanation.engine: evidence`(리뷰)나 `summary.engine: evidence`(요약)이면 3장·4.1절 대신 근거 장부 엔진이 글을 씁니다(`application/use_cases/paper.py::_generate_review`·`_generate_summary` → `application/use_cases/paper.py::write_paper_with_evidence` → `application/paper_engine.py::EvidencePaperEngine`). 기본값은 두 설정 모두 `sections`입니다. 수집(논문 소스, 파싱, 코드 저장소)은 같고, 인용 요약(`CitationSummarizer`)은 `sections` 리뷰만 만듭니다(`_prepare_paper_data(needs_citations=…)`). 평가 결과는 `docs/redesign.md` 7.4절입니다.
+`explanation.engine: evidence`(리뷰)나 `summary.engine: evidence`(요약)이면 3장·4.1절 대신 근거 장부 엔진이 글을 씁니다(`application/use_cases/paper.py::_generate_review`·`_generate_summary` → `application/use_cases/paper.py::write_paper_with_evidence` → `application/paper_engine.py::EvidencePaperEngine`). 기본값은 두 설정 모두 `sections`입니다. 수집(논문 소스, 파싱, 코드 저장소)은 같고, 인용 요약(`CitationSummarizer`)은 `sections` 리뷰만 만듭니다(`_prepare_paper_data(needs_citations=…)`). 평가 결과는 `eval/RESULTS.md` 4절입니다.
 
 1. **출처 문서**(`application/use_cases/paper.py::paper_documents`): 파싱한 논문 본문이 권한 `official`인 출처 문서 하나가 되고, 그림은 본문의 이미지 마커에서 가져옵니다. 코드베이스 요약이 있으면 `reference` 권한의 문서(`<arXiv ID>-code`)로 더합니다.
 2. **읽기**(역할 `read` = `reader_model_id`, 기본 Sonnet 5.5): 논문의 절을 연속한 묶음(리뷰 약 15,000자, 요약 약 40,000자, `reading_groups`)으로 나누고 묶음마다 Strands 에이전트 하나가 근거를 기록합니다(24턴, 50만 토큰, 동시 4개). 리뷰는 10–25개, 요약은 6–12개 안팎을 기록하라고 지시하며, 코드·설정 종류의 근거는 받지 않습니다(`_no_code_or_settings`). 기록은 서베이처럼 코드가 원문과 대조합니다(4.3.1절 4단계).

@@ -2,7 +2,7 @@
 
 Rubric for judging the **content quality of generated artifacts** — paper
 **reviews**, paper **summaries**, and **technical guides/blog posts** — as
-opposed to code quality (see `RUBRIC.md`). Used by an LLM-judge subagent.
+opposed to code quality. Used by an LLM-judge subagent.
 
 Every deduction MUST cite concrete evidence from the artifact (a quoted phrase
 or a line/section reference). Score each criterion 0–10.
@@ -70,19 +70,15 @@ be ≥ 9.0 (factual integrity is non-negotiable).
   methods, fabricated results, mis-attributed work, or broken/empty links. This
   is the highest-stakes criterion. Check explicitly (each found case is a
   deduction of at least 2):
-  - table and result numbers match the source table cell for cell (e.g.
-    respondent counts 272/122/199, not 27/21/22);
+  - table and result numbers match the source table cell for cell;
   - no future work the paper already does (an appendix derivation counts as
     done); future work comes only from the paper's Limitations/Future Work/
     Conclusion text;
-  - formulas from outside the paper are exactly right (PPO's clipped objective
-    is min(r·A, clip(r, 1−ε, 1+ε)·A); a partition function over length-L
-    sequences sums |V|^L terms);
+  - formulas from outside the paper are exactly right;
   - derivation steps agree in signs and variable definitions (the gradient's
     final form matches its intermediate variables);
   - no adjacent duplicate table rows;
-  - "all"/"모든" about a setting holds in every experiment (β = 0.1 except
-    where a task used another value);
+  - "all"/"모든" about a setting holds in every experiment;
   - math symbols: \mid for conditionals, \lvert\rvert for lengths, \|/\Vert
     only for norms and KL divergence.
   - each number is attributed to the exact model, variant and setting of its

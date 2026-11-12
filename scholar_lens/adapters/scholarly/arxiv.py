@@ -267,7 +267,7 @@ class ArxivHandler:
         # never retry a genuine "not found" — that is terminal.
         return tenacity.Retrying(
             wait=tenacity.wait_exponential_jitter(
-                initial=_ARXIV_FETCH_INITIAL_WAIT, max=_ARXIV_FETCH_MAX_WAIT
+                multiplier=_ARXIV_FETCH_INITIAL_WAIT, max=_ARXIV_FETCH_MAX_WAIT
             ),
             stop=tenacity.stop_after_attempt(self._max_attempts),
             # Retry transient API errors but NOT a genuine "not found"

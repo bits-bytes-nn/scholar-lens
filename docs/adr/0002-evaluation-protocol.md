@@ -1,7 +1,7 @@
 # 0002. 평가 절차: 가린 판정, 독립 세션, 고정 말뭉치, 생성 쌍
 
 - 상태: 채택
-- 관련: `docs/engine.md` 1장(평가), 7장, `docs/redesign.md` 7장
+- 관련: `docs/engine.md` 1장(평가), 7장, `docs/redesign.md` 7장(합격 기준), `eval/RESULTS.md`(결과)
 
 ## 배경
 
@@ -19,4 +19,4 @@
 ## 결과
 
 - 평가 한 번의 비용이 늘지만, 판정 편차 안의 차이로 기본값을 바꾸는 일을 막습니다.
-- 평가 실행 기록은 `eval/runs/`에 두고, 결과 요약은 `docs/redesign.md`에 남깁니다.
+- 평가 실행 기록은 `eval/runs/`에 두고, 결과 요약은 `eval/RESULTS.md`에 남깁니다.

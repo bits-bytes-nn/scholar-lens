@@ -58,6 +58,9 @@ pythonpath = ["."]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 addopts = "-ra --strict-markers"
+# A deprecation our own code triggers fails the suite; third-party ones
+# (SWIG types of PyMuPDF at import) do not.
+filterwarnings = ["error::DeprecationWarning:scholar_lens.*"]
 
 [tool.coverage.run]
 source = ["scholar_lens"]

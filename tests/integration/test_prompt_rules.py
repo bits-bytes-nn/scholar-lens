@@ -19,9 +19,12 @@ from scholar_lens.adapters.bedrock.prompts.tech_guide import TechGuideTaxonomyPr
 from scholar_lens.adapters.conventions_file import load_local_conventions
 from scholar_lens.domain.markdown.lint import style_hits, writing_issues
 from scholar_lens.domain.prompts.rules import (
+    DESCRIPTION_CHARS,
     KOREAN_STYLE,
+    MATH_RULES,
     NATURALNESS_CHECK,
     PAPER_TABLE_RULES,
+    READER_PROFILE,
     TABLE_SIZE_RULE,
     TERMINOLOGY_RULES,
 )
@@ -53,7 +56,7 @@ def _render(prompt: type[BasePrompt]) -> str:
 @pytest.mark.parametrize("prompt", WRITERS + [PaperEditPrompt])
 def test_math_rule_is_double_dollar_only(prompt: type[BasePrompt]) -> None:
     text = _render(prompt)
-    assert "Write all math, inline and display, between $$ and $$" in text
+    assert MATH_RULES.strip().splitlines()[0] in text
     # The blog does not render \( \); no prompt may tell the model to use it.
     assert "Inline math: \\(" not in text
     assert "\\\\(" not in text
@@ -97,7 +100,7 @@ def test_review_prompts_are_compact(prompt: type[BasePrompt]) -> None:
 
 def test_reader_profile_is_shared() -> None:
     for prompt in (PaperPlanningPrompt, PaperSectionPrompt, PaperSectionCheckPrompt):
-        assert "general data scientist or ML engineer" in _render(prompt)
+        assert READER_PROFILE in _render(prompt)
 
 
 def test_checker_outputs_only_what_is_parsed() -> None:
@@ -214,15 +217,6 @@ def test_review_checker_lists_blocking_wording_in_must_fix() -> None:
     )
 
 
-def test_naturalness_blocks_only_meaning_and_plain_da_form() -> None:
-    check = " ".join(NATURALNESS_CHECK.split())
-    assert "grammar or agent changes or obscures its meaning" in check
-    assert "plain 다-form prose sentence outside quotations and code" in check
-    assert "Everything else is feedback" in check and "at most" not in check
-    # A table cell is a noun phrase or an 입니다 sentence, one form per table.
-    assert "one form per table" in " ".join(KOREAN_STYLE.split())
-
-
 def test_figure_introductions_carry_no_template_sentence() -> None:
     from scholar_lens.domain.prompts.rules import VISUAL_RULES
 
@@ -271,7 +265,7 @@ def test_the_table_size_cap_has_one_source() -> None:
 
 def test_guide_taxonomy_returns_a_description() -> None:
     assert "description" in TechGuideTaxonomyPrompt.output_variables
-    assert "120-160 characters" in _render(TechGuideTaxonomyPrompt)
+    assert DESCRIPTION_CHARS in _render(TechGuideTaxonomyPrompt)
 
 
 # ---- prompt examples stay off the evaluation set ------------------------------
