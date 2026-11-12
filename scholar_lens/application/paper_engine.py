@@ -70,7 +70,7 @@ from scholar_lens.domain.validation import (
 logger = logging.getLogger(__name__)
 
 # Bump when the reader's prompt or the evidence schema changes meaning.
-PAPER_READER_VERSION = 3
+PAPER_READER_VERSION = 4
 _FREE_NUMBERS = free_numbers()
 
 PAPER_PROMPTS = WriterPrompts(

@@ -816,7 +816,8 @@ def _paper_id(source: str) -> str:
 
 
 def drop_unknown_images(markdown: str, known_sources: set[str]) -> str:
-    """Remove image links whose source is not a known figure.
+    """Remove image links whose source is not a known figure, and every
+    repeat of a figure already shown (a post shows each figure once).
 
     ``known_sources`` holds the artifact's real figure paths/URLs; a link is
     kept when its source is in that set, or when its file name is and it is a
@@ -833,20 +834,30 @@ def drop_unknown_images(markdown: str, known_sources: set[str]) -> str:
             (_host(source), _paper_id(source)), source
         )
     keep = _in_prose(markdown)
+    shown: set[str] = set()
+
+    def once(source: str, image: str) -> str:
+        if source in shown:
+            logger.warning("Dropping a repeat of image %r", source[:100])
+            return ""
+        shown.add(source)
+        return image
 
     def repl(m: re.Match[str]) -> str:
         src = m.group(2)
-        if not keep(m.start()) or src in known_sources:
+        if not keep(m.start()):
             return m.group(0)
+        if src in known_sources:
+            return once(src, m.group(0))
         origins = known_names.get(_file_name(src))
         if origins is not None and not _host(src):
-            return m.group(0)
+            return once(src, m.group(0))
         known = (origins or {}).get((_host(src), _paper_id(src)))
         if known is not None:
             # The same figure under another version or path: point at the
             # source that was actually fetched (another one may 404).
             head, sep, tail = m.group(0).partition("](")
-            return head + sep + tail.replace(src, known, 1)
+            return once(known, head + sep + tail.replace(src, known, 1))
         logger.warning("Dropping image with unknown source: %r", src[:100])
         return ""
 

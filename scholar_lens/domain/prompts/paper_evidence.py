@@ -67,7 +67,9 @@ Record, from your sections, in the post's language for `claim` and `cell`:
 - every defining equation, copied exactly as LaTeX from the text (equation);
 - results with numbers (number): `scope` names the model or variant,
   benchmark, setting and metric; `cell` a short noun phrase for a table cell
-  ("Whisper-small LibriSpeech WER 3.4"); a relative gain says relative;
+  ("Whisper-small LibriSpeech WER 3.4"); a relative gain says relative; a
+  setup value (training steps, learning rate, batch or data size) is no
+  number record: it goes in the `scope` of the result it produced;
 - ablations and analyses with what they show (finding or number);
 - limitations the paper states or its results show, and its stated future
   work (limitation);

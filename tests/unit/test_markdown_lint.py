@@ -305,6 +305,16 @@ class TestDropUnknownImages:
         # The same figure in another version points at the fetched source.
         assert out.strip() == "![a](https://arxiv.org/html/2106.09685v2/x1.png)"
 
+    def test_a_figure_is_shown_once(self) -> None:
+        known = {"https://arxiv.org/html/2106.09685v2/x1.png"}
+        md = (
+            "![first](https://arxiv.org/html/2106.09685v2/x1.png)\n\ntext\n\n"
+            "![again](https://arxiv.org/html/2106.09685v1/x1.png)"
+        )
+        out = drop_unknown_images(md, known)
+        # The repeat is caught after it is pointed at the fetched source.
+        assert "![first]" in out and "again" not in out and "text" in out
+
 
 class TestFillImageAlts:
     def test_caption_without_label_becomes_alt(self) -> None:
