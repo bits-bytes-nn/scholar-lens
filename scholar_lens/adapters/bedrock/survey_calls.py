@@ -41,7 +41,6 @@ from scholar_lens.domain.survey.references import (
     ReadReference,
     reference_excerpts,
 )
-from scholar_lens.domain.tags import controlled_tag_problems
 from scholar_lens.domain.usage_context import staged
 from scholar_lens.domain.validation import (
     description_markup,
@@ -279,12 +278,7 @@ class SurveyWriter(RetryableBase):
                 " ".join((result.get("description") or "").split())
             )
             result["description"] = description
-            if not (
-                problems := description_problems(description, body)
-                + controlled_tag_problems(
-                    result.get("controlled_tags"), controlled_tags
-                )
-            ):
+            if not (problems := description_problems(description, body)):
                 return result
             logger.warning(
                 "Survey finalization answer unusable (attempt %d): %s",

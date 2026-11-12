@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import html
 import re
-from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from scholar_lens.domain.conventions import GENERATED_SPECIFIC_TAGS, PostConventions
@@ -101,8 +100,8 @@ def normalize_tags(
     """Build the published tag list from the model's proposals.
 
     ``controlled`` proposals outside the closed list are dropped; a specific
-    tag that is itself a controlled tag moves to the controlled group. The
-    caller (the post validator) rejects a result without any controlled tag.
+    tag that is itself a controlled tag moves to the controlled group. A
+    result may have none (when none fits the post).
     """
     words = spec.tags.lowercase_words
     canonical_controlled = {_key(t): t for t in spec.tags.controlled}
@@ -183,19 +182,3 @@ def unsupported_tags(tags: list[str], text: str) -> list[str]:
             continue
         missing.append(tag)
     return missing
-
-
-NO_CONTROLLED_TAG = (
-    "controlled_tags has no value from controlled_tag_options; the blog "
-    "requires at least one, so copy the closest fit"
-)
-
-
-def controlled_tag_problems(answer: str | None, options: Sequence[str]) -> list[str]:
-    """The taxonomy answer's controlled-tag problem: none of its
-    comma-separated values is one of ``options`` (the blog lint requires at
-    least one controlled tag)."""
-    picked = {value.strip().lower() for value in (answer or "").split(",")}
-    return (
-        [] if picked & {option.lower() for option in options} else [NO_CONTROLLED_TAG]
-    )

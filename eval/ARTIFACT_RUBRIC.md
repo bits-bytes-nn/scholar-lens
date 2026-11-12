@@ -167,7 +167,8 @@ be ≥ 9.0 (factual integrity is non-negotiable).
 ## Taxonomy (paper posts)
 
 - **X1. Category and tags** — the topic category is one of the blog's topics;
-  tags are short and reusable: one controlled tag (a second only when the
+  tags are short and reusable: a controlled tag when one names the
+  post's topic, none rather than a near miss (a second only when the
   method or experiments are about it) and a few specific tags in the
   paper's own terms (an existing tag's spelling only when it names this
   paper's contribution), never a restatement of the title or a technique the

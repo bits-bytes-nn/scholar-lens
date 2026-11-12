@@ -89,7 +89,6 @@ from scholar_lens.domain.sources import (
     TagLookup,
     search_exclusions,
 )
-from scholar_lens.domain.tags import controlled_tag_problems
 from scholar_lens.domain.text import is_affirmative, is_placeholder
 from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.domain.usage_context import staged
@@ -614,12 +613,7 @@ class TechGuideGenerator(RetryableBase):
         for attempt in range(2):
             result = await self._classify(payload)
             description = " ".join((result.get("description") or "").split())
-            if not (
-                problems := description_problems(description, guide.body)
-                + controlled_tag_problems(
-                    result.get("controlled_tags"), controlled_tags
-                )
-            ):
+            if not (problems := description_problems(description, guide.body)):
                 break
             logger.warning(
                 "Guide taxonomy answer unusable (attempt %d): %s", attempt + 1, problems

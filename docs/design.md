@@ -249,7 +249,7 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 
 출처 권한은 근거 엔진의 읽기·집필·검증 프롬프트가 공유합니다(`domain/prompts/guide_evidence.py::SOURCE_AUTHORITY`). 각 출처는 공식 문서(official), 참고 자료(reference), 서드파티(third_party), 이전 버전 문서(older_docs)로 표시됩니다(`domain/research.py::source_label`). 명령, 플래그, API 이름, 기본값, 설정 키, 환경 변수, 메트릭 이름, 버전·플랫폼 지원은 공식 문서가 정합니다. 참고 자료와 서드파티 페이지(논문, 설계 문서, 메인테이너 글, 엔지니어링 글, 소스 코드)는 개념, 내부 구조, 설계 이유, 장단점, 연동 패턴의 근거가 될 수 있고, 1차 자료가 일반 튜토리얼보다 우선하며, 업체 페이지는 그 제품 자체의 사실에만 근거가 됩니다. 현재 동작을 두고 공식 문서와 어긋나면 공식 문서가 이기고, 이전 버전 문서는 현재 동작을 정하지 않으며 그 문서에만 나오는 메커니즘은 그 버전의 설계로 씁니다. 참고 자료는 출처 목록에 항상 들어갑니다.
 
-가이드 파이프라인(`application/use_cases/guide.py`)은 완성된 가이드를 `TechGuideGenerator.classify`로 분류해 블로그 주제 하나, 통제 태그(기본 하나로 가이드가 가르치는 주제, 절 전체가 다루는 주제일 때만 둘째), 세부 태그, `seo_title` 후보, 검색 설명(`description`: 제품·기법 이름으로 시작하는 120–160자 평문)을 받고, `domain/post_format.py::build_post_meta`가 spec에 맞게 확정합니다. 분류는 개요가 아니라 완성된 본문의 헤딩과 문단 첫 문장으로 하므로 본문에 없는 내용을 태그로 달지 않습니다. 설명은 발행 검증과 같은 규칙(`domain/validation.py::description_problems`)으로 확인하고, 어기면 문제를 알려 한 번 다시 묻습니다. 그래도 어기면 PR 메모로 남기며, 마크업이 있거나 제목보다 길지 않은 설명은 비워 블로그가 첫 문단에서 만들게 합니다. 목차는 블로그 레이아웃이 만들므로 본문에 따로 넣지 않습니다. 문서 사이트 같은 남의 이미지는 블로그로 복사하지 않고 원본 링크로 두며, 검증 warning으로 PR 체크리스트에 올라갑니다(7장).
+가이드 파이프라인(`application/use_cases/guide.py`)은 완성된 가이드를 `TechGuideGenerator.classify`로 분류해 블로그 주제 하나, 통제 태그(기본 하나로 가이드가 가르치는 주제, 맞는 것이 없으면 없음, 절 전체가 다루는 주제일 때만 둘째), 세부 태그, `seo_title` 후보, 검색 설명(`description`: 제품·기법 이름으로 시작하는 120–160자 평문)을 받고, `domain/post_format.py::build_post_meta`가 spec에 맞게 확정합니다. 분류는 개요가 아니라 완성된 본문의 헤딩과 문단 첫 문장으로 하므로 본문에 없는 내용을 태그로 달지 않습니다. 설명은 발행 검증과 같은 규칙(`domain/validation.py::description_problems`)으로 확인하고, 어기면 문제를 알려 한 번 다시 묻습니다. 그래도 어기면 PR 메모로 남기며, 마크업이 있거나 제목보다 길지 않은 설명은 비워 블로그가 첫 문단에서 만들게 합니다. 목차는 블로그 레이아웃이 만들므로 본문에 따로 넣지 않습니다. 문서 사이트 같은 남의 이미지는 블로그로 복사하지 않고 원본 링크로 두며, 검증 warning으로 PR 체크리스트에 올라갑니다(7장).
 
 ### 4.3 논문 서베이
 
@@ -374,7 +374,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 `adapters/documents/content_extractor.py::ContentExtractor`가 두 가지를 추출합니다.
 
-- 속성(`extract_attributes`): 제목, 저자, 발행 조직(`affiliation`), 규칙 파일의 주제 중 하나(`category`), 통제 태그(기본 하나로 논문 자신의 주제, 방법이나 실험이 다루는 주제일 때만 둘째), 세부 키워드, `seo_title`. 키워드 재사용 후보로 블로그 글에 이미 쓰인 태그를 넘기되, 기존 표기는 그 태그가 이 논문 자신의 기여를 가리킬 때만 쓰고 아니면 논문의 용어를 씁니다(`application/run.py::RunContext.require_blog_tags`).
+- 속성(`extract_attributes`): 제목, 저자, 발행 조직(`affiliation`), 규칙 파일의 주제 중 하나(`category`), 통제 태그(기본 하나로 논문 자신의 주제, 맞는 것이 없으면 없음, 방법이나 실험이 다루는 주제일 때만 둘째), 세부 키워드, `seo_title`. 키워드 재사용 후보로 블로그 글에 이미 쓰인 태그를 넘기되, 기존 표기는 그 태그가 이 논문 자신의 기여를 가리킬 때만 쓰고 아니면 논문의 용어를 씁니다(`application/run.py::RunContext.require_blog_tags`).
 - 인용(`extract_citations`, 리뷰만): 참고문헌을 페이지 단위로 추출하며 최대 `MAX_CITATION_PAGES`(20)회입니다. 모델이 적은 arXiv ID는 중복 제거 전에 페이지마다 arXiv 메타데이터 한 번의 일괄 조회로 확인합니다(`adapters/documents/content_extractor.py::verify_arxiv_ids`). 제목이 일치하고(`titles_match`), 인용의 제1저자 이름이 레코드 저자에 있고, 인용 연도가 arXiv 첫 버전보다 1년 넘게 이르지 않을 때만 ID를 남깁니다. 다른 논문의 ID, arXiv에 없는 ID, 형식이 틀린 ID(`2024.01234`처럼 YYMM의 월이 없는 것)는 버리고 인용은 ID 없이 남으며, arXiv에 닿지 못하면 그 페이지의 ID를 모두 버립니다. 이런 인용은 요약 단계가 제목으로 찾습니다. 레거시 리뷰는 인용 요약에 실린 링크(제목으로 찾은 논문)를 `ReviewText.link_sources`로 넘기고, 발행 단계가 논문의 출처와 함께 링크를 확인합니다(7장).
 
 인용 요약(`sections_engine/citation_summarizer.py::CitationSummarizer`)은 초록을 우선합니다. Crossref, OpenAlex(선택 API 키 `OPENALEX_API_KEY`를 `Authorization: Bearer`로 보냄. 키가 없으면 IP당 하루 약 100회 검색), Semantic Scholar(API 키가 있을 때만), arXiv 순서로 메타데이터를 찾고(`adapters/scholarly/metadata.py`, 속도 제한 포함, `Retry-After`가 60초를 넘으면 그 실행 동안 해당 제공자를 건너뜀), 제목 유사도 0.9 이상이고 버전 표기와 단어가 바뀌지 않은 경우(하이픈·영국식 철자 차이는 같은 단어)만 같은 논문으로 인정합니다(Crossref는 상위 5건 중 제목이 일치하는 레코드 가운데 제목 유사도가 가장 높은 것, OpenAlex는 상위 5건 중 첫 일치 결과). 제목의 내용어를 하나도 담지 않은 초록은 다른 논문의 것으로 보고 버리며, OpenAlex의 arXiv 레코드 초록은 믿지 않고 DOI의 arXiv ID로 arXiv에서 받습니다. 맞지 않는 초록은 요약하지 않으며, 초록도 본문도 찾지 못한 인용은 리뷰 노트(PR 체크리스트)에 올립니다. `prefer_full_text: true`면 arXiv 전문을 받습니다.
@@ -402,7 +402,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 | `types` | `categories[0]` 값. `paper: true`인 유형은 논문 글(`paper_author` 필요), `cover`가 있으면 그 표지 |
 | `topics` | `categories[1]` 값과 주제별 표지. 표지가 없으면 `/assets/images/default.jpg` |
 | `forbidden_keys` | front matter 금지 키(`author`, 블로그 플러그인이 정하는 `last_modified_at`) |
-| `tags.controlled` | 통제 태그 목록. 관련 글 연결의 기준 |
+| `tags.controlled` | 통제 태그 목록. 관련 글 연결의 기준. 맞는 태그가 없는 글은 붙이지 않습니다(관련 글 없음이 엉뚱한 관련 글보다 낫다는 블로그 `docs/writing.md` 규칙) |
 | `tags.lowercase_words` | 태그 안에서 소문자로 쓰는 기능어 |
 | `tags.aliases` | 퇴역 태그 → 대체 태그 |
 | `math.defined_macros` | 블로그 `head.html`이 MathJax에 정의한 매크로. 이 목록의 매크로는 미정의 매크로 경고(`domain/markdown/lint.py::undefined_macros`)에서 빠짐 |
@@ -441,7 +441,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 | `subtitle` | error | 논문 글에서 비었거나 제목과 같음 |
 | `seo-title` | error | 제목이 70자 초과인데 없음, 또는 `seo_title`이 70자 초과 |
 | `translation` | error | `lang`이 spec의 `languages`(`ko`/`en`)가 아님, 번역본에 `translation_id`가 없음, `translation_id`가 있는데 `lang`이 없음, 파일명(날짜 뒤)이 `<translation_id>`(한국어)·`<translation_id>-en`(영어)이 아님, `-en` 글에 `translation_id`가 없음, 블로그의 다른 글이 이 글을 `translation_id`로 가리키는데 이 글에 `translation_id`가 없음, 같은 `translation_id`의 같은 `lang` 글이 이미 있음 |
-| `tags` | error | 비어 있음, 퇴역 태그(대소문자 그대로 비교), 형식 위반(`[A-Za-z0-9][A-Za-z0-9.+-]*`가 아님, 첫 단어와 마지막 단어 사이의 기능어가 소문자가 아님; 블로그 lint 162-171행), 통제 태그 없음, 세부 태그 상한 초과 |
+| `tags` | error | 비어 있음, 퇴역 태그(대소문자 그대로 비교), 형식 위반(`[A-Za-z0-9][A-Za-z0-9.+-]*`가 아님, 첫 단어와 마지막 단어 사이의 기능어가 소문자가 아님; 블로그 lint 162-171행), 세부 태그 상한 초과 |
 | `tags` | warning | 통제 태그 3개 초과(논문에 없는 태그 구절은 `application/use_cases/paper.py::_tag_notes`가 PR 메모로 남김) |
 | `headings` | error | 본문 H1, 헤딩 레벨 건너뜀, 논문 글이 `## TL;DR`로 시작하지 않음, TL;DR이 비어 있음, 리뷰 TL;DR에 `###` 질문이 없음 |
 | `use-math` | error | `use_math`와 `$$` 존재 여부(`has_math`, 블로그 lint 292·330행의 판단)가 다름 |
