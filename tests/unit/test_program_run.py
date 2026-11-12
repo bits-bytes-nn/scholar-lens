@@ -400,3 +400,19 @@ def test_a_cells_pip_lines_install() -> None:
         "llama-index-core==0.12.0",
         "llama-index-llms-bedrock-converse",
     ]
+
+
+def test_an_excerpt_is_not_judged_by_the_static_check() -> None:
+    from scholar_lens.domain.program import python_code_problems
+
+    sections = [
+        (
+            "발췌",
+            _py(
+                "# excerpt: 앞 클래스의 머리만\nclass Translator:\n    # 본문은 앞과 같습니다"
+            ),
+            True,
+        ),
+        ("발췌2", _py("# excerpt\nresult = handle.remote(x)"), True),
+    ]
+    assert python_code_problems(sections) == []
