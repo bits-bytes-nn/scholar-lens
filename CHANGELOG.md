@@ -2,6 +2,15 @@
 
 Notable changes, newest first. Undated entries predate November 2026. Design decisions are recorded in [docs/adr/](./docs/adr/) and measurement results in [eval/RESULTS.md](./eval/RESULTS.md).
 
+- 2026-11-12: a review-and-cleanup pass.
+  - The guide sandbox check (`tech_guide.run_examples`) blames a post only for misusing the product's API: a wrong call signature of a name imported from the product, an import of a product name or submodule that does not exist, a product module's missing attribute, or an SDK's own parameter or service-name validation. Any other failure makes the check partial, shown as a PR note.
+  - A block marked `# excerpt` is never judged by the static code check.
+  - A survey drops figures that arXiv lists but does not serve before reading, so no section describes a figure that is not shown.
+  - A model's version ("Llama 3.1", "Claude 3.5 Sonnet") is no longer cut as an unsourced number when the sources write it after a name. A benchmark score still is.
+  - Headings: one claim-heading rule and one no-TL;DR-retelling rule for both paper engines. The sentence-heading check keeps only unambiguous endings.
+  - Data: arXiv retries only transient failures. arXiv figures have their own pace. A transient document-parse failure is retried before falling back to text only.
+  - Operations: the hourly cost alarm fires at twice the largest per-run ceiling (was a fixed $50). `JobResult.input_tokens` is documented as including cache tokens.
+  - Evaluation: `eval/sets/baseline.yaml` marks dev and confirm items. `eval/JUDGE.md` describes the pairwise blind protocol, and `eval/compare.py` applies it. Measurement history moved to `eval/RESULTS.md`. Evaluation posts are no longer committed.
 - 2026-11-11: a survey's comparison table no longer shows a figure a paper only cites as its result: the survey reader records only a paper's own measured results as numbers (a qualitative paper may have none; the ask for a missing number says so), and numbers of related-work, background and preliminaries sections stay in their section. The survey reader version is 9, so the next survey run reads its papers again once.
 - 2026-11-11: `tech_guide.run_examples` (default off) runs a guide's Python examples in reading order in an Amazon Bedrock AgentCore Code Interpreter sandbox without AWS credentials (Batch: the stack's custom interpreter with public network, so the docs' packages install; local: `tech_guide.code_interpreter_id` or AWS's system interpreter, which installs nothing). A block of a usage or operations section that fails because of its own code is fixed and run again; one still failing, a sandbox that could not run, or a run stopped by a missing credential, network or service is a PR note. The stack adds the interpreter (no cost while idle) and the job role may start, invoke and stop sessions on it only.
 - 2026-11-10: `status` of a running Batch job, or one that died without a result, shows its `progress` (current stage, model calls, estimated cost so far, last report time, Batch attempt), written by the worker to `<s3_prefix>/progress/<job_id>.json` at most every 30 seconds.
