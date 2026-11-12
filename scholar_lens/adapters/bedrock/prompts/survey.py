@@ -186,8 +186,10 @@ search description. Choose only from the lists you are given.
 
 - category: exactly one value copied from category_options, the closest fit.
 - controlled_tags: values copied from controlled_tag_options: one by
-  default, naming what the survey covers; none (left empty) when none names
-  it, never a near miss; a second only when whole lineages are about it.
+  default, naming what the survey covers, the entry its reader would browse
+  for; none (left empty) when no entry is that, never one for a field the
+  survey only uses or mentions; a second only when whole lineages are about
+  it.
 - keywords: up to 5 short reusable topic tags in English (1-4 words each)
   naming methods and ideas the survey covers; never restate the title.
 - description: the post's search snippet, one plain text paragraph of
@@ -202,7 +204,7 @@ search description. Choose only from the lists you are given.
 
 Respond in exactly this format:
 <category>...</category>
-<controlled_tags>Tag-One</controlled_tags>
+<controlled_tags>...</controlled_tags>
 <keywords>Keyword One, Keyword Two</keywords>
 <description>...</description>
 """

@@ -181,6 +181,33 @@ class TestSummaryEndToEnd:
         assert fetched == [ARXIV_FIGURE]
         assert "](/assets/images/" in body and "arxiv.org/html" not in body
 
+    async def test_a_post_with_no_fitting_controlled_tag_is_published(
+        self,
+        pipeline_env,
+        monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
+    ) -> None:
+        context, _ = pipeline_env
+        paper = _paper(controlled_tags=[])
+        monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(paper))
+        monkeypatch.setattr(
+            sections_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
+        )
+
+        outcome = await bootstrap.run_use_case(
+            context,
+            JobRequest(kind="summarize", source="2106.09685"),
+            TokenUsageTracker(),
+        )
+
+        post = Path(outcome.markdown_path).read_text(encoding="utf-8")
+        assert [
+            v
+            for v in validate_post(post, context.conventions, "summarize")
+            if v.level == "error"
+        ] == []
+        tags = next(ln for ln in post.splitlines() if ln.startswith("tags:"))
+        assert '"Low-Rank-Adaptation"' in tags and '"Quantization"' not in tags
+
     async def test_post_with_an_unknown_topic_is_blocked(
         self,
         pipeline_env,

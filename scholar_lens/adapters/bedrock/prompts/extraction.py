@@ -56,10 +56,10 @@ class AttributesExtractionPrompt(BasePrompt):
     5. CATEGORY: exactly one of these values, copied verbatim:
        {category_options}
     6. CONTROLLED_TAGS: values from this closed list, copied verbatim,
-       comma-separated: one by default, the paper's own topic; none (left
-       empty) when none names it, never a near miss; a second only when the
-       method or the experiments are about it, never a field the paper only
-       mentions:
+       comma-separated: one by default, the paper's own topic, the entry its
+       reader would browse for; none (left empty) when no entry is that,
+       never one for a field the paper only uses or mentions; a second only
+       when the method or the experiments are about it:
        {controlled_tags}
     7. KEYWORDS: at most 5 specific tags for the paper's own contributions
        (1-4 words each, e.g. "Knowledge Distillation", "Vector Search"). Use an
