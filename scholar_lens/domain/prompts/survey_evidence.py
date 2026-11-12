@@ -76,7 +76,7 @@ Record evidence the post needs about this paper, in the survey's language for
   it cites to set the scene (a product's user count, a market size, another
   work's score) is no number record (a finding, if the survey needs it), and
   neither is a setup value (training steps, learning rate, batch or data
-  size): it goes in the `scope` of the result it produced;
+  size): record it as a finding with its quote if the survey needs it;
 - limitations the paper states or its own results show (limitation; `cell` a
   noun phrase): a weakness of this paper's own method or evaluation, never a
   finding about other methods and never about what the text does not

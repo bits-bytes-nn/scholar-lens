@@ -202,10 +202,11 @@ _NAME_VERSION = re.compile(r"\b[A-Z][A-Za-z]+ \d+\.\d+(?:\.\d+)?\b")
 def named_versions(texts: Iterable[str], results: Iterable[str] = ()) -> list[str]:
     """The name-version pairs the sources write ("Llama 3.1"): a sentence
     that writes the same pair names that model; the version alone, or the
-    pair's number elsewhere, is still a stated number. A pair whose number
-    is a recorded result (``results``: the table cells of number evidence,
-    "MMLU 86.4") is a score, not a name, and is never exempt."""
-    scores = {n for cell in results for n in re.findall(r"\d+(?:\.\d+)?", cell)}
+    pair's number elsewhere, is still a stated number. ``texts`` are the
+    non-number evidence; ``results`` the number evidence (quote, claim and
+    cell), whose numbers are scores ("MMLU 86.4", "MT-Bench 8.46 대 8.17"):
+    a pair with one of them is never exempt."""
+    scores = {n for text in results for n in re.findall(r"\d+(?:\.\d+)?", text)}
     found: dict[str, None] = {}
     for text in texts:
         for m in _NAME_VERSION.finditer(text):
@@ -219,7 +220,7 @@ def _claim_text(sentence: str, free: str = "") -> str:
     and the sources' name-version pairs (``free.names``) out."""
     text = _NAMED_NUMBER.sub(" ", _plain(sentence))
     for name in getattr(free, "names", ()):
-        text = re.sub(rf"(?i)\b{re.escape(name)}(?![\d.])", " ", text)
+        text = re.sub(rf"(?i)\b{re.escape(name)}(?!\d|\.\d)", " ", text)
     return text
 
 

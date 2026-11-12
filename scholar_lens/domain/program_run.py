@@ -19,6 +19,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import shlex
 from collections.abc import Collection, Sequence
 
 from pydantic import BaseModel, field_validator
@@ -59,8 +60,11 @@ class BlockRun(BaseModel):
     index: int
     ok: bool
     error_type: str = ""
-    error_module: str = ""
     message: str = ""
+    # The modules of the traceback's frames, innermost first ("__main__":
+    # a block or a file of the working directory; import machinery left
+    # out): who raised it.
+    raised_in: list[str] = []
 
     @field_validator("message")
     @classmethod
@@ -126,9 +130,25 @@ _SHELL_INFO = frozenset({"", "bash", "sh", "shell", "zsh", "console", "terminal"
 _PIP = re.compile(
     r"(?:^|[\s;&|(])(?:uv\s+)?(?:python3?\s+-m\s+)?pip3?\s+install\s+(.+)"
 )
-# pip options that take a value (the value is not a requirement).
+# pip's and uv pip's options that take a value as the next word (the value
+# is not a requirement).
 _VALUED = frozenset(
     {
+        "--abi",
+        "--cache-dir",
+        "--exists-action",
+        "--implementation",
+        "--index-strategy",
+        "--keyring-provider",
+        "--log",
+        "--progress-bar",
+        "--python-version",
+        "--retries",
+        "--src",
+        "--timeout",
+        "--torch-backend",
+        "--trusted-host",
+        "--upgrade-strategy",
         "-r",
         "--requirement",
         "-c",
@@ -167,13 +187,17 @@ def _line_requirements(line: str) -> list[Requirement]:
     if not (m := _PIP.search(line)):
         return []
     out: list[Requirement] = []
-    words = re.split(r"\s*(?:&&|\|\||;|\|)\s*", m.group(1))[0].split()
+    command = re.split(r"\s*(?:&&|\|\||;|\|)\s*", m.group(1))[0]
+    try:
+        # Quotes keep a requirement whole ("ray[serve] >= 2.9").
+        words = shlex.split(command)
+    except ValueError:
+        words = [w.strip("'\"") for w in command.split()]
     skip = False
     for word in words:
         if skip:
             skip = False
             continue
-        word = word.strip("'\"")
         if word.startswith("-"):
             skip = word in _VALUED
             continue
@@ -289,6 +313,16 @@ class BlockTimeout(BaseException):
     pass
 def _sl_alarm(signum, frame):
     raise BlockTimeout("the block ran over {block_timeout_s}s")
+def _sl_where(e):
+    cwd, out, tb = _sl_os.getcwd() + _sl_os.sep, [], e.__traceback__
+    while tb is not None:
+        f = tb.tb_frame
+        name = f.f_code.co_filename
+        if not name.startswith("<frozen"):
+            mod = str(f.f_globals.get("__name__", ""))
+            out.append("__main__" if name.startswith(cwd) else mod)
+        tb = tb.tb_next
+    return out[::-1][:40]
 def _sl_text(e):
     try:
         return str(e)[:400]
@@ -343,8 +377,8 @@ for _sl_i, _sl_code in enumerate(_SL_CODES, 1):
             "index": _sl_i,
             "ok": False,
             "error_type": type(_sl_e).__name__,
-            "error_module": str(getattr(type(_sl_e), "__module__", "")),
             "message": _sl_text(_sl_e),
+            "raised_in": _sl_where(_sl_e),
         }}
     finally:
         _sl_signal.alarm(0)
@@ -399,7 +433,9 @@ def _product_names(
         for node in ast.walk(tree):
             if isinstance(node, ast.ImportFrom) and node.module:
                 if _is_product(node.module, products):
+                    # The error names the original ("Agent.__init__()").
                     imported |= {a.asname or a.name for a in node.names}
+                    imported |= {a.name for a in node.names}
             elif isinstance(node, ast.Import):
                 imported |= {
                     (a.asname or a.name).split(".")[0]
@@ -412,6 +448,15 @@ def _product_names(
                 rebound.add(node.name)
             elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
                 rebound.add(node.id)
+        # A product name called through its module ("serve.deployment(...)"
+        # fails as "deployment()").
+        imported |= {
+            node.attr
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Attribute)
+            and isinstance(node.value, ast.Name)
+            and node.value.id in imported
+        }
     return imported - rebound
 
 
@@ -426,16 +471,38 @@ def _quoted(message: str) -> list[str]:
     return message.split("'")[1::2]
 
 
+# The SDKs whose own validation of a call is the post's misuse.
+_SDK_MODULES = ("botocore", "boto3")
+
+
+def _raised_by_post(run: BlockRun, own: Collection[str]) -> bool:
+    """Whether the post's code raised it: the innermost frame outside the
+    ``own`` modules (the product's, raising for the call it got) is a block
+    or a file of the working directory, not another package that uses the
+    product (a plugin built for another version). No frames: the call."""
+    for module in run.raised_in:
+        if module == "__main__":
+            return True
+        if not _is_product(module, own):
+            return False
+    return True
+
+
 def blamed(run: BlockRun, products: Collection[str], product_names: set[str]) -> bool:
     """Whether ``run`` failed on the product's API itself (the module
-    docstring's four cases), whatever else the sandbox lacks."""
+    docstring's four cases), whatever else the sandbox lacks, raised by the
+    post's own code (:func:`_raised_by_post`)."""
     if run.ok:
         return False
     message = run.message
     lowered = message.lower()
     quoted = _quoted(message)
     if run.error_type in _SDK_CALL_ERRORS:
-        return any(phrase in lowered for phrase in _SDK_CALL_ERRORS[run.error_type])
+        return _raised_by_post(run, {*products, *_SDK_MODULES}) and any(
+            phrase in lowered for phrase in _SDK_CALL_ERRORS[run.error_type]
+        )
+    if not _raised_by_post(run, products):
+        return False
     if run.error_type == "TypeError":
         callee = _CALLEE.match(message)
         return bool(
@@ -489,7 +556,7 @@ def judge_run(
     outcomes: Sequence[BlockRun],
     product_modules: Collection[str],
     *,
-    exact: bool = True,
+    exact: bool,
 ) -> ProgramRun:
     """What running ``blocks`` (:func:`program_blocks`) showed: a finding
     for the first block of a runnable section that fails on the product's

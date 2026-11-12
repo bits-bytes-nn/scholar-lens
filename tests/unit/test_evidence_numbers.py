@@ -205,6 +205,22 @@ def test_a_recorded_score_is_never_a_name() -> None:
     assert stated_numbers("Llama 3.1을 기반으로 한다.", free) == []
 
 
+def test_every_score_a_number_record_quotes_stays_a_number() -> None:
+    from scholar_lens.domain.evidence_draft import (
+        free_numbers,
+        named_versions,
+        stated_numbers,
+    )
+
+    # A number record's cell holds one score; its quote holds the others.
+    results = ["MT-Bench 8.46 대 8.17, Chat-Arena-Hard 29.1 대 22.4 길이제어 승률 31.3"]
+    sources = ["We compare on MT-Bench 8.46 and Chat-Arena-Hard 29.1 using Llama 3.1."]
+    free = free_numbers().with_names(named_versions(sources, results))
+    assert stated_numbers("MT-Bench 8.46을 기록했다.", free) == ["8.46"]
+    assert stated_numbers("Hard 29.1로 앞선다.", free) == ["29.1"]
+    assert stated_numbers("We fine-tune Llama 3.1.", free) == []
+
+
 def test_a_marker_inside_link_text_keeps_the_link() -> None:
     from scholar_lens.domain.evidence_draft import MARKER
 

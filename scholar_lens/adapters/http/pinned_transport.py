@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 from urllib.parse import urlsplit, urlunsplit
 
@@ -90,6 +91,10 @@ class PinnedHTTPTransport(httpx.BaseTransport):
 
 # A name lookup longer than this is a dead resolver, not a slow page.
 _RESOLVE_TIMEOUT_S = 15.0
+# Lookups get their own threads: on the loop's default executor, which the
+# model clients' sync calls fill, the deadline would count the wait for a
+# free thread and fail healthy lookups.
+_RESOLVE_POOL = ThreadPoolExecutor(max_workers=8, thread_name_prefix="resolve")
 
 
 class PinnedAsyncHTTPTransport(httpx.AsyncBaseTransport):
@@ -112,7 +117,10 @@ class PinnedAsyncHTTPTransport(httpx.AsyncBaseTransport):
         # (httpx's timeouts start at the connection).
         try:
             original = await asyncio.wait_for(
-                asyncio.to_thread(_pin, request), _RESOLVE_TIMEOUT_S
+                asyncio.get_running_loop().run_in_executor(
+                    _RESOLVE_POOL, _pin, request
+                ),
+                _RESOLVE_TIMEOUT_S,
             )
         except TimeoutError as e:
             raise httpx.ConnectTimeout(

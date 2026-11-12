@@ -358,14 +358,14 @@ def test_a_finding_names_the_first_blamed_block_and_the_rest_limits_the_check() 
             "TypeError", "Agent.__init__() got an unexpected keyword argument 'bad'", 3
         ),
     ]
-    run = judge_run(blocks, outcomes, _PRODUCT)
+    run = judge_run(blocks, outcomes, _PRODUCT, exact=True)
     (finding,) = run.findings
     assert finding.section == "설정" and "NoCredentialsError" in run.limited
     # Off the docs' versions, the product's API may differ: nothing is blamed.
     assert not judge_run(blocks, outcomes, _PRODUCT, exact=False).findings
     # A section not meant to run is not blamed.
     blocks[2] = ("원리", blocks[2][1], False)
-    assert not judge_run(blocks, outcomes, _PRODUCT).findings
+    assert not judge_run(blocks, outcomes, _PRODUCT, exact=True).findings
 
 
 def test_a_callee_the_post_redefines_is_its_own() -> None:
@@ -378,7 +378,7 @@ def test_a_callee_the_post_redefines_is_its_own() -> None:
         "TypeError", "Agent.__init__() got an unexpected keyword argument 'a'", 3
     )
     outcomes = [BlockRun(index=1, ok=True), BlockRun(index=2, ok=True), failed]
-    assert not judge_run(blocks, outcomes, _PRODUCT).findings
+    assert not judge_run(blocks, outcomes, _PRODUCT, exact=True).findings
 
 
 def test_a_module_attribute_a_skipped_import_binds_is_not_blamed() -> None:
@@ -389,9 +389,9 @@ def test_a_module_attribute_a_skipped_import_binds_is_not_blamed() -> None:
     ]
     attr = _failed("AttributeError", "module 'strands' has no attribute 'storage'", 3)
     outcomes = [BlockRun(index=1, ok=True), _failed("KeyError", "'X'", 2), attr]
-    assert not judge_run(blocks, outcomes, _PRODUCT).findings
+    assert not judge_run(blocks, outcomes, _PRODUCT, exact=True).findings
     blocks[1] = ("설정", "import os\nos.environ['X']", True)
-    assert judge_run(blocks, outcomes, _PRODUCT).findings
+    assert judge_run(blocks, outcomes, _PRODUCT, exact=True).findings
 
 
 def test_a_cells_pip_lines_install() -> None:
@@ -416,3 +416,53 @@ def test_an_excerpt_is_not_judged_by_the_static_check() -> None:
         ("발췌2", _py("# excerpt\nresult = handle.remote(x)"), True),
     ]
     assert python_code_problems(sections) == []
+
+
+def test_a_package_that_uses_the_product_is_not_the_posts_misuse(
+    tmp_path: pytest.TempPathFactory,
+) -> None:
+    from pathlib import Path
+
+    site = Path(str(tmp_path)) / "site"
+    (site / "prod").mkdir(parents=True)
+    (site / "prod" / "__init__.py").write_text(
+        "class Agent:\n    def __init__(self, model):\n        self.model = model\n"
+    )
+    (site / "plugin").mkdir()
+    # A plugin built against another version of the product.
+    (site / "plugin" / "__init__.py").write_text(
+        "import prod\ndef make():\n    return prod.Agent(hooks=[])\n"
+    )
+    blocks = [
+        ("설치", f"import sys\nsys.path.insert(0, {str(site)!r})", False),
+        ("사용", "import plugin\nplugin.make()", True),
+        ("사용", "import prod\nprod.Agent(hooks=[])", True),
+    ]
+    mark = run_mark("t")
+    outcomes = read_outcomes(
+        _run(program_script([c for _, c, _ in blocks], block_timeout_s=20, mark=mark)),
+        mark,
+    )
+    assert [o.error_type for o in outcomes] == ["", "TypeError", "TypeError"]
+    found = judge_run(blocks, outcomes, {"prod"}, exact=True).findings
+    # Only the post's own call is blamed; it names the class through its module.
+    assert [f.block for f in found] == ["import prod\nprod.Agent(hooks=[])"]
+
+
+@pytest.mark.parametrize(
+    "line, names",
+    [
+        (
+            "uv pip install vllm --index-strategy first-index --torch-backend cpu",
+            [("vllm", "")],
+        ),
+        ("pip install --upgrade-strategy eager x", [("x", "")]),
+        ('pip install "ray[serve] >= 2.9"', [("ray", ">=2.9")]),
+    ],
+)
+def test_option_values_are_no_requirements(
+    line: str, names: list[tuple[str, str]]
+) -> None:
+    from scholar_lens.domain.program_run import command_installs
+
+    assert [(n, spec) for n, _, spec in command_installs(line)] == names

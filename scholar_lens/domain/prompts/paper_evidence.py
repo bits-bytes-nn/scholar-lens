@@ -11,6 +11,7 @@ from scholar_lens.domain.prompts.rules import (
     COVERAGE_READING,
     DESCRIPTION_CHARS,
     EARLIER_SECTIONS,
+    HEADING_STRUCTURE_RULES,
     ILLUSTRATION_MARK,
     MATH_RULES,
     NO_RETELLING_RULE,
@@ -50,7 +51,7 @@ How a good paper post on this blog is written:
   reports; elsewhere state the paper's content plainly.
 - Vary how a figure or table is introduced; never the same formula twice
   ("…를 보면 됩니다"), and avoid noun frames such as "~다는 점".
-""" + CLAIM_HEADING_RULE + NO_RETELLING_RULE
+""" + HEADING_STRUCTURE_RULES + CLAIM_HEADING_RULE + NO_RETELLING_RULE
 
 READER_SYSTEM = """
 You read part of one research paper for a post about it and record the
@@ -69,7 +70,7 @@ Record, from your sections, in the post's language for `claim` and `cell`:
   benchmark, setting and metric; `cell` a short noun phrase for a table cell
   ("Whisper-small LibriSpeech WER 3.4"); a relative gain says relative; a
   setup value (training steps, learning rate, batch or data size) is no
-  number record: it goes in the `scope` of the result it produced;
+  number record: record it as a finding with its quote;
 - ablations and analyses with what they show (finding or number);
 - limitations the paper states or its results show, and its stated future
   work (limitation);

@@ -1110,13 +1110,6 @@ def _declarative(word: str) -> bool:
     return final in (4, 20) or before == "니" or before in _PREDICATE_BEFORE_DA
 
 
-# Endings of a word before a verb: a subject or object particle or a
-# connective ("데이터를 판다", "옮겨 간다"), not a noun's company ("카메라와").
-_BEFORE_A_VERB = re.compile(
-    r"(?:[을를이가은는도로에]|에서|[고게겨워해려쳐져혀돼봐줘아어서])$"
-)
-
-
 def _question_in_nga(word: str) -> bool:
     """A question in "~ㄴ가?" ("다른가?", "필요한가?"): the question mark is
     required, as nouns end alike ("전문가")."""
@@ -1127,12 +1120,12 @@ def _question_in_nga(word: str) -> bool:
 
 
 def _is_sentence_heading(text: str) -> bool:
-    """Whether a heading reads as a Korean sentence, judged on unambiguous
-    endings only: a polite ending ("~니다", "~요", "~죠"), a "~ㄴ가?"
-    question (a TL;DR's question headings are its own), a past tense
-    "~었다", or a "~다" predicate after a particle or connective
-    ("데이터를 판다"). A lone word that may be a noun ("판다", "우간다") is
-    left to the section review, which reads the heading in context."""
+    """Whether a heading reads as a Korean sentence: a polite ending
+    ("~니다", "~요", "~죠"), a "~ㄴ가?" question (a TL;DR's question headings
+    are its own), or a declarative "~다" ending a heading of more than one
+    word ("배치를 다시 짠다", "성격이 다른 작업이다") or in the past tense
+    ("바꿨다"). A lone word that may be a noun ("판다", "우간다") is left to
+    the section review, which reads the heading in context."""
     words = text.split()
     if not words:
         return False
@@ -1144,7 +1137,7 @@ def _is_sentence_heading(text: str) -> bool:
         return False
     before = bare[-2]
     past = (ord(before) - ord("가")) % 28 == 20  # a final ㅆ: "바꿨다"
-    return past or (len(words) > 1 and bool(_BEFORE_A_VERB.search(words[-2])))
+    return past or len(words) > 1
 
 
 def ends_in_plain_declarative(text: str) -> bool:
