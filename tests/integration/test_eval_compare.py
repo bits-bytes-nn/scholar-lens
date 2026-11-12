@@ -41,6 +41,8 @@ def test_only_confirm_items_decide_and_bad_runs_fail(tmp_path: Path) -> None:
         _judge(tmp_path, "b", s, "X")  # old wins b
     assert compare(tmp_path, {"a"})["decision"] == "new"
     assert compare(tmp_path, {"a"})["items"]["b"]["decides"] is False
+    with pytest.raises(ValueError, match="not judged: c"):
+        compare(tmp_path, {"a", "c"})
     _judge(tmp_path, "b", 3, "X")
     with pytest.raises(ValueError, match="4 sessions"):
         compare(tmp_path, {"a"})

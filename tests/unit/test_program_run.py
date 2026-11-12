@@ -457,6 +457,7 @@ def test_a_package_that_uses_the_product_is_not_the_posts_misuse(
             [("vllm", "")],
         ),
         ("pip install --upgrade-strategy eager x", [("x", "")]),
+        ("uv pip install -p 3.12 --group dev x", [("x", "")]),
         ('pip install "ray[serve] >= 2.9"', [("ray", ">=2.9")]),
     ],
 )
@@ -466,3 +467,31 @@ def test_option_values_are_no_requirements(
     from scholar_lens.domain.program_run import command_installs
 
     assert [(n, spec) for n, _, spec in command_installs(line)] == names
+
+
+def test_the_products_call_through_the_standard_library_is_still_its_own(
+    tmp_path: pytest.TempPathFactory,
+) -> None:
+    from pathlib import Path
+
+    site = Path(str(tmp_path)) / "site"
+    (site / "prod").mkdir(parents=True)
+    # The product runs the call on a thread, as SDKs do.
+    (site / "prod" / "__init__.py").write_text(
+        "from concurrent.futures import ThreadPoolExecutor\n"
+        "def work(model):\n    return model\n"
+        "def submit(fn, **kw):\n"
+        "    with ThreadPoolExecutor(1) as pool:\n"
+        "        return pool.submit(fn, **kw).result()\n"
+    )
+    blocks = [
+        ("설치", f"import sys\nsys.path.insert(0, {str(site)!r})", False),
+        ("사용", "import prod\nprod.submit(prod.work, modle=1)", True),
+    ]
+    mark = run_mark("t")
+    outcomes = read_outcomes(
+        _run(program_script([c for _, c, _ in blocks], block_timeout_s=20, mark=mark)),
+        mark,
+    )
+    assert "concurrent.futures.thread" not in outcomes[1].raised_in
+    assert judge_run(blocks, outcomes, {"prod"}, exact=True).findings

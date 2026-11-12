@@ -134,7 +134,17 @@ _PIP = re.compile(
 # is not a requirement).
 _VALUED = frozenset(
     {
+        "-p",
         "--abi",
+        "--default-index",
+        "--exclude-newer",
+        "--group",
+        "--index",
+        "--no-binary",
+        "--only-binary",
+        "--prerelease",
+        "--report",
+        "--resolution",
         "--cache-dir",
         "--exists-action",
         "--implementation",
@@ -313,14 +323,20 @@ class BlockTimeout(BaseException):
     pass
 def _sl_alarm(signum, frame):
     raise BlockTimeout("the block ran over {block_timeout_s}s")
+_SL_CWD = _sl_os.getcwd() + _sl_os.sep
+_SL_STDLIB = frozenset(getattr(_sl_sys, "stdlib_module_names", ()))
 def _sl_where(e):
-    cwd, out, tb = _sl_os.getcwd() + _sl_os.sep, [], e.__traceback__
+    # The standard library (threads, wrappers, importlib) passes a call on;
+    # who raised is the package around it.
+    out, tb = [], e.__traceback__
     while tb is not None:
         f = tb.tb_frame
         name = f.f_code.co_filename
-        if not name.startswith("<frozen"):
-            mod = str(f.f_globals.get("__name__", ""))
-            out.append("__main__" if name.startswith(cwd) else mod)
+        mod = str(f.f_globals.get("__name__", ""))
+        if name.startswith(_SL_CWD):
+            out.append("__main__")
+        elif not name.startswith("<frozen") and mod.split(".")[0] not in _SL_STDLIB:
+            out.append(mod)
         tb = tb.tb_next
     return out[::-1][:40]
 def _sl_text(e):

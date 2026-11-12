@@ -53,14 +53,17 @@ def compare(run: Path, confirm: set[str]) -> dict[str, Any]:
     the totals and the decision over the ``confirm`` items.
 
     Raises:
-        ValueError: an item without exactly three sessions, or a preference
-            the mapping does not resolve.
+        ValueError: a confirm item not judged, an item without exactly three
+            sessions, or a preference the mapping does not resolve.
     """
     mapping = json.loads((run / "blind-mapping.json").read_text(encoding="utf-8"))
     items: dict[str, Any] = {}
     totals: Counter[str] = Counter()
     lost_on_f: set[str] = set()
-    for item, sessions in _sessions(run).items():
+    judged = _sessions(run)
+    if missing := sorted(confirm - set(judged)):
+        raise ValueError(f"confirm items not judged: {', '.join(missing)}")
+    for item, sessions in judged.items():
         if len(sessions) != SESSIONS:
             raise ValueError(f"{item}: {len(sessions)} sessions, need {SESSIONS}")
         votes: Counter[str] = Counter()
