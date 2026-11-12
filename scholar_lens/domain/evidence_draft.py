@@ -167,12 +167,16 @@ def free_numbers(extra: Iterable[object] = ()) -> str:
 
 
 # Numbers that are part of a name, not a stated quantity: digits glued to a
-# Latin word (ResNet-50, GPT-4o, T5, Llama-3.1-8B), a dotted version after a
-# capitalised Latin name (Claude 3.5 Sonnet, Python 3.12), and a parameter
-# count right after such a name (Llama 3.1 70B, Llama 2 7B).
+# Latin word (ResNet-50, GPT-4o, T5, Llama-3.1-8B), and a version between a
+# capitalised Latin name and a name word or a parameter count (Claude 3.5
+# Sonnet, Llama 3.1 70B, Llama 2 7B).
 _NAMED_NUMBER = re.compile(
     r"\b(?:[A-Za-z]{2,}[A-Za-z0-9]*-?|[A-Z])\d[\w.]*(?:-[A-Za-z0-9.]+)*"
-    r"|\b[A-Z][A-Za-z]+(?: \d+(?:\.\d+)+| \d+(?= \d+(?:\.\d+)?[BM](?![A-Za-z0-9])))"
+    # A spaced version counts as a name only when a name word or a size
+    # follows it: "Claude 3.5 Sonnet", "Llama 3.1 70B", "Llama 2 7B" (and not
+    # "MMLU 86.4", a score).
+    r"|\b[A-Z][A-Za-z]+ \d+(?:\.\d+)*"
+    r"(?= [A-Z][a-z]| \d+(?:\.\d+)?[BM](?![A-Za-z0-9]))"
     r"(?: \d+(?:\.\d+)?[BM](?![A-Za-z0-9]))?"
 )
 

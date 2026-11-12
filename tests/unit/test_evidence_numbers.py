@@ -119,7 +119,12 @@ def test_cached_evidence_without_a_header_still_loads() -> None:
     [
         ("Claude 3.5 Sonnet을 기준 모델로 삼는다.", []),
         ("ResNet-50과 T5, Llama-3.1-8B를 비교했다.", []),
-        ("Python 3.12에서 Llama 2 7B를 돌린다.", []),
+        ("Llama 2 7B를 돌린다.", []),
+        # A score after a benchmark name is stated, not part of a name.
+        ("GPT-4o는 MMLU 86.4%를 기록했다.", ["86.4"]),
+        ("HumanEval 85.4%로 올랐다.", ["85.4"]),
+        ("BLEU 28.4를 얻었다.", ["28.4"]),
+        ("Accuracy 92.35를 보였다.", ["92.35"]),
         ("Llama 3.1 70B와 128K 문맥을 쓴다.", ["128K"]),
         ("GPT-4o가 MMLU에서 88.7을 얻었다.", ["88.7"]),
         ("Top-1 정확도는 76.5%다.", ["76.5"]),

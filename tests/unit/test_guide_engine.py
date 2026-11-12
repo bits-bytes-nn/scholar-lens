@@ -1385,3 +1385,20 @@ def test_code_the_static_fix_cleans_is_run_after_it() -> None:
     out = asyncio.run(engine.review_post(_outline(), ledger, written))
     assert "json.dumps(payload)" in out[1][1]
     assert len(runner.programs) == 1 and "json.dumps(payload)" in runner.programs[0]
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Install it with `pip install strands-agents`.",
+        "`pip install strands-agents`",
+        "!pip install strands-agents",
+        "(.venv) $ pip install strands-agents",
+        "- pip install strands-agents",
+    ],
+)
+def test_a_docs_pages_pip_command_is_read_in_any_usual_form(line: str) -> None:
+    from scholar_lens.domain.guide.evidence_guide import install_requirements
+
+    assert install_requirements(line) == [("strands-agents", frozenset())]
+    assert install_requirements("Run pip install the SDK if needed.") == []

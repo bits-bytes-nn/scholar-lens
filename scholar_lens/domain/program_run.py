@@ -215,22 +215,27 @@ def post_installs(markdown: str) -> list[Requirement]:
     ]
 
 
-# A line that is a pip command (after an optional "$ " prompt): what a docs
-# page's text, fenced or not, installs; a sentence mentioning pip is not one.
-_COMMAND_LINE = re.compile(
-    r"^\s*(?:\$\s+)?(?:uv\s+)?(?:python3?\s+-m\s+)?pip3?\s+install\s"
-)
+# A line that is a pip command once its list marker, shell prompt or
+# notebook prefix is off ("- ", "$ ", "(.venv) $ ", "!", "%").
+_COMMAND_LINE = re.compile(r"^(?:uv\s+)?(?:python3?\s+-m\s+)?pip3?\s+install\s")
+_LINE_LEAD = re.compile(r"^\s*(?:[-*+]\s+)?(?:\(\S+\)\s*)?(?:\$\s*)?[!%]?")
+_CODE_SPAN = re.compile(r"`([^`\n]+)`")
 
 
 def command_installs(text: str) -> list[Requirement]:
-    """What the lines of ``text`` that are pip commands install (a docs
-    page whose code may have lost its fences)."""
-    return [
-        r
-        for line in text.splitlines()
-        if _COMMAND_LINE.match(line)
-        for r in _line_requirements(line)
-    ]
+    """What a docs page's pip commands install: a line that is one (its
+    code may have lost its fences), and an inline code span that is one
+    ("Install it with `pip install x`"); a sentence that only mentions pip
+    is not read."""
+    out: list[Requirement] = []
+    for line in text.splitlines():
+        commands = [m.group(1) for m in _CODE_SPAN.finditer(line)]
+        commands.append(_LINE_LEAD.sub("", line, count=1))
+        for command in commands:
+            command = _LINE_LEAD.sub("", command, count=1)
+            if _COMMAND_LINE.match(command):
+                out += _line_requirements(command)
+    return out
 
 
 def run_requirements(pins: Sequence[tuple[str, str]], markdown: str) -> list[str]:

@@ -12,6 +12,7 @@ primitive is the right tool and composes with concurrent callers.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import math
 import threading
@@ -60,6 +61,18 @@ class RateLimiter:
             # Sleep outside the lock so other threads can refill/observe.
             self._sleep(min(wait, self.per))
 
+    async def acquire_async(self) -> None:
+        """:meth:`acquire` for a coroutine: waits on the event loop, so many
+        paced coroutines hold no worker thread while they wait."""
+        while True:
+            with self._lock:
+                now = self._monotonic()
+                wait = self._time_until_available(now)
+                if wait <= 0:
+                    self._tokens -= 1
+                    return
+            await asyncio.sleep(min(wait, self.per))
+
     def penalize(self, retry_after_seconds: float) -> None:
         """Honour a server ``Retry-After``: block all callers until it elapses."""
         if retry_after_seconds <= 0:
@@ -97,6 +110,18 @@ class RateLimiter:
 # arXiv asks for about one request every 3 seconds: one limiter for the whole
 # process (the arXiv API client, citation fetches and the guide's arXiv pages).
 ARXIV_RATE_LIMITER = RateLimiter(rate=1.0, per=3.0, name="arxiv")
+# arXiv's static files (an HTML paper's figures): a pace of their own, so a
+# paper's figures do not wait three seconds each behind the API's pace; a
+# 429 there holds both (arxiv_asset_penalty).
+ARXIV_ASSET_LIMITER = RateLimiter(rate=4.0, per=1.0, name="arxiv-assets")
+
+
+def arxiv_asset_penalty(retry_after_seconds: float) -> None:
+    """A Retry-After from arXiv's static files holds its API too."""
+    ARXIV_ASSET_LIMITER.penalize(retry_after_seconds)
+    ARXIV_RATE_LIMITER.penalize(retry_after_seconds)
+
+
 # Penalty when an arXiv 429 carries no Retry-After header (arXiv usually omits
 # it).
 _ARXIV_429_FALLBACK_RETRY_SECONDS: float = 30.0

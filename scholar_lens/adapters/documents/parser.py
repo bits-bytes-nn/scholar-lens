@@ -14,6 +14,7 @@ from urllib.parse import urljoin
 import boto3
 import httpx
 import pymupdf
+import tenacity
 from bs4 import BeautifulSoup, Tag
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import Runnable
@@ -29,9 +30,11 @@ from scholar_lens.adapters.documents.html import (
 from scholar_lens.adapters.documents.images import is_svg, svg_to_png
 from scholar_lens.adapters.http.pinned_transport import PinnedAsyncHTTPTransport
 from scholar_lens.adapters.http.rate_limit import (
+    ARXIV_ASSET_LIMITER,
     ARXIV_RATE_LIMITER,
     ARXIV_RETRIES,
     RateLimiter,
+    arxiv_asset_penalty,
     arxiv_retry_after_seconds,
     arxiv_retry_hold,
     is_retryable_status,
@@ -144,11 +147,11 @@ class FigureReader(RetryableBase):
         if path.startswith(("http://", "https://")):
             # Figure URLs come from untrusted page content: the pinned
             # transport validates every hop against the SSRF guard. arXiv's
-            # figures share its process-wide pace with its pages.
+            # figures keep arXiv's pace for static files.
             arxiv = is_arxiv_host(path)
             try:
                 if arxiv:
-                    await asyncio.to_thread(ARXIV_RATE_LIMITER.acquire)
+                    await ARXIV_ASSET_LIMITER.acquire_async()
                 async with httpx.AsyncClient(
                     timeout=DEFAULT_TIMEOUT, transport=PinnedAsyncHTTPTransport()
                 ) as client:
@@ -159,7 +162,7 @@ class FigureReader(RetryableBase):
                 raise FigureParseError(f"Unsafe image URL '{path}': {e}") from e
             except httpx.HTTPError as e:
                 if arxiv and isinstance(e, httpx.HTTPStatusError):
-                    ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
+                    arxiv_asset_penalty(arxiv_retry_after_seconds(e))
                 raise FigureParseError(f"HTTP error for image '{path}': {e}") from e
         else:
             try:
@@ -580,6 +583,12 @@ def _caption_text(caption: Tag) -> str:
     return " ".join(extract_text_from_html(str(caption)).split())
 
 
+def _transient_parse_error(exc: BaseException) -> bool:
+    if isinstance(exc, httpx.HTTPStatusError):
+        return is_retryable_status(exc.response.status_code)
+    return isinstance(exc, (httpx.ConnectError, httpx.RemoteProtocolError))
+
+
 class PDFParser(RichParser):
     FIGURE_CATEGORIES = frozenset({"chart", "figure"})
 
@@ -689,10 +698,18 @@ class PDFParser(RichParser):
         except (OSError, json.JSONDecodeError) as e:
             raise ContentParseError(f"Failed to load cached response: {e}") from e
 
-    @RetryableBase._retry("document_parse")
+    @tenacity.retry(
+        # A 429, a 5xx or a dropped connection is asked again, twice; a read
+        # timeout is not (the parse may simply take longer, and every try is
+        # billed): the text-only fallback follows.
+        retry=tenacity.retry_if_exception(_transient_parse_error),
+        stop=tenacity.stop_after_attempt(3),
+        wait=tenacity.wait_exponential_jitter(multiplier=2, max=20),
+        reraise=True,
+    )
     async def _post_document(self, name: str, data: bytes) -> dict[str, Any]:
-        """The parse API's answer; a 429, 5xx or timeout is asked again (the
-        shared retry policy), so one blip does not cost the figures."""
+        """The parse API's answer; a transient failure is asked again, so one
+        blip does not cost the figures."""
         response = await self.async_client.post(
             AppConstants.External.UPSTAGE_DOCUMENT_PARSE.value,
             headers={"Authorization": f"Bearer {self.api_key}"},

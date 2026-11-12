@@ -90,8 +90,8 @@ CLAIM_HEADING_RULE: str = """
 
 # The TL;DR opens the post: the body does not retell it.
 NO_RETELLING_RULE: str = """
-- Never retell the TL;DR, abstract or headline results up front: start with
-  the problem; each result goes where it is explained.
+- After the TL;DR, never retell it, the abstract or the headline results up
+  front: start with the problem; each result goes where it is explained.
 """
 
 HEADING_STRUCTURE_RULES: str = """
