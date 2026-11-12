@@ -166,9 +166,22 @@ def free_numbers(extra: Iterable[object] = ()) -> str:
     return " ".join([*(str(n) for n in range(11)), *(str(x) for x in extra)])
 
 
+# Numbers that are part of a name, not a stated quantity: digits glued to a
+# Latin word (ResNet-50, GPT-4o, T5, Llama-3.1-8B), a dotted version after a
+# capitalised Latin name (Claude 3.5 Sonnet, Python 3.12), and a parameter
+# count right after such a name (Llama 3.1 70B, Llama 2 7B).
+_NAMED_NUMBER = re.compile(
+    r"\b(?:[A-Za-z]{2,}[A-Za-z0-9]*-?|[A-Z])\d[\w.]*(?:-[A-Za-z0-9.]+)*"
+    r"|\b[A-Z][A-Za-z]+(?: \d+(?:\.\d+)+| \d+(?= \d+(?:\.\d+)?[BM](?![A-Za-z0-9])))"
+    r"(?: \d+(?:\.\d+)?[BM](?![A-Za-z0-9]))?"
+)
+
+
 def stated_numbers(sentence: str, free: str) -> list[str]:
-    """The numbers a sentence states beyond ``free`` (years, small counts)."""
-    return unsourced_numbers(_plain(sentence), free)
+    """The numbers a sentence states beyond ``free`` (years, small counts),
+    names left out (:data:`_NAMED_NUMBER`: a model or library version is no
+    claim)."""
+    return unsourced_numbers(_NAMED_NUMBER.sub(" ", _plain(sentence)), free)
 
 
 # A table cell a writer left blank: fill it from the evidence or drop the
@@ -777,7 +790,7 @@ def structure_lost(
 # citation or evidence marker, inline code or math, or a Korean sentence
 # ending written without its period.
 _COMPLETE_END = re.compile(r"(?:[.!?。:)\]」』\"'*`$]|\]\]|(?:다|요|죠|까))\s*$")
-_LIST_ITEM = re.compile(r"^(?:[-*+]|\d+[.)])\s")
+_LIST_LINE = re.compile(r"^(?:[-*+]|\d+[.)])\s")
 
 
 def ends_mid_sentence(markdown: str) -> bool:
@@ -788,7 +801,7 @@ def ends_mid_sentence(markdown: str) -> bool:
         bare = line.strip()
         if not bare:
             continue
-        if bare.startswith(("#", "|", "!", "<", "- - -")) or _LIST_ITEM.match(bare):
+        if bare.startswith(("#", "|", "!", "<", "- - -")) or _LIST_LINE.match(bare):
             return False
         return not _COMPLETE_END.search(bare)
     return False

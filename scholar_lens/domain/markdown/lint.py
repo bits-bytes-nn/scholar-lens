@@ -1082,50 +1082,12 @@ _POLITE = re.compile(
 _PREDICATE_BEFORE_DA = frozenset(
     "이하되않없같있었았였했겠렵롭답많좋낫닿크쉽깊높낮옳르리"
 )
-# Nouns (loanwords, names) whose last syllables read like a predicate
-# ending: those that are no verb form match as word endings ("아나콘다",
-# "카메라와 라이다"); those that are also common verb endings ("간다", "판다")
-# match only as the whole word.
-_NOUN_ENDINGS_LIKE_DA = (
-    "콘다",
-    "젠다",
-    "라이다",
-    "레이다",
-    "에이다",
-    "플로리다",
-    "보르다",
-    "코르다",
-)
-_NOUNS_LIKE_DA = frozenset(
-    {
-        "판다",
-        "간다",
-        "란다",
-        "완다",
-        "사이다",
-        "우간다",
-        "르완다",
-        "베란다",
-        "미란다",
-        "프로파간다",
-    }
-)
-# A compound that ends in a noun of the set ("레서판다", "자이언트판다").
-_COMPOUND_NOUNS_LIKE_DA = ("판다",)
-
-
 def _declarative(word: str) -> bool:
     """Whether ``word`` ends in a declarative "~다": after a syllable with a
     final ㄴ (present tense: "한다", "만든다"), after "니" ("합니다"), or
     after a predicate stem or tense mark."""
     word = word.rstrip(".!?")
-    if (
-        len(word) < 2
-        or not word.endswith("다")
-        or word in _NOUNS_LIKE_DA
-        or word.endswith(_NOUN_ENDINGS_LIKE_DA)
-        or (len(word) > 2 and word.endswith(_COMPOUND_NOUNS_LIKE_DA))
-    ):
+    if len(word) < 2 or not word.endswith("다"):
         return False
     before = word[-2]
     if not "가" <= before <= "힣":
@@ -1137,14 +1099,8 @@ def _declarative(word: str) -> bool:
 
 # Endings of a word before a verb: a subject or object particle or a
 # connective ("데이터를 판다", "옮겨 간다"), not a noun's company ("카메라와").
-# Particles (subject, object, topic, direction, place) and connectives
-# (nouns that end like one are listed apart).
 _BEFORE_A_VERB = re.compile(
     r"(?:[을를이가은는도로에]|에서|[고게겨워해려쳐져혀돼봐줘아어서])$"
-)
-# Nouns that end in 아/어/서 like a connective ("아시아 판다").
-_NOUNS_LIKE_CONNECTIVES = frozenset(
-    {"아시아", "소프트웨어", "하드웨어", "미들웨어", "펌웨어", "레서", "미디어"}
 )
 
 
@@ -1158,20 +1114,24 @@ def _question_in_nga(word: str) -> bool:
 
 
 def _is_sentence_heading(text: str) -> bool:
+    """Whether a heading reads as a Korean sentence, judged on unambiguous
+    endings only: a polite ending ("~니다", "~요", "~죠"), a "~ㄴ가?"
+    question (a TL;DR's question headings are its own), a past tense
+    "~었다", or a "~다" predicate after a particle or connective
+    ("데이터를 판다"). A lone word that may be a noun ("판다", "우간다") is
+    left to the section review, which reads the heading in context."""
     words = text.split()
     if not words:
         return False
     last = words[-1]
-    if _POLITE.search(last) or _declarative(last) or _question_in_nga(last):
+    bare = last.rstrip(".!")
+    if _POLITE.search(last) or bare.endswith("니다") or _question_in_nga(last):
         return True
-    # A word that is a noun or a verb ending ("간다", "판다") reads as the verb
-    # after a particle or connective.
-    return (
-        last.rstrip(".!") in _NOUNS_LIKE_DA
-        and len(words) > 1
-        and bool(_BEFORE_A_VERB.search(words[-2]))
-        and words[-2] not in _NOUNS_LIKE_CONNECTIVES
-    )
+    if not _declarative(last):
+        return False
+    before = bare[-2]
+    past = (ord(before) - ord("가")) % 28 == 20  # a final ㅆ: "바꿨다"
+    return past or (len(words) > 1 and bool(_BEFORE_A_VERB.search(words[-2])))
 
 
 def ends_in_plain_declarative(text: str) -> bool:

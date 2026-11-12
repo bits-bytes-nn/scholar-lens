@@ -4,6 +4,8 @@ or cell; a quoted table row keeps its header for later checks."""
 
 from __future__ import annotations
 
+import pytest
+
 from scholar_lens.domain.evidence import (
     Evidence,
     EvidenceLedger,
@@ -110,3 +112,22 @@ def test_cached_evidence_without_a_header_still_loads() -> None:
         "anchor": "S1",
     }
     assert Evidence.model_validate(cached).table_header == ""
+
+
+@pytest.mark.parametrize(
+    ("sentence", "stated"),
+    [
+        ("Claude 3.5 Sonnet을 기준 모델로 삼는다.", []),
+        ("ResNet-50과 T5, Llama-3.1-8B를 비교했다.", []),
+        ("Python 3.12에서 Llama 2 7B를 돌린다.", []),
+        ("Llama 3.1 70B와 128K 문맥을 쓴다.", ["128K"]),
+        ("GPT-4o가 MMLU에서 88.7을 얻었다.", ["88.7"]),
+        ("Top-1 정확도는 76.5%다.", ["76.5"]),
+    ],
+)
+def test_a_version_in_a_name_is_no_stated_number(
+    sentence: str, stated: list[str]
+) -> None:
+    from scholar_lens.domain.evidence_draft import free_numbers, stated_numbers
+
+    assert stated_numbers(sentence, free_numbers()) == stated
