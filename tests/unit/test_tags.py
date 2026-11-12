@@ -154,3 +154,18 @@ class TestSpellingAndStylizedNames:
             "vLLM",
             "Key-Value-Cache",
         ]
+
+
+def test_a_post_without_a_controlled_tag_gets_a_note() -> None:
+    from scholar_lens.domain.conventions import PostConventions
+    from scholar_lens.domain.tags import controlled_tag_notes
+
+    spec = PostConventions.model_validate(
+        {
+            "types": {"Paper Reviews": {"paper": True}},
+            "topics": {"Language-Models": "/x.jpg"},
+            "tags": {"controlled": ["Quantization"]},
+        }
+    )
+    assert controlled_tag_notes(["LoRA", "Quantization"], spec) == []
+    assert "no related reading" in controlled_tag_notes(["LoRA"], spec)[0]

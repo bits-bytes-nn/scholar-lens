@@ -45,7 +45,7 @@ from scholar_lens.domain.post_format import (
 )
 from scholar_lens.domain.post_names import title_slug
 from scholar_lens.domain.publishing import PublishRequest, build_pr_body
-from scholar_lens.domain.tags import unsupported_tags
+from scholar_lens.domain.tags import controlled_tag_notes, unsupported_tags
 from scholar_lens.domain.validation import unsourced_table_numbers
 
 logger = logging.getLogger(__name__)
@@ -159,6 +159,9 @@ async def run_paper(
         )
         publish_request.blocking += blocking
         publish_request.review_notes += degraded
+        publish_request.review_notes += controlled_tag_notes(
+            front_tags(document), context.require_conventions()
+        )
         publish_request.link_sources = paper.link_sources(verified)
         outcome = await publish_artifact(
             context, publish_request, create_pr=request.create_pr
@@ -458,18 +461,20 @@ def _tag_notes(paper: Paper, document: str) -> list[str]:
     """Tags whose phrase or acronym the paper itself never uses: a likely
     mis-tag worth a reviewer's look (checked against the paper, not the
     translated post)."""
-    front, _, _ = split_front_matter(document)
-    tags = [str(t) for t in (front or {}).get("tags") or []]
+    tags = front_tags(document)
     return [
         f"Tag '{tag}' (or its acronym) does not appear in the paper; check it fits."
         for tag in unsupported_tags(tags, paper.content.text)
     ]
 
 
-def _new_tags(document: str, known_tags: set[str]) -> list[str]:
+def front_tags(document: str) -> list[str]:
     front, _, _ = split_front_matter(document)
-    tags = (front or {}).get("tags") or []
-    return [str(t) for t in tags if str(t) not in known_tags]
+    return [str(t) for t in (front or {}).get("tags") or []]
+
+
+def _new_tags(document: str, known_tags: set[str]) -> list[str]:
+    return [t for t in front_tags(document) if t not in known_tags]
 
 
 def _build_publish_request(
