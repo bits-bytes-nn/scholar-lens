@@ -292,16 +292,12 @@ class CoverageSpec:
         return {k.name: k.headline for k in self.kinds if k.headline}
 
 
-PassName = Literal["consistency", "repetition", "coverage"]
-
-
 @dataclass(frozen=True)
 class PostPasses:
     """The whole-post steps, run in this order after the sections
     (docs/engine.md, 4.7): ``consistency`` and ``repetition`` are model
     reads of the whole post, run together; ``coverage`` is code."""
 
-    names: tuple[PassName, ...] = ("consistency", "repetition", "coverage")
     # The consistency read also traces one run of the running example
     # through the post and checks its code against the sources' code, and
     # code checks the program the runnable sections build (a post whose

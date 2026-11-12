@@ -1082,6 +1082,8 @@ _POLITE = re.compile(
 _PREDICATE_BEFORE_DA = frozenset(
     "이하되않없같있었았였했겠렵롭답많좋낫닿크쉽깊높낮옳르리"
 )
+
+
 def _declarative(word: str) -> bool:
     """Whether ``word`` ends in a declarative "~다": after a syllable with a
     final ㄴ (present tense: "한다", "만든다"), after "니" ("합니다"), or

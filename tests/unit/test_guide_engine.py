@@ -1167,7 +1167,7 @@ def test_settling_one_of_the_guides_listed_items_adds_no_problem(dropped: int) -
         identifier_check=lambda md: [f for f in flags if f in md],
     )
     ctx: Any = SimpleNamespace(outline=SimpleNamespace(code_language="python"))
-    verifiers = VerifierSet("A", (lambda md: engine.extra_problems(ctx, md),))
+    verifiers = VerifierSet((lambda md: engine.extra_problems(ctx, md),))
     sdk = ["python", "typescript", "java", "go"]
 
     def section(kept: list[str]) -> str:

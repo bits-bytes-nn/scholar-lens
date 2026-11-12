@@ -30,7 +30,6 @@ class Problem:
         kind: What is wrong, as a stable name ("numbers_uncited").
         text: The message the writer is shown (it may quote ``where``).
         where: The passage the problem is in ("" when it is the section's).
-        blocking: Whether the post may not be published with it as is.
         item: The one listed item the problem is about (a number, a paper,
             an image), shown in ``text`` as ``[item]`` ("" when none).
     """
@@ -38,7 +37,6 @@ class Problem:
     kind: str
     text: str
     where: str = ""
-    blocking: bool = False
     item: str = ""
 
     @property
@@ -97,9 +95,8 @@ def messages(problems: Iterable[Problem]) -> list[str]:
 
 @dataclass(frozen=True)
 class VerifierSet:
-    """The named checks of one section, run together in order."""
+    """The checks of one section, run together in order."""
 
-    name: str
     checks: tuple[Check, ...]
     # The figures given to the section (None: every figure shown is its
     # own). Only these are the section's to keep: a figure given to another
@@ -151,6 +148,6 @@ class VerifierSet:
         return out
 
 
-def no_checks(name: str = "none") -> VerifierSet:
+def no_checks() -> VerifierSet:
     """A verifier set that finds nothing."""
-    return VerifierSet(name, ())
+    return VerifierSet(())
