@@ -114,25 +114,67 @@ def test_cached_evidence_without_a_header_still_loads() -> None:
     assert Evidence.model_validate(cached).table_header == ""
 
 
+# What the sources write: names with versions, and one real score.
+_SOURCES = [
+    "We fine-tune Llama 3.1 and compare with Qwen 2.5, Gemini 1.5 and Claude 3.5 "
+    "Sonnet; experiments run on Python 3.12. Our model reaches 88.7% on MMLU.",
+]
+
+
 @pytest.mark.parametrize(
     ("sentence", "stated"),
     [
-        ("Claude 3.5 Sonnet을 기준 모델로 삼는다.", []),
+        # Glued names, whatever the sources.
         ("ResNet-50과 T5, Llama-3.1-8B를 비교했다.", []),
-        ("Llama 2 7B를 돌린다.", []),
-        # A score after a benchmark name is stated, not part of a name.
+        # A version the sources write after a name, with or without a particle.
+        ("이 논문은 Llama 3.1을 기반 모델로 쓴다.", []),
+        ("Qwen 2.5는 오픈 가중치 모델이다.", []),
+        ("Gemini 1.5의 긴 문맥을 활용한다.", []),
+        ("Claude 3.5 Sonnet을 판정 모델로 쓴다.", []),
+        ("Python 3.12에서 실행한다.", []),
+        # A score is stated (the sources never write it after the name).
         ("GPT-4o는 MMLU 86.4%를 기록했다.", ["86.4"]),
-        ("HumanEval 85.4%로 올랐다.", ["85.4"]),
+        ("HumanEval 85.4 Pass@1을 얻었다.", ["85.4"]),
         ("BLEU 28.4를 얻었다.", ["28.4"]),
-        ("Accuracy 92.35를 보였다.", ["92.35"]),
-        ("Llama 3.1 70B와 128K 문맥을 쓴다.", ["128K"]),
-        ("GPT-4o가 MMLU에서 88.7을 얻었다.", ["88.7"]),
-        ("Top-1 정확도는 76.5%다.", ["76.5"]),
+        ("Llama 3.1 70B와 128K 문맥을 쓴다.", ["70B", "128K"]),
     ],
 )
 def test_a_version_in_a_name_is_no_stated_number(
     sentence: str, stated: list[str]
 ) -> None:
-    from scholar_lens.domain.evidence_draft import free_numbers, stated_numbers
+    from scholar_lens.domain.evidence_draft import (
+        free_numbers,
+        named_versions,
+        stated_numbers,
+    )
 
-    assert stated_numbers(sentence, free_numbers()) == stated
+    free = " ".join([free_numbers(), *named_versions(_SOURCES)])
+    assert stated_numbers(sentence, free) == stated
+
+
+def test_a_cited_sentence_naming_a_versioned_model_is_not_cut() -> None:
+    from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
+    from scholar_lens.domain.evidence_draft import (
+        free_numbers,
+        named_versions,
+        unsourced_number_sentences,
+    )
+
+    doc = SourceDocument.from_markdown(
+        "p", "t", "full_text", "## 4 Results\n\nOur model reaches 88.7% on MMLU.\n"
+    )
+    ledger = EvidenceLedger()
+    ledger.add(
+        doc,
+        kind="number",
+        claim="c",
+        quote="Our model reaches 88.7% on MMLU",
+        anchor=doc.sections[0].anchor,
+        scope="MMLU",
+        cell="MMLU 88.7%",
+    )
+    free = " ".join([free_numbers(), *named_versions(_SOURCES)])
+    draft = (
+        "## 결과\n\nClaude 3.5 Sonnet과 비교해 MMLU에서 88.7%를 기록했습니다 [[E1]].\n"
+    )
+    assert unsourced_number_sentences(draft, ledger, free, {}) == []

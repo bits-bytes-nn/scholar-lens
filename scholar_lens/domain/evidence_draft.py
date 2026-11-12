@@ -166,26 +166,40 @@ def free_numbers(extra: Iterable[object] = ()) -> str:
     return " ".join([*(str(n) for n in range(11)), *(str(x) for x in extra)])
 
 
-# Numbers that are part of a name, not a stated quantity: digits glued to a
-# Latin word (ResNet-50, GPT-4o, T5, Llama-3.1-8B), and a version between a
-# capitalised Latin name and a name word or a parameter count (Claude 3.5
-# Sonnet, Llama 3.1 70B, Llama 2 7B).
+# Numbers glued into a name, not a stated quantity: digits joined to a
+# Latin word (ResNet-50, GPT-4o, T5, Llama-3.1-8B). A spaced version
+# ("Llama 3.1") is told from a score ("MMLU 86.4") by the sources instead:
+# :func:`named_versions`.
 _NAMED_NUMBER = re.compile(
     r"\b(?:[A-Za-z]{2,}[A-Za-z0-9]*-?|[A-Z])\d[\w.]*(?:-[A-Za-z0-9.]+)*"
-    # A spaced version counts as a name only when a name word or a size
-    # follows it: "Claude 3.5 Sonnet", "Llama 3.1 70B", "Llama 2 7B" (and not
-    # "MMLU 86.4", a score).
-    r"|\b[A-Z][A-Za-z]+ \d+(?:\.\d+)*"
-    r"(?= [A-Z][a-z]| \d+(?:\.\d+)?[BM](?![A-Za-z0-9]))"
-    r"(?: \d+(?:\.\d+)?[BM](?![A-Za-z0-9]))?"
 )
+# A capitalised Latin name and the dotted version after it, as sources
+# write models and libraries ("Llama 3.1", "Python 3.12", "Claude 3.5").
+_NAME_VERSION = re.compile(r"\b[A-Z][A-Za-z]+[ -](\d+\.\d+(?:\.\d+)?)\b")
+
+
+def named_versions(texts: Iterable[str]) -> list[str]:
+    """The versions the sources write after a name ("Llama 3.1" -> 3.1):
+    numbers a sentence may name a model or library with, not claims of its
+    own. A score after a benchmark name is a version only if the sources
+    write it so, and then it is sourced anyway."""
+    found: dict[str, None] = {}
+    for text in texts:
+        for m in _NAME_VERSION.finditer(text):
+            found.setdefault(m.group(1), None)
+    return list(found)
+
+
+def _claim_text(sentence: str) -> str:
+    """``sentence`` as its numbers are checked: markers, keys and glued
+    names out."""
+    return _NAMED_NUMBER.sub(" ", _plain(sentence))
 
 
 def stated_numbers(sentence: str, free: str) -> list[str]:
-    """The numbers a sentence states beyond ``free`` (years, small counts),
-    names left out (:data:`_NAMED_NUMBER`: a model or library version is no
-    claim)."""
-    return unsourced_numbers(_NAMED_NUMBER.sub(" ", _plain(sentence)), free)
+    """The numbers a sentence states beyond ``free`` (years, small counts,
+    the sources' named versions), glued names left out."""
+    return unsourced_numbers(_claim_text(sentence), free)
 
 
 # A table cell a writer left blank: fill it from the evidence or drop the
@@ -385,7 +399,7 @@ def section_problems(
         elif numbers and not example:
             support = _support(ids, ledger, passages)
             if missing := unsourced_numbers(
-                _plain(sentence), f"{support} {free_numbers}"
+                _claim_text(sentence), f"{support} {free_numbers}"
             ):
                 each(
                     "numbers_not_in_evidence",
@@ -557,7 +571,7 @@ def unsourced_number_sentences(
         if not numbers or is_illustration(sentence):
             continue
         support = _support(cited_ids(sentence), ledger, passages)
-        if unsourced_numbers(_plain(sentence), f"{support} {free_numbers}"):
+        if unsourced_numbers(_claim_text(sentence), f"{support} {free_numbers}"):
             found.append(sentence)
     return found
 

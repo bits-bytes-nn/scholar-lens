@@ -100,6 +100,7 @@ from scholar_lens.domain.evidence_draft import (
     cited_ids,
     copied_sentences,
     free_numbers,
+    named_versions,
     prose_length,
     prose_sentences,
     section_heading,
@@ -819,6 +820,10 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
         stages (:meth:`staged`); the chain starts at the outline, whose key
         holds the ledger and the key targets."""
         self._upstream = ""
+        # A version the sources write after a name ("Llama 3.1") may name a
+        # model in any sentence.
+        if versions := named_versions(f"{e.quote} {e.claim}" for e in ledger):
+            self.free = " ".join([self.free, *versions])
         outline = await self.staged(
             "outline",
             [
