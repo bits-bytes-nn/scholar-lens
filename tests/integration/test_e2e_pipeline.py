@@ -9,6 +9,7 @@ cannot repair is blocked before anything is published.
 
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -187,7 +188,7 @@ class TestSummaryEndToEnd:
         monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
     ) -> None:
         context, _ = pipeline_env
-        paper = _paper(controlled_tags=[])
+        paper = _paper(controlled_tags=[], keywords=["Low-Rank Adaptation"])
         monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(paper))
         monkeypatch.setattr(
             sections_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
@@ -206,7 +207,13 @@ class TestSummaryEndToEnd:
             if v.level == "error"
         ] == []
         tags = next(ln for ln in post.splitlines() if ln.startswith("tags:"))
-        assert '"Low-Rank-Adaptation"' in tags and '"Quantization"' not in tags
+        assert tags == 'tags: ["Low-Rank-Adaptation"]'
+        request = json.loads(
+            Path(outcome.markdown_path)
+            .with_suffix(".request.json")
+            .read_text(encoding="utf-8")
+        )
+        assert any("No controlled tag" in n for n in request["review_notes"])
 
     async def test_post_with_an_unknown_topic_is_blocked(
         self,

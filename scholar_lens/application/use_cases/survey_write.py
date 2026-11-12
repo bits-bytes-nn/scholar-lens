@@ -68,6 +68,7 @@ from scholar_lens.domain.survey.post import (
     validate_plan,
 )
 from scholar_lens.domain.survey.references import reference_excerpts
+from scholar_lens.domain.tags import controlled_tag_notes
 
 logger = logging.getLogger(__name__)
 
@@ -422,6 +423,7 @@ async def run_survey_write(
         *survey.notes,
         *body_notes,
         *writer.notes,
+        *controlled_tag_notes(meta.tags, spec),
     ]
     return await publish_artifact(context, publish_request, create_pr=request.create_pr)
 

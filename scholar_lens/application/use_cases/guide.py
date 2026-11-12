@@ -73,6 +73,7 @@ from scholar_lens.domain.sources import (
     engine_authority,
     normalize_url,
 )
+from scholar_lens.domain.tags import controlled_tag_notes
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +186,7 @@ async def run_guide(
         *lookup_notes,
         *guide.notes,
         *researcher.search_notes(),
+        *controlled_tag_notes(meta.tags, spec),
     ]
     return await publish_artifact(context, publish_request, create_pr=request.create_pr)
 

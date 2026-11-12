@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import html
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from scholar_lens.domain.conventions import GENERATED_SPECIFIC_TAGS, PostConventions
@@ -182,3 +183,15 @@ def unsupported_tags(tags: list[str], text: str) -> list[str]:
             continue
         missing.append(tag)
     return missing
+
+
+def controlled_tag_notes(tags: Sequence[str], spec: PostConventions) -> list[str]:
+    """A PR note for a post without a controlled tag (none fit, or the
+    model's was not on the list): it shows no related reading, which a
+    reviewer may fix by adding one that names its topic."""
+    if set(map(str, tags)) & set(spec.tags.controlled):
+        return []
+    return [
+        "No controlled tag: the post shows no related reading. Add one from "
+        "tags.controlled in _data/post_conventions.yml if one names its topic."
+    ]
