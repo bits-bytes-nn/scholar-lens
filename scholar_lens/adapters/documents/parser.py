@@ -36,7 +36,7 @@ from scholar_lens.adapters.http.rate_limit import (
     arxiv_retry_hold,
     is_retryable_status,
 )
-from scholar_lens.adapters.http.url_guard import UnsafeUrlError, assert_url_is_public
+from scholar_lens.adapters.http.url_guard import UnsafeUrlError
 from scholar_lens.adapters.retry import (
     RetryableBase,
     is_transient_error,
@@ -48,6 +48,7 @@ from scholar_lens.domain.constants import (
     LanguageModelId,
     LocalPaths,
 )
+from scholar_lens.domain.ids import is_arxiv_host
 from scholar_lens.domain.paper.models import Content, Figure
 from scholar_lens.domain.usage_context import staged
 
@@ -141,16 +142,13 @@ class FigureReader(RetryableBase):
         image_bytes: bytes
 
         if path.startswith(("http://", "https://")):
-            # Figure URLs can originate from untrusted paper/page content; run
-            # them through the SSRF guard before fetching server-side.
+            # Figure URLs come from untrusted page content: the pinned
+            # transport validates every hop against the SSRF guard. arXiv's
+            # figures share its process-wide pace with its pages.
+            arxiv = is_arxiv_host(path)
             try:
-                assert_url_is_public(path)
-            except UnsafeUrlError as e:
-                raise FigureParseError(f"Unsafe image URL '{path}': {e}") from e
-            try:
-                # PinnedAsyncHTTPTransport pins the connection to the validated
-                # IP (no DNS-rebinding window after the assert_url_is_public check
-                # above, and any redirect hop is re-validated).
+                if arxiv:
+                    await asyncio.to_thread(ARXIV_RATE_LIMITER.acquire)
                 async with httpx.AsyncClient(
                     timeout=DEFAULT_TIMEOUT, transport=PinnedAsyncHTTPTransport()
                 ) as client:
@@ -160,6 +158,8 @@ class FigureReader(RetryableBase):
             except UnsafeUrlError as e:
                 raise FigureParseError(f"Unsafe image URL '{path}': {e}") from e
             except httpx.HTTPError as e:
+                if arxiv and isinstance(e, httpx.HTTPStatusError):
+                    ARXIV_RATE_LIMITER.penalize(arxiv_retry_after_seconds(e))
                 raise FigureParseError(f"HTTP error for image '{path}': {e}") from e
         else:
             try:
@@ -689,21 +689,26 @@ class PDFParser(RichParser):
         except (OSError, json.JSONDecodeError) as e:
             raise ContentParseError(f"Failed to load cached response: {e}") from e
 
+    @RetryableBase._retry("document_parse")
+    async def _post_document(self, name: str, data: bytes) -> dict[str, Any]:
+        """The parse API's answer; a 429, 5xx or timeout is asked again (the
+        shared retry policy), so one blip does not cost the figures."""
+        response = await self.async_client.post(
+            AppConstants.External.UPSTAGE_DOCUMENT_PARSE.value,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            files={"document": (name, data, "application/pdf")},
+        )
+        response.raise_for_status()
+        return response.json()
+
     async def _request_document_parse(self, pdf_path: Path) -> dict[str, Any]:
-        headers = {"Authorization": f"Bearer {self.api_key}"}
         try:
-            with open(pdf_path, "rb") as f:
-                files = {"document": (pdf_path.name, f.read(), "application/pdf")}
-                response = await self.async_client.post(
-                    AppConstants.External.UPSTAGE_DOCUMENT_PARSE.value,
-                    headers=headers,
-                    files=files,
-                )
-                response.raise_for_status()
-                return response.json()
+            data = pdf_path.read_bytes()
         except OSError as e:
             raise ContentParseError(f"Cannot read PDF file '{pdf_path}': {e}") from e
-        except httpx.HTTPError as e:
+        try:
+            return await self._post_document(pdf_path.name, data)
+        except (httpx.HTTPError, OSError) as e:
             raise ContentParseError(f"Document parsing API request failed: {e}") from e
         except ValueError as e:
             # response.json() raises JSONDecodeError (a ValueError) on a non-JSON

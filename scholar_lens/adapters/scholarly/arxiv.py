@@ -17,6 +17,7 @@ from pydantic import (
     field_validator,
 )
 
+from scholar_lens.adapters.retry import is_transient_error
 from scholar_lens.adapters.http.rate_limit import (
     ARXIV_RATE_LIMITER,
     RateLimiter,
@@ -120,6 +121,20 @@ class ArxivMetadata(BaseModel):
         if published is not None:
             return published
         raise ValueError("Both 'updated' and 'published' are None")
+
+
+def _transient_arxiv_error(exc: BaseException) -> bool:
+    """Whether a wrapped arXiv failure may succeed when retried: a 429 or
+    5xx, an empty page (arXiv's API returns one under load), or a transient
+    transport error. A 4xx, a malformed record or a "not found" is final."""
+    if not isinstance(exc, ArxivPaperError) or isinstance(exc, ArxivNotFoundError):
+        return False
+    cause = exc.__cause__
+    if isinstance(cause, arxiv.HTTPError):
+        return cause.status == 429 or cause.status >= 500
+    if isinstance(cause, arxiv.UnexpectedEmptyPageError):
+        return True
+    return cause is not None and is_transient_error(cause)
 
 
 class ArxivHandler:
@@ -257,10 +272,7 @@ class ArxivHandler:
             stop=tenacity.stop_after_attempt(self._max_attempts),
             # Retry transient API errors but NOT a genuine "not found"
             # (ArxivNotFoundError subclasses ArxivPaperError, so exclude it).
-            retry=tenacity.retry_if_exception(
-                lambda e: isinstance(e, ArxivPaperError)
-                and not isinstance(e, ArxivNotFoundError)
-            ),
+            retry=tenacity.retry_if_exception(_transient_arxiv_error),
             before_sleep=lambda s: logger.warning(
                 "arXiv fetch for %s failed (attempt %d); retrying...",
                 label,
