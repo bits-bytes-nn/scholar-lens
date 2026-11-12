@@ -156,11 +156,41 @@ _SPEC = re.compile(
 )
 
 
-def post_installs(markdown: str) -> list[tuple[str, frozenset[str], str]]:
-    """(distribution, extras, specifier) of each requirement the post's
-    shell blocks ``pip install``: options and their values, files, paths and
-    URLs left out (prose is not read)."""
-    out: list[tuple[str, frozenset[str], str]] = []
+Requirement = tuple[str, frozenset[str], str]
+
+
+def _line_requirements(line: str) -> list[Requirement]:
+    """(distribution, extras, specifier) of the requirements one shell
+    line ``pip install``s: options and their values, files, paths and URLs
+    left out; [] for a line that installs nothing."""
+    line = line.strip().removeprefix("$ ").split(" #")[0]
+    if not (m := _PIP.search(line)):
+        return []
+    out: list[Requirement] = []
+    words = re.split(r"\s*(?:&&|\|\||;|\|)\s*", m.group(1))[0].split()
+    skip = False
+    for word in words:
+        if skip:
+            skip = False
+            continue
+        word = word.strip("'\"")
+        if word.startswith("-"):
+            skip = word in _VALUED
+            continue
+        if (spec := _SPEC.match(word)) is None or word.endswith(
+            (".txt", ".whl", ".gz", ".zip")
+        ):
+            continue
+        extras = frozenset(
+            e.strip().lower() for e in (spec.group(2) or "").split(",") if e.strip()
+        )
+        out.append((spec.group(1), extras, spec.group(3).replace(" ", "")))
+    return out
+
+
+def post_installs(markdown: str) -> list[Requirement]:
+    """What the post's shell blocks and notebook cells ``pip install``
+    (prose is not read)."""
     # Fences are paired as the static check pairs them (a block's closing
     # fence never opens another).
     shell = [
@@ -177,32 +207,30 @@ def post_installs(markdown: str) -> list[tuple[str, frozenset[str], str]]:
         )
         for block in python_blocks(markdown)
     ]
-    for block in shell:
-        for line in block.splitlines():
-            line = line.strip().removeprefix("$ ").split(" #")[0]
-            if not (m := _PIP.search(line)):
-                continue
-            words = re.split(r"\s*(?:&&|\|\||;|\|)\s*", m.group(1))[0].split()
-            skip = False
-            for word in words:
-                if skip:
-                    skip = False
-                    continue
-                word = word.strip("'\"")
-                if word.startswith("-"):
-                    skip = word in _VALUED
-                    continue
-                if (spec := _SPEC.match(word)) is None or word.endswith(
-                    (".txt", ".whl", ".gz", ".zip")
-                ):
-                    continue
-                extras = frozenset(
-                    e.strip().lower()
-                    for e in (spec.group(2) or "").split(",")
-                    if e.strip()
-                )
-                out.append((spec.group(1), extras, spec.group(3).replace(" ", "")))
-    return out
+    return [
+        r
+        for block in shell
+        for line in block.splitlines()
+        for r in _line_requirements(line)
+    ]
+
+
+# A line that is a pip command (after an optional "$ " prompt): what a docs
+# page's text, fenced or not, installs; a sentence mentioning pip is not one.
+_COMMAND_LINE = re.compile(
+    r"^\s*(?:\$\s+)?(?:uv\s+)?(?:python3?\s+-m\s+)?pip3?\s+install\s"
+)
+
+
+def command_installs(text: str) -> list[Requirement]:
+    """What the lines of ``text`` that are pip commands install (a docs
+    page whose code may have lost its fences)."""
+    return [
+        r
+        for line in text.splitlines()
+        if _COMMAND_LINE.match(line)
+        for r in _line_requirements(line)
+    ]
 
 
 def run_requirements(pins: Sequence[tuple[str, str]], markdown: str) -> list[str]:

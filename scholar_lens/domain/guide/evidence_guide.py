@@ -35,6 +35,7 @@ from scholar_lens.domain.program import python_blocks as python_blocks  # re-exp
 from scholar_lens.domain.program import (
     python_code_problems as python_code_problems,  # re-exported
 )
+from scholar_lens.domain.program_run import command_installs
 from scholar_lens.domain.specs.guide import GUIDE_SPEC, TLDR_TITLE
 from scholar_lens.domain.verifiers import Problem
 
@@ -242,27 +243,10 @@ def unverified_imports(
     return found
 
 
-# "pip install pkg[extra,extra2] other" (uv pip install too), outside prose.
-_PIP_INSTALL = re.compile(r"(?:uv\s+)?pip3?\s+install\s+([^\n#;&|]+)")
-_REQUIREMENT = re.compile(r"""^['"]?([A-Za-z0-9][A-Za-z0-9._-]*)(?:\[([^\]]*)\])?""")
-
-
 def install_requirements(text: str) -> list[tuple[str, frozenset[str]]]:
-    """(package, extras) of every ``pip install`` the text shows, options
-    and URLs left out."""
-    found: list[tuple[str, frozenset[str]]] = []
-    for m in _PIP_INSTALL.finditer(text):
-        for arg in m.group(1).split():
-            if arg.startswith("-") or "/" in arg or arg.startswith("."):
-                continue
-            if r := _REQUIREMENT.match(arg):
-                extras = frozenset(
-                    e.strip().lower()
-                    for e in (r.group(2) or "").split(",")
-                    if e.strip()
-                )
-                found.append((r.group(1).lower(), extras))
-    return found
+    """(package, extras) of every pip command line in ``text``
+    (:func:`~scholar_lens.domain.program_run.command_installs`)."""
+    return [(name.lower(), extras) for name, extras, _ in command_installs(text)]
 
 
 def unknown_extras(markdown: str, provided: Mapping[str, frozenset[str]]) -> list[str]:
