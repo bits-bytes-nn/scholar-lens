@@ -225,3 +225,6 @@ tokenizers/
 # tracked (the Docker context is an allowlist, so none of eval/ ships).
 eval/baselines/*/out/
 eval/baselines/*/*.result.json
+
+# Generated posts of an evaluation run stay out of the repo (judge results are kept).
+eval/runs/*/posts/
