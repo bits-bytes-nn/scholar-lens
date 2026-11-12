@@ -182,3 +182,11 @@ def test_a_cited_sentence_naming_a_versioned_model_is_not_cut() -> None:
         "## 결과\n\nClaude 3.5 Sonnet과 비교해 MMLU에서 88.7%를 기록했습니다 [[E1]].\n"
     )
     assert unsourced_number_sentences(draft, ledger, free, {}) == []
+
+
+def test_a_marker_with_bracketed_ids_is_read_and_stripped() -> None:
+    from scholar_lens.domain.evidence_draft import MARKER, cited_ids
+
+    sentence = "출력 값은 그대로 두고 행렬곱 외 연산만 덜어냅니다 [[E4], [E14]]."
+    assert cited_ids(sentence) == ["E4", "E14"]
+    assert "[[" not in MARKER.sub("", sentence)

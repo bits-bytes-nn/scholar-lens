@@ -1369,6 +1369,12 @@ def _check_description(lines: Lines, offset: int, add: Add) -> None:
         return
 
 
+# What is left of an evidence marker in any shape a writer gives it
+# ("[[E12]]", "[[E4], [E14]]", "[E12]]"): the engine strips the markers it
+# knows; one it does not know must not reach the blog.
+_EVIDENCE_LEFTOVER = re.compile(r"\[\[?\s*\[?E(?:\d+|X)\b\]?(?:\s*,|\]\])", re.I)
+
+
 def _check_text(lines: Lines, offset: int, add: Add) -> None:
     for i, line in lines:
         prose = BLOG_CODE_SPAN.sub("", line)
@@ -1380,6 +1386,13 @@ def _check_text(lines: Lines, offset: int, add: Add) -> None:
                 "envelope",
                 offset + i,
                 "internal figure marker leaked into the post",
+            )
+        if _EVIDENCE_LEFTOVER.search(prose):
+            add(
+                "error",
+                "envelope",
+                offset + i,
+                "an evidence marker leaked into the post",
             )
 
 

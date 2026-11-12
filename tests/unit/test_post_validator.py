@@ -625,3 +625,10 @@ def test_an_overlong_description_is_cut_at_its_last_fitting_sentence() -> None:
     unbroken = "다" * 170
     assert fit_description(unbroken) == unbroken
     assert fit_description("짧은 설명입니다.") == "짧은 설명입니다."
+
+
+def test_a_leaked_evidence_marker_blocks_the_post() -> None:
+    from scholar_lens.domain.validation import _EVIDENCE_LEFTOVER
+
+    assert _EVIDENCE_LEFTOVER.search("관점 [[E120], [E128]]도 설득력이 있습니다.")
+    assert not _EVIDENCE_LEFTOVER.search("배열 [[1, 2]]와 E12 규격")

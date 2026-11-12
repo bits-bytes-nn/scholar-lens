@@ -22,10 +22,12 @@ from scholar_lens.domain.quality_gate import rule_issues
 from scholar_lens.domain.validation import unsourced_numbers
 from scholar_lens.domain.verifiers import Problem, item_problems
 
-# An evidence marker ("[[E12]]", "[[E12, E15]]") or the illustration mark
-# below; code removes both before publishing.
+# An evidence marker ("[[E12]]", "[[E12, E15]]", and the "[[E12], [E15]]" a
+# writer sometimes writes) or the illustration mark below; code removes both
+# before publishing.
 MARKER = re.compile(
-    r"\[\[\s*((?:E\d+|EX)(?:\s*,\s*(?:E\d+|EX))*)\s*\]\]", re.IGNORECASE
+    r"\[\[\s*(\[?(?:E\d+|EX)\]?(?:\s*,\s*\[?(?:E\d+|EX)\]?)*)\s*\]\]",
+    re.IGNORECASE,
 )
 
 

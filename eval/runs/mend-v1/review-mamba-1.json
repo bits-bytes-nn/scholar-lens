@@ -1,0 +1,150 @@
+{
+  "item": "review-mamba",
+  "judge_model": "us.anthropic.claude-opus-5-5",
+  "session": 1,
+  "X": {
+    "scores": {
+      "A": {"score": 8.0, "reason": "Coherent arc, front matter complete, math in $$ only. Deductions: the copy-task figure is embedded twice (L48 and L185) and the task is explained twice (L50-52, L183-187). L296 'HyenaDNA 1.4M의 최대 길이 정확도는 54.87%입니다.' is an orphan one-sentence paragraph that repeats the table. The Great Apes table header 'L290 | 모델 | 정확도(%) 길이 $$2^{10}$$ | $$2^{14}$$ ...' is malformed and silently drops the 2^12 column."},
+      "B": {"score": 8.5, "reason": "Natural 입니다 register and consistent terms. Minor: L54 '저자들의 기술적 기여는 ... 넘는 데 있습니다' is a noun frame (better: '저자들은 ... 넘는 방법을 내놓습니다'). L165 forces the running example into an unconvincing sentence: '넓어진 채널마다 Δ가 따로 정해지므로 색 토큰을 담아 둘 상태 공간이 그만큼 커집니다'. L337 has a double space."},
+      "C": {"score": 8.0, "reason": "Mostly smooth, with a running example that is reused. Deductions: L300 '다만 이 실험들에는 단서가 하나 붙습니다' promises a caveat but never says that the audio run is the only one with complex parameterization. L409 '앞서 본 정리 1' refers to a theorem number the post never gave (L99 says only '저자들이 제시한 정리'). L323-325 opens with '결과는 두 가지입니다' without describing the U-Net block ablation."},
+      "D": {"score": 9.0, "reason": "Hard spots get help where they appear: a worked scalar ZOH example (L95: Δ=0.01 → 0.99/0.01, Δ=5 → 0.007/0.993, arithmetic correct), a D=1024 parameter count (L171), the HBM/SRAM step list, and a warning on how to read '두 배 크기와 대등' (L260). Little padding."},
+      "E": {"score": 8.0, "reason": "Good tables for selective copy, zero-shot, SC09 (shortened by rows), memory and all three LM ablations, and figures are described in words. Deductions: the copy-task figure is duplicated (L48/L185). The Great Apes table drops a column (rubric: shorten by whole rows) and has a malformed header (L290). There are no tables for the induction-head numbers or the U-Net block ablation, even though the prose discusses both (L214, L325). The related-work table has a prose cell, '논문 언급 없음' (L420)."},
+      "F": {"score": 9.5, "reason": "24 claims checked, all supported, including every table cell. Only a small residual: L409 cites a 'Theorem 1' label the post never introduced. That is a presentation slip, not a factual error."},
+      "G": {"score": 9.0, "reason": "use_math is set, the description is 143 chars, opens with Mamba and uses only TL;DR numbers (5배, 백만), and the categories have two levels. No Liquid or prompt tokens. The duplicate image path is the only oddity."},
+      "R1": {"score": 9.0, "reason": "Covers the method, the hardware-aware algorithm, the block design, all experiment families and the full ablation set (Δ/B/C, state dim N, A init, architecture × inner layer, recipe ablation L232-234). Thin spots: the U-Net ablation is prose only (L325), and the induction-head numbers and settings are missing."},
+      "R2": {"score": 9.0, "reason": "Layered well: intuition (compression view) → LTI limits → ZOH formula → worked numeric example → RNN-gate theorem → kernel steps. Length matches the paper's difficulty."},
+      "R3": {"score": 8.5, "reason": "The TL;DR answers all four questions concretely with numbers (+4 points over Pythia-3B, 5x throughput, 1M DNA context). The closing names concrete tradeoffs (audio Mamba-S4 result) and marks the writer's interpretation (L441 '이는 이 글의 해석입니다'). The open questions (L443) are generic, though reasonable."},
+      "X1": {"score": 7.0, "reason": "The category fits. Tags: 'Efficient-Attention' misdescribes an attention-free model, and 'Mamba-Architecture' and 'Linear-Time-Sequence-Modeling' restate the title."}
+    },
+    "principles": {
+      "claim_headings": "met: almost all H2 and H3 headings are claims, e.g. L114, L362",
+      "running_example": "met: the selective-copy Δ example runs from L95 through L206, L380 and L441",
+      "mechanism_reason_formula_example": "met: L62-L95 and L116-L141",
+      "facts_said_once": "partly met: the copy task and its figure appear twice (L46-52, L183-187); the 54.87% sentence at L296 repeats the table; the two-x-size claim recurs L28/L218/L258/L260",
+      "numbers_with_variant_scope_unit": "met: e.g. L133 '이 비교는 스캔 커널 하나만 놓고 잰 것입니다', L345",
+      "nothing_invented": "met",
+      "writer_assessment_at_end": "met: L437-L443",
+      "length_fitted": "met",
+      "type_specific_shape": "met",
+      "korean_style": "met, with minor noun frames"
+    },
+    "claims": {
+      "checked": 24, "unsupported": 0, "wrong": 0, "error_rate": 0.0,
+      "items": [
+        {"claim": "Selective copying accuracies 18.3/97.0/57.0/30.1/99.7/56.4/28.4/99.8 (L197-204)", "status": "supported", "source": "Selective Copying table"},
+        {"claim": "Mamba-3B is 4 points higher on common-sense average than Pythia-3B and exceeds Pythia-7B (L28, L258)", "status": "supported", "source": "Sec 4.2: '4 points higher avg. on common sense reasoning compared to Pythia-3B and even exceeding Pythia-7B'"},
+        {"claim": "5x inference throughput vs Transformers (L29)", "status": "supported", "source": "Abstract"},
+        {"claim": "Fused scan 20-40x faster than standard implementation (L133)", "status": "supported", "source": "Sec 4.5 '20-40x faster than a standard scan implementation in PyTorch'"},
+        {"claim": "Up to 3x faster on A100 than previous methods (L147)", "status": "supported", "source": "Sec 3.3 / Intro"},
+        {"claim": "Induction heads: perfect up to 1M, 4000x training length, others under 2x (L214)", "status": "supported", "source": "Sec 4.1.2"},
+        {"claim": "Pythia-1.4B 7.51/6.08/61.7/52.1/55.2; RWKV-1.5B 7.70/7.04/56.4/52.5/54.3; Mamba-1.4B 6.80/5.04/64.9/59.1/59.7 (L248-250)", "status": "supported", "source": "Table 1"},
+        {"claim": "Mamba-2.8B Pile ppl 6.22, LAMBADA ppl 4.23, avg 63.3 (L253, L258)", "status": "supported", "source": "Table 1"},
+        {"claim": "Mamba and Pythia context 2048, RWKV 1024 (L244)", "status": "supported", "source": "Table 1 caption"},
+        {"claim": "HG38 training split about 4.5B tokens (L268)", "status": "supported", "source": "Sec 4.3"},
+        {"claim": "Model-size scaling: ~1M tokens per batch, 10K steps, 10B tokens (L270)", "status": "supported", "source": "Sec 4.3.1"},
+        {"claim": "Sequence-length warmup: 2 epochs per power of two from 2^10, batch halved as length doubles (L270)", "status": "supported", "source": "Appendix E.3"},
+        {"claim": "At ~40M params Mamba matches Transformer++/HyenaDNA with 3-4x fewer params (L276)", "status": "supported", "source": "Sec 4.3.1"},
+        {"claim": "Great Apes accuracies HyenaDNA 28.04/41.17/42.22/31.10/54.87, Mamba 1.4M 31.47/27.66/40.72/42.41/71.67, Mamba 7M 30.00/31.48/43.73/56.60/81.31 at 2^10,14,16,18,20 (L292-294)", "status": "supported", "source": "Great Apes table (2^12 column omitted)"},
+        {"claim": "SC09 rows SaShiMi 5.8M, DiffWave+SaShiMi 23.0M, Mamba 6.1M and 24.3M with all metrics (L316-319)", "status": "supported", "source": "SC09 table"},
+        {"claim": "Causal-mask FlashAttention-2 is ~1.7x faster than without mask (L333)", "status": "supported", "source": "Appendix E.5"},
+        {"claim": "Scan benchmark uses N=16 (L333)", "status": "supported", "source": "Sec 4.5"},
+        {"claim": "Memory table 4.6/4.8 ... 34.5/38.2 GB, 125M model, A100 80GB, length 2048 (L349-358)", "status": "supported", "source": "Memory benchmark table"},
+        {"claim": "Selective params ablation 10.93/10.15/9.98/9.81/8.71 (L374-378)", "status": "supported", "source": "Ablation table"},
+        {"claim": "State dim ablation params 367.1-371.5 and ppl 9.88..9.81 vs 9.73..8.71 (L386-390)", "status": "supported", "source": "State dimension table"},
+        {"claim": "A_n init ablation 9.16/8.85/8.71/8.71 (L398-401)", "status": "supported", "source": "A init table"},
+        {"claim": "H3+S6 8.95; Mamba LTI layers 10.54-10.75; Mamba+S6 8.69 (L368)", "status": "supported", "source": "Architecture x inner SSM table"},
+        {"claim": "Untrained Mamba-6.9B > throughput of 5x smaller Transformer-1.3B (L341)", "status": "supported", "source": "Sec 4.5"},
+        {"claim": "Scaling-law models ~125M to ~1.3B under Chinchilla protocol (L222)", "status": "supported", "source": "Sec 4.2.1"}
+      ]
+    },
+    "checklist": {"repeated": 0, "avoided": 0, "na": 0, "repeated_ids": []},
+    "structure_defects": 39,
+    "structure_defects_breakdown": {
+      "broken_seams": ["L325 '결과는 두 가지입니다.' opens the U-Net subsection without the experiment"],
+      "references_never_stated": ["L300 '다만 이 실험들에는 단서가 하나 붙습니다' (the caveat, that this is the only complex-parameterized run, is never stated)", "L409 '앞서 본 정리 1' (no theorem number given earlier)"],
+      "one_sentence_subsections": ["L382-392 '### B·C가 선택적이어야 상태 확장이 효과를 냅니다': table plus one sentence"],
+      "sentence_shaped_headings": 35,
+      "sentence_shaped_headings_note": "35 of 53 headings end in 다, e.g. L34 '고정된 동역학으로는 문맥을 골라 담을 수 없습니다'. They are deliberate claim headings."
+    },
+    "top_issues": [
+      "The copy-task figure and explanation are duplicated (L48/L185, L50/L187)",
+      "The audio caveat is promised (L300) but never stated, and L409 cites 'Theorem 1' without it ever being numbered",
+      "The Great Apes table drops the 2^12 column and has a malformed header (L290); there are no induction-head or U-Net ablation tables"
+    ]
+  },
+  "Y": {
+    "scores": {
+      "A": {"score": 8.0, "reason": "Coherent arc and complete front matter. Deductions: the copy-task figure is embedded twice (L50/L185). The first scaling figure (L226) gets only the dangling 'L228 다른 어텐션 없는 모델은 모두 그 위에 있습니다.' L279 puts raw '2^20' in a heading outside math. Tables have empty cells: L193 '| 게이트 없음 | 18.3 | | 97.0 |' and L243 '| GPT-J-6B | | 4.10 |'."},
+      "B": {"score": 8.5, "reason": "Natural register. Minor: L410 '실무자가 이 손잡이를 직접 조정해야 할 수 있습니다' calques 'knob' (better: '이 설정을 직접 골라야'). L114 '용어를 고집합니다' is slightly loaded. L287 has a double space."},
+      "C": {"score": 7.5, "reason": "Several seams break: L228 '그 위' refers to nothing, and L245 'LAMBADA 퍼플렉시티(perplexity)도 5.04에서 4.23으로 낮습니다' opens with '도' and never names the compared models. L175 '이렇게 만든 모델은 완전한 순환 모델입니다' is stuck in the real-valued subsection. L398 '선택적 복사에 대입하면 차이가 분명해집니다' ends the section without making the difference clear."},
+      "D": {"score": 8.5, "reason": "Useful helps: the S4 vs S6 shape table (L76-83), the D=1024 parameter example (L169), and the Δ running example (L95, L265). There is no worked numeric discretization example, so Δ's effect stays qualitative."},
+      "E": {"score": 8.5, "reason": "Rich, faithful tables: the S4/S6 shape comparison, the induction-head table with params, the full SC09 table, the U-Net block ablation and the memory table. Deductions: the copy figure is duplicated, the first scaling figure has no description, some cells are empty (L193, L243), and the central Δ/B/C, state-dimension and A-init ablations get no table at all."},
+      "F": {"score": 9.0, "reason": "24 claims checked; 23 are supported, including every table cell. One is unsupported: L414 '이 논문의 DNA·오디오 컨텍스트 실험은 연산을 고정했으므로'. The paper's YouTubeMix setup varies tokens per batch (958,464 to 1,048,576) and claims compute control only for DNA."},
+      "G": {"score": 9.0, "reason": "use_math is set, the description is 139 chars, opens with Mamba, and its 4~5배 appears in the TL;DR. Raw '2^20' in the L279 heading is a minor markup slip."},
+      "R1": {"score": 8.5, "reason": "Strong on the algorithm, induction-head details (74K params, learning rates), training details (1.3B: 50K steps, 26B tokens), the DNA setup and the audio ablations (L370-380). Gaps: the Δ/B/C selectivity ablation, the state-dimension N ablation and the A initialization ablation, which are the paper's core ablations of the selection mechanism, are absent. The Great Apes result has no numbers (L273)."},
+      "R2": {"score": 8.5, "reason": "Layered: LTI → ZOH → shape table → parameter roles → RNN-gate theorem. Some hard parts stay qualitative (no numeric example for Δ)."},
+      "R3": {"score": 8.5, "reason": "The TL;DR is concrete (4~5x, 4000x induction, the audio caveat). The closing is specific and well grounded: the audio complex-parameterization caveat, ~3B scale, small DNA models, hardware dependence. The L414 overstatement is the one blemish."},
+      "X1": {"score": 7.0, "reason": "The category fits. 'Efficient-Attention' misdescribes an attention-free model, and 'Linear-Time-Sequence-Modeling' restates the title; 'Attention-Free-Architecture' is fine."}
+    },
+    "principles": {
+      "claim_headings": "met: most headings are claims, e.g. L116, L352",
+      "running_example": "met: the selective-copy Δ example appears at L95, L197, L265, L398 and L406",
+      "mechanism_reason_formula_example": "partly met: mechanism and formula are present, but no worked numeric example",
+      "facts_said_once": "partly met: the copy task and figure appear twice (L48-54, L183-187); QRNN/SRU limits are said at L114, L392 and L396",
+      "numbers_with_variant_scope_unit": "partly met: L245 '5.04에서 4.23' omits which models",
+      "nothing_invented": "partly met: L414 overstates compute control for the audio experiments",
+      "writer_assessment_at_end": "met: L402-L416, marked as the post's view",
+      "length_fitted": "met",
+      "type_specific_shape": "met",
+      "korean_style": "met, with minor calques"
+    },
+    "claims": {
+      "checked": 24, "unsupported": 1, "wrong": 0, "error_rate": 0.042,
+      "items": [
+        {"claim": "Selective copying accuracies (L193-195)", "status": "supported", "source": "Selective Copying table"},
+        {"claim": "Induction-head table: MHA-Abs 58.6/26.6/7.8/OOM, RoPE 83.6/31.3/5.5, xPos 99.6/67.6/7.8, H3 80.9/39.5/5.9/7.4, Hyena 100/44.1/7.0/9.8 (L209-214)", "status": "supported", "source": "Induction heads table (2^9, 2^10, 2^14, 2^20 columns)"},
+        {"claim": "Mamba 74K params, Hyena 69M, most of it positional encodings (L205, L213, L216)", "status": "supported", "source": "Induction heads table and footnote"},
+        {"claim": "LRs 2e-4 and 1e-3, best reported, Mamba used 1e-3 (L216)", "status": "supported", "source": "Table note"},
+        {"claim": "1.3B model trained 50,000 steps on 26B tokens (L224)", "status": "supported", "source": "Appendix E.2 training details"},
+        {"claim": "Zero-shot rows with WinoGrande 59.7/59.6/63.5/61.3/61.0/64.1 and averages (L238-243)", "status": "supported", "source": "Table 1"},
+        {"claim": "DNA model-size scaling 10K steps, 10B tokens (L253)", "status": "supported", "source": "Sec 4.3.1"},
+        {"claim": "Context-length experiment model 6 layers x width 128, ~1.3-1.4M params (L261)", "status": "supported", "source": "Sec 4.3.2"},
+        {"claim": "~40M: 3-4x fewer params (L257)", "status": "supported", "source": "Sec 4.3.1"},
+        {"claim": "HyenaDNA species {human, lemur, mouse, pig, hippo} replaced by five great apes sharing 99% DNA (L269)", "status": "supported", "source": "Sec 4.3.3"},
+        {"claim": "BPB is a constant factor log(2) of NLL (L281)", "status": "supported", "source": "Sec 4.4.1"},
+        {"claim": "YouTubeMix is a piano music dataset (L281)", "status": "supported", "source": "Sec 4.4.1"},
+        {"claim": "Audio pretraining is the only experiment switched from real to complex (L283)", "status": "supported", "source": "Sec 4.4.1 'the only experiment in this paper in which we switched from the real parameterization to complex'"},
+        {"claim": "SC09 full table, 8 rows, all cells (L291-298)", "status": "supported", "source": "SC09 table"},
+        {"claim": "U-Net outer/center ablation FID/mIS 1.45/47.03 ... 0.94/88.54 (L308-313)", "status": "supported", "source": "U-Net ablation table"},
+        {"claim": "N=16 scan benchmark; faster than FlashAttention-2 beyond 2K (L323, L327)", "status": "supported", "source": "Sec 4.5"},
+        {"claim": "Throughput measured on A100 80GB with prompt length 2048 (L331)", "status": "supported", "source": "Appendix E.5"},
+        {"claim": "4-5x higher throughput than similar-size Transformer (L331)", "status": "supported", "source": "Sec 4.5"},
+        {"claim": "Memory table 125M, A100 80GB, length 2048 (L339-348)", "status": "supported", "source": "Memory table"},
+        {"claim": "Fused scan 20-40x faster (L135)", "status": "supported", "source": "Sec 4.5"},
+        {"claim": "Up to 3x faster on A100 (L145)", "status": "supported", "source": "Sec 3.3"},
+        {"claim": "Lu et al. reset is a hard-coded selection with A-bar manually set to 0 (L390, L394)", "status": "supported", "source": "Related work / Sec 3.5"},
+        {"claim": "Induction heads generalize to 1M = 4000x training length; others under 2x (L30, L205)", "status": "supported", "source": "Sec 4.1.2"},
+        {"claim": "The DNA and audio context experiments fixed compute (L414)", "status": "unsupported", "source": "Only the DNA experiment fixes tokens per update; YouTubeMix tokens per batch vary from 958,464 to 1,048,576 and no compute control is claimed"}
+      ]
+    },
+    "checklist": {"repeated": 0, "avoided": 0, "na": 0, "repeated_ids": []},
+    "structure_defects": 35,
+    "structure_defects_breakdown": {
+      "broken_seams": ["L228 '다른 어텐션 없는 모델은 모두 그 위에 있습니다.' ('그 위' has no referent)", "L245 'LAMBADA 퍼플렉시티(perplexity)도 5.04에서 4.23으로 낮습니다.' (opens with '도'; models never named)", "L398 '선택적 복사에 대입하면 차이가 분명해집니다. 앞의 계보는 대부분 LTI이거나 리셋 시점을 미리 정해 둡니다.' (promised contrast not delivered)"],
+      "references_never_stated": [],
+      "one_sentence_subsections": [],
+      "sentence_shaped_headings": 32,
+      "sentence_shaped_headings_note": "32 of 48 headings end in 다, e.g. L34 '기존 SSM은 효율을 위해 시불변성에 묶였고, 그래서 내용을 고르지 못했습니다'. They are deliberate claim headings."
+    },
+    "top_issues": [
+      "The core selection ablations (selective Δ/B/C, state dimension N, A init) are missing, though the section claims selection drives the gains (L352-360)",
+      "Broken seams around the scaling figure and zero-shot table (L228, L245); the first scaling figure is never described",
+      "L414 overstates that the audio context experiments fixed compute"
+    ]
+  },
+  "preference": {
+    "overall": "X",
+    "per_criterion": {"A": "tie", "B": "tie", "C": "X", "D": "X", "E": "Y", "F": "X", "G": "tie", "R1": "X", "R2": "X", "R3": "tie", "X1": "tie"},
+    "reason": "Both posts are accurate and well structured. X covers the paper's central evidence for the selection mechanism: the Δ/B/C, state-dimension and A-init ablation tables, plus the recipe-vs-architecture caution. It also gives a correct worked numeric example of Δ gating, has fewer broken seams and has no unsupported claim. Y has richer appendix tables (induction heads with params, the full SC09 table, the U-Net ablation, the S4/S6 shape table) and a sharper closing. But Y drops the core selection ablations, leaves the first scaling figure undescribed, has two dangling seams (L228, L245), and overstates compute control for audio (L414). The margin is modest."
+  }
+}

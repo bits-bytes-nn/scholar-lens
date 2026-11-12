@@ -1,0 +1,166 @@
+{
+  "item": "review-mamba",
+  "session": 3,
+  "judge_model": "us.anthropic.claude-opus-5-5",
+  "X": {
+    "scores": {
+      "A": {"score": 8.0, "reason": "Coherent arc (motivation -> selection -> scan -> block -> synthetics -> LM -> DNA -> audio -> efficiency -> ablations -> related -> assessment); front matter and $$ math are clean. Deductions: same figure image -1 inserted twice (L48 and L185); species table header mixes caption and first column ('정확도(%) 길이 $$2^{10}$$', L290); L296 one-sentence paragraph restating a table cell ('HyenaDNA 1.4M의 최대 길이 정확도는 54.87%입니다.')."},
+      "B": {"score": 8.0, "reason": "Natural 입니다 register, terms kept consistent (선택 메커니즘, 하드웨어 인식 스캔). Deductions: mixed-language number '약 4.5 billion 토큰(염기쌍)' (L268, should be 약 45억); formulaic back-references '앞서 본 …' repeated in nearly every section (e.g. L120, L165, L308, L360, L380, L403); noun frame '기술적 기여는 … 넘는 데 있습니다' (L54)."},
+      "C": {"score": 7.5, "reason": "Mostly smooth with a running example. Seams: L300 announces '다만 이 실험들에는 단서가 하나 붙습니다' but never says the audio pretraining run switched to complex parameterization; L325 opens '결과는 두 가지입니다.' without describing the U-Net ablation setup; L409 cites '앞서 본 정리 1' though L99 never named it Theorem 1. Selective-copy/LTI explanation is given twice (L46-54 and L183-189)."},
+      "D": {"score": 9.0, "reason": "Excellent timely help: hypothetical scalar channel with Δ=0.01 vs Δ=5 showing 0.99/0.01 vs 0.007/0.993 (L95), reused at L206 and L380; HBM defined at first use (L126); the '두 배 크기와 대등' reading caveat (L260). Minor: L171 D=1024 parameter arithmetic adds little."},
+      "E": {"score": 7.5, "reason": "Good tables (selective copying, zero-shot, SC09, memory, three ablation tables), figures discussed descriptively. Deductions: duplicate figure -1 (L48, L185); species table drops the 2^12 column instead of whole rows (L290-294); U-Net ablation (L325) and architecture ablation (L368) described without their tables; no induction-heads table."},
+      "F": {"score": 8.0, "reason": "Almost all numbers match source cells. One misattribution: L321 'IS 7.33, mIS 144.9로 다른 충실도 지표도 크게 좋아졌습니다' follows the 6.1M-model sentence, but those are the 24.3M model's values (6.1M: IS 6.26, mIS 88.54). Omission of the complex-parameterization caveat for YouTubeMix (L300) leaves a promised fact unstated."},
+      "G": {"score": 9.0, "reason": "use_math true with $$ only; no single $ or \\( \\); description 143 chars, opens with 'Mamba', numbers (5배, 백만) from TL;DR; date/front matter fine."},
+      "X1": {"score": 6.5, "reason": "Category fine. Tags 'Efficient-Attention' names a technique the paper does not use (it is attention-free); 'Linear-Time-Sequence-Modeling' and 'Mamba-Architecture' restate the title."},
+      "R1": {"score": 9.0, "reason": "Deep coverage of ZOH, selection functions, Δ broadcast/low-rank, Theorem 1, fused scan steps, recomputation, block parameter budget, all experiment families and ablations, plus the training-recipe confound analysis (L232-234)."},
+      "R2": {"score": 9.0, "reason": "Layering intuition -> formula -> worked numeric example -> figure is done for the hard part (selection/Δ) and for the scan (HBM vs SRAM steps)."},
+      "R3": {"score": 8.5, "reason": "TL;DR concrete (Pythia-3B +4, 5x, 1M). Closing names the paper's no-free-lunch audio limitation and a labeled own interpretation (L441); open questions on scale and retrieval are reasonable. Minor: assessment repeats earlier facts at length."}
+    },
+    "principles": {
+      "claim_headings": "met (35 sentence-shaped claim headings)",
+      "running_example": "met (selective copying with Δ=0.01/5, L95, L206, L380, L441)",
+      "mechanism_reason_formula_example": "met for selection and scan",
+      "facts_once": "partly met (copy-task figure and explanation twice; species max accuracy stated twice L288/L296)",
+      "numbers_with_variant_scope_unit": "partly met (L321 IS/mIS variant blurred)",
+      "nothing_invented": "partly met (one misattribution)",
+      "own_assessment_at_end": "met (L437-443)",
+      "length_fitted": "met",
+      "type_specific_shape": "met",
+      "korean_style": "partly met ('4.5 billion', repeated '앞서 본')"
+    },
+    "claims": {
+      "checked": 28, "unsupported": 0, "wrong": 1, "unverifiable": 1, "error_rate": 0.036,
+      "items": [
+        {"line": 28, "claim": "Pythia-3B보다 4점 높고 Pythia-7B도 넘어섭니다", "status": "supported", "source": "Abstract: 4 points higher avg. on common sense reasoning compared to Pythia-3B and even exceeding Pythia-7B"},
+        {"line": 29, "claim": "추론 처리량은 트랜스포머의 5배", "status": "supported", "source": "Abstract: 5x higher throughput than Transformers"},
+        {"line": 120, "claim": "유효 상태 차원 N배(약 10~100)", "status": "supported", "source": "3.3.1: factor of N (≈10-100)"},
+        {"line": 122, "claim": "순환 O(BLDN) vs 컨볼루션 O(BLD log L) FLOPs, 순환 상수 계수 작음", "status": "supported", "source": "3.3.2 observations"},
+        {"line": 133, "claim": "메모리 IO O(N)배 감소, 20~40배 빨라짐", "status": "supported", "source": "3.3.2: reduce IOs by a factor of O(N) ... speeds up by 20-40 times"},
+        {"line": 147, "claim": "A100에서 최대 3배 빠름", "status": "supported", "source": "Intro: up to 3x faster on A100 GPUs"},
+        {"line": 169, "claim": "3ED^2, E=2, 두 블록이 12D^2", "status": "supported", "source": "3.4"},
+        {"line": 197, "claim": "선택적 복사 정확도 18.3/97.0/57.0/30.1/99.7/56.4/28.4/99.8", "status": "supported", "source": "Table 1 (Selective Copying)"},
+        {"line": 214, "claim": "백만 길이, 4000배, 다른 방법은 2배를 넘지 못함", "status": "supported", "source": "4.1.2 Results"},
+        {"line": 222, "claim": "약 125M~1.3B, Chinchilla 프로토콜", "status": "supported", "source": "4.2.1"},
+        {"line": 234, "claim": "개선 레시피가 RetNet, H3++, Transformer++, Mamba에 쓰임; H3++ 헤드 차원 8", "status": "supported", "source": "E.2.2 / Figure 17"},
+        {"line": 244, "claim": "Mamba·Pythia 컨텍스트 2048, RWKV 1024; GPT-NeoX 토크나이저", "status": "supported", "source": "4.2.2 and Table 3 caption"},
+        {"line": 248, "claim": "제로샷 표 9행(Pile/LAMBADA ppl, LAMBADA/HellaSwag acc, 평균)", "status": "supported", "source": "Table 3 cells match"},
+        {"line": 268, "claim": "HG38 학습 분할 약 4.5B 토큰", "status": "supported", "source": "4.3: about 4.5 billion tokens"},
+        {"line": 270, "claim": "배치당 약 1M 토큰, 10K 스텝, 총 10B; SLW 2^10부터 2 에폭씩", "status": "supported", "source": "4.3.1 Training; E.3.3"},
+        {"line": 276, "claim": "약 40M에서 3~4배 적은 파라미터", "status": "supported", "source": "4.3.1 Results"},
+        {"line": 284, "claim": "다섯 유인원 종이 DNA의 99% 공유", "status": "supported", "source": "4.3.3"},
+        {"line": 292, "claim": "유인원 분류 정확도 28.04/41.17/42.22/31.10/54.87 등", "status": "supported", "source": "Table 5 (2^12 column omitted)"},
+        {"line": 316, "claim": "SC09 표 4행 (SaShiMi, DiffWave+SaShiMi, Mamba 6.1M, 24.3M)", "status": "supported", "source": "Figure 10 table"},
+        {"line": 321, "claim": "610만 Mamba 문장 뒤 'IS 7.33, mIS 144.9로 다른 충실도 지표도 크게 좋아졌습니다'", "status": "wrong", "source": "IS 7.33 / mIS 144.9 belong to Mamba 24.3M; the 6.1M model has IS 6.26 / mIS 88.54"},
+        {"line": 336, "claim": "N=16, FlashAttention-2 인과 마스크 약 1.7배 빠름", "status": "supported", "source": "E.5 Scan Operation"},
+        {"line": 353, "claim": "메모리 표 4.6/4.8 ... 34.5/38.2GB, 125M, A100 80GB, 길이 2048", "status": "supported", "source": "Table 7 / E.5"},
+        {"line": 368, "claim": "H3+S6 8.95, Mamba LTI 10.54~10.75, Mamba+S6 8.69", "status": "supported", "source": "Ablation architecture table"},
+        {"line": 374, "claim": "선택적 파라미터 ablation 10.93/10.15/9.98/9.81/8.71", "status": "supported", "source": "Selective parameters table"},
+        {"line": 386, "claim": "상태 차원 표 367.1~371.5M, 9.88~9.81 / 9.73~8.71", "status": "supported", "source": "State dimension table"},
+        {"line": 398, "claim": "A 초기화 9.16/8.85/8.71/8.71", "status": "supported", "source": "A parameterization table"},
+        {"line": 433, "claim": "오디오에서 S4->S6가 성능을 떨어뜨림, Mamba-S4 명칭, 실수가 복소수보다 뒤처짐", "status": "supported", "source": "E.4.1 Additional Ablations"},
+        {"line": 279, "claim": "컨텍스트 길이 그림에 HyenaDNA 1.4M과 Mamba 1.4M·7M", "status": "unverifiable", "source": "Text fixes 1.3-1.4M models; legend not in HTML text"}
+      ]
+    },
+    "checklist": {"repeated": 0, "avoided": 0, "na": 0, "repeated_ids": []},
+    "structure_defects": 4,
+    "structure_defect_detail": {
+      "broken_seams": ["L325 '결과는 두 가지입니다.' (U-Net ablation setup never described)"],
+      "references_to_unstated": ["L300 '다만 이 실험들에는 단서가 하나 붙습니다.' (the complex-parameterization caveat is never stated)", "L409 '앞서 본 정리 1이' (L99 never named it 정리 1)"],
+      "one_sentence_subsections": ["L382 '### B·C가 선택적이어야 상태 확장이 효과를 냅니다' (table + one sentence L392)"],
+      "sentence_shaped_headings": 35,
+      "sentence_shaped_heading_examples": ["L34 '## 고정된 동역학으로는 문맥을 골라 담을 수 없습니다'", "L124 '### 병목은 연산이 아니라 메모리 IO입니다'", "L216 '## Mamba는 Pile 스케일링과 제로샷 평가에서 두 배 크기 트랜스포머와 맞먹습니다'", "L429 '### 선택에는 대가가 있습니다'"],
+      "note": "structure_defects counts seams, unstated references and one-sentence subsections; the 35 sentence-shaped headings are the house claim-heading style and listed separately (total including them: 39)"
+    },
+    "top_issues": [
+      "L321 attributes IS 7.33 / mIS 144.9 (24.3M model) to the 6.1M Mamba",
+      "L300 announces a caveat for audio but never states that YouTubeMix used complex parameterization",
+      "Duplicate figure -1 (L48, L185) and species table with a dropped column",
+      "Tags include 'Efficient-Attention' for an attention-free paper"
+    ]
+  },
+  "Y": {
+    "scores": {
+      "A": {"score": 7.5, "reason": "Same coherent arc, plus S4-vs-S6 shape table and a related-work table. Deductions: the Pile scaling subsection is gutted: after the first figure only '다른 어텐션 없는 모델은 모두 그 위에 있습니다.' (L228), after the second only one sentence (L232); same figure -1 inserted twice (L50, L185); heading with raw '2^20' outside math (L279)."},
+      "B": {"score": 8.0, "reason": "Natural 입니다 register, consistent terms (합성곱, 하드웨어 인지). Deductions: '앞서 본/앞서 소개한' formula throughout (L95, L112, L197, L216, L265, L283, L398, L410); '저자들은 … 봅니다' stacking; 'L245 LAMBADA 퍼플렉시티(perplexity)도' gives the gloss only at the 30th-odd use of the term."},
+      "C": {"score": 7.0, "reason": "Seams: L228 '그 위' has no antecedent (Mamba/Transformer++ curves never described); L245 'LAMBADA 퍼플렉시티(perplexity)도 5.04에서 4.23으로' -'도' points to an unstated comparison and 5.04 is unattributed (Pythia-2.8B); L398 '선택적 복사에 대입하면 차이가 분명해집니다. 앞의 계보는…' is a stub. QRNN/SRU facts said three times (L114, L392, L396)."},
+      "D": {"score": 8.0, "reason": "Good help at hard points: shape table for S4 vs S6 (L76-83), HBM/SRAM steps, explanation of BPB constant factor, Lu et al. reset explained (L394). No numeric worked example of Δ; the running example is narrative only (L95, L197)."},
+      "E": {"score": 8.5, "reason": "Rich, well placed tables: shapes, induction heads (cells verified), full SC09 table, SC09 U-Net ablation, memory; audio ablation figures. Deductions: duplicate figure -1 (L50, L185); selective-copy table pivoted with an empty cell (L193); induction table shortened by columns; zero-shot table drops the 1.4B rows."},
+      "F": {"score": 9.5, "reason": "No wrong numbers found in 28 checks; table cells match. Minor: L245 '5.04에서 4.23' unattributed; L327 'OOM' for the standard scan and convolution is more specific than the paper's 'some of the baselines'."},
+      "G": {"score": 8.5, "reason": "use_math true, $$ only; description 139 chars, opens with 'Mamba', numbers from TL;DR. Deduction: raw '2^20' in a heading (L279) outside math."},
+      "X1": {"score": 7.0, "reason": "'Attention-Free-Architecture' fits; still carries 'Efficient-Attention' (technique not used) and title restatement 'Linear-Time-Sequence-Modeling'."},
+      "R1": {"score": 9.0, "reason": "Deep and complete: shapes, selection functions, Theorem 1, fused scan, S5 contrast, block, all experiments incl. induction table, SC09 ablation, audio Mamba-S4 ablation with figures, recipe/head-dim ablation."},
+      "R2": {"score": 8.0, "reason": "Layered for selection (formula -> shape table -> role of each parameter -> RNN gate), but no concrete worked example; Pile results lose their explanatory layer (L226-232)."},
+      "R3": {"score": 9.0, "reason": "TL;DR concrete and includes the audio caveat (L30). Closing separates paper limitations (audio trade-off, complex-only audio, small scale) from labeled post opinion ('아래 판단은 이 포스트의 견해입니다', L402); fair-comparison note on HyenaDNA (L414)."}
+    },
+    "principles": {
+      "claim_headings": "met (32 sentence-shaped claim headings)",
+      "running_example": "partly met (selective copying referenced, no numeric example)",
+      "mechanism_reason_formula_example": "partly met (no worked example)",
+      "facts_once": "partly met (QRNN/SRU three times; copy figure twice)",
+      "numbers_with_variant_scope_unit": "partly met (L245 unattributed 5.04)",
+      "nothing_invented": "met",
+      "own_assessment_at_end": "met (L402-416, labeled)",
+      "length_fitted": "met",
+      "type_specific_shape": "met",
+      "korean_style": "met with formulaic back-references"
+    },
+    "claims": {
+      "checked": 28, "unsupported": 0, "wrong": 0, "unverifiable": 2, "error_rate": 0.0,
+      "items": [
+        {"line": 29, "claim": "추론 처리량 4~5배", "status": "supported", "source": "4.5: 4-5x higher inference throughput"},
+        {"line": 30, "claim": "유도 헤드 4000배, 백만 길이 완벽 일반화", "status": "supported", "source": "4.1.2"},
+        {"line": 78, "claim": "S4 vs S6 텐서 모양 (D,N), (B,L,N), (B,L,D), (B,L,D,N)", "status": "supported", "source": "Algorithms 1-2"},
+        {"line": 122, "claim": "유효 상태 차원 약 10~100배", "status": "supported", "source": "3.3.1"},
+        {"line": 124, "claim": "O(BLDN) vs O(BLD log L), 순환 상수 계수 작음", "status": "supported", "source": "3.3.2"},
+        {"line": 135, "claim": "HBM IO O(N)배 감소, 20~40배 빨라짐", "status": "supported", "source": "3.3.2"},
+        {"line": 139, "claim": "S5가 병렬 스캔을 처음 쓴 S4 모델, SISO->MIMO로 상태 차원 축소", "status": "supported", "source": "Appendix B (S5)"},
+        {"line": 145, "claim": "A100 기준 최대 3배; 합성곱 SSM은 준선형", "status": "supported", "source": "Intro"},
+        {"line": 169, "claim": "E=2, 블록 6D^2, 두 블록 12D^2", "status": "supported", "source": "3.4"},
+        {"line": 193, "claim": "선택적 복사 18.3/97.0/57.0/30.1/99.7/56.4/28.4/99.8", "status": "supported", "source": "Table 1"},
+        {"line": 205, "claim": "Mamba 74K 파라미터", "status": "supported", "source": "Table 2"},
+        {"line": 209, "claim": "유도 헤드 표 셀 (MHA-Abs 58.6/26.6/7.8/OOM ... Hyena 69M 100/44.1/7.0/9.8)", "status": "supported", "source": "Table 2 cells at 2^9, 2^10, 2^14, 2^20"},
+        {"line": 216, "claim": "학습률 2e-4/1e-3 중 나은 쪽, Mamba만 1e-3; Hyena 파라미터는 위치 인코딩", "status": "supported", "source": "E.1 Induction Heads"},
+        {"line": 224, "claim": "1.3B 모델 50000 스텝, 26B 토큰; GPT3 사양; Chinchilla에 대략 맞춤", "status": "supported", "source": "Table 12 / E.2.1"},
+        {"line": 238, "claim": "제로샷 6행 + WinoGrande 59.7/59.6/63.5/61.3/61.0/64.1", "status": "supported", "source": "Table 3"},
+        {"line": 253, "claim": "짧은 길이는 기준선에 유리, 10K 스텝 10B 토큰", "status": "supported", "source": "4.3.1 Training"},
+        {"line": 257, "claim": "약 40M, 3~4배 적은 파라미터", "status": "supported", "source": "4.3.1 Results"},
+        {"line": 261, "claim": "6층, 폭 128, 약 1.3M~1.4M", "status": "supported", "source": "4.3.2"},
+        {"line": 269, "claim": "HyenaDNA 종 목록(사람, 여우원숭이, 쥐, 돼지, 하마) -> 유인원 5종, DNA 99% 공유", "status": "supported", "source": "4.3.3"},
+        {"line": 281, "claim": "YouTubeMix 피아노 독주; BPB는 NLL과 log(2) 상수배", "status": "supported", "source": "4.4.1"},
+        {"line": 283, "claim": "논문에서 유일하게 복소수 파라미터화를 쓴 실험", "status": "supported", "source": "4.4.1"},
+        {"line": 291, "claim": "SC09 전체 표 8행", "status": "supported", "source": "Figure 10 table"},
+        {"line": 300, "claim": "6.1M은 23.0M의 4분의 1 남짓; 24.3M은 파라미터 맞춤", "status": "supported", "source": "Figure 10; 4.4.2 'parameter-matched'"},
+        {"line": 308, "claim": "SC09 U-Net ablation FID/mIS 1.45/47.03 ... 0.94/88.54", "status": "supported", "source": "Figure 11 table"},
+        {"line": 323, "claim": "N=16, FlashAttention-2 비교", "status": "supported", "source": "4.5"},
+        {"line": 331, "claim": "A100 80GB, 프롬프트 길이 2048", "status": "supported", "source": "E.5 End-to-end Inference"},
+        {"line": 341, "claim": "메모리 표 6행", "status": "supported", "source": "Table 7"},
+        {"line": 327, "claim": "표준 스캔과 합성곱이 긴 길이에서 OOM", "status": "unverifiable", "source": "E.5 says only 'some of the baselines run out of memory before reaching 500K'"},
+        {"line": 46, "claim": "Δ를 시간에 따라 바꾸는 특수한 선택은 이전에도 순환형 SSM에서 시도", "status": "unverifiable", "source": "No matching passage located in HTML text"}
+      ]
+    },
+    "checklist": {"repeated": 0, "avoided": 0, "na": 0, "repeated_ids": []},
+    "structure_defects": 3,
+    "structure_defect_detail": {
+      "broken_seams": ["L228 '다른 어텐션 없는 모델은 모두 그 위에 있습니다.' ('그 위' has no antecedent)", "L398 '선택적 복사에 대입하면 차이가 분명해집니다. 앞의 계보는 대부분 LTI이거나 리셋 시점을 미리 정해 둡니다.' (stub that does not deliver the comparison)"],
+      "references_to_unstated": ["L245 'LAMBADA 퍼플렉시티(perplexity)도 5.04에서 4.23으로 낮습니다.' ('도' refers to a comparison never made; 5.04 unattributed)"],
+      "one_sentence_subsections": [],
+      "sentence_shaped_headings": 32,
+      "sentence_shaped_heading_examples": ["L34 '## 기존 SSM은 효율을 위해 시불변성에 묶였고, 그래서 내용을 고르지 못했습니다'", "L159 '### 파라미터는 대부분 선형 투영에 있습니다'", "L317 '## 스캔은 2K부터 FlashAttention-2를 앞서고, 추론 처리량은 4~5배 높습니다'", "L370 '### 예외: 오디오 파형에서는 선택이 해가 됩니다'"],
+      "note": "structure_defects counts seams, unstated references and one-sentence subsections; the 32 sentence-shaped headings are the house claim-heading style and listed separately (total including them: 35)"
+    },
+    "top_issues": [
+      "Pile scaling subsection reduced to orphan sentences around the two figures (L226-232)",
+      "L245 unattributed '5.04에서 4.23' with a dangling '도'",
+      "QRNN/SRU facts repeated three times; duplicate figure -1",
+      "No numeric worked example for Δ selection"
+    ]
+  },
+  "preference": {
+    "overall": "Y",
+    "per_criterion": {
+      "A": "X", "B": "tie", "C": "X", "D": "X", "E": "Y", "F": "Y", "G": "X",
+      "X1": "Y", "R1": "tie", "R2": "X", "R3": "Y"
+    },
+    "reason": "Close call; mean rubric scores are equal (8.18 each). X is the better teaching text (numeric Δ example, recipe-confound analysis, fewer seams in the LM section). Y is factually clean (0 wrong in 28 claims) and carries more verified evidence (induction-heads table, full SC09 table, U-Net ablation table, audio Mamba-S4 ablation, and the complex-parameterization caveat that X announces but never states). X misattributes the 24.3M model's IS/mIS to the 6.1M model, which puts its F below the 9.0 gate. Because the rubric treats F as non-negotiable, I prefer Y narrowly."
+  }
+}

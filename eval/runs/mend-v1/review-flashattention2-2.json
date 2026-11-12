@@ -1,0 +1,164 @@
+{
+  "item": "review-flashattention2",
+  "session": 2,
+  "judge_model": "us.anthropic.claude-opus-5-5",
+  "X": {
+    "scores": {
+      "A": {"score": 7.0, "reason": "Coherent arc and valid Jekyll markup, but stitched spots: one-sentence subsection L146-148 '### 인과 마스크와 함께 보면' / '마스크가 있으면 행 블록마다, 열 블록마다 실제로 계산할 칸 수가 다릅니다.' followed by an unrelated callout; orphan paragraph L302 '컨텍스트 길이에 따라 결과가 크게 달라집니다.' that the next paragraph (FLOPs formula) never develops."},
+      "B": {"score": 7.5, "reason": "Natural 입니다 register, but formulaic repetition of '예를 들어 가상의' (L57, L90, L94, L118, L130, L144, L166, L196) and noun-frame endings: L166 '…함께 따라온다는 것이 이 글의 해석입니다', L176 '…처리할 수 있다는 것이 이 글의 해석입니다'. L213 '3-10배, 최대 10배' redundant."},
+      "C": {"score": 7.0, "reason": "Back-references to things not stated: L196 '헤드 차원과 head 수는 앞서 소개한 두 조합을 씁니다' (the 64/32 and 128/16 combinations are never introduced). L300 '같은 설정에서 미사용 기준은 80 TFLOPs/s여서' names no setting after the table. L277 'FlashAttention-2의 라벨은 512부터 16k까지…' does not state the setting in the body."},
+      "D": {"score": 9.0, "reason": "Hard parts get help at the right moment: worked numeric online-softmax example with scores [1,2]/[3] (L94, arithmetic correct: ℓ≈1.503, L≈3.41), atomic-add explanation (L142-144), split-K partial-sum explanation (L164-166). Minor: L57 and L118 hypotheticals are a bit redundant."},
+      "E": {"score": 8.5, "reason": "Both warp-partition diagrams (split-K vs Q-split, L162/L172), parallelism diagram, speedup and Table-1 tables. 11 benchmark charts is heavy: L237-255 walk through every chart with label readings, partly redundant with L257 summary."},
+      "F": {"score": 8.5, "reason": "No wrong numbers found among 24 checks. Deductions: L110 'L행 인덱스가 열 인덱스보다 확실히 작은 블록에는 마스크 연산 자체가 필요 없습니다' copies the paper's inverted wording (rows < columns are the skipped blocks) without noticing; L261 'H100 80GB SXM5' not in the paper text; L229 speculation '블록 건너뛰기의 이득이 FLOPs 환산에 이미 반영됐기 때문' is muddled (flagged as speculation)."},
+      "G": {"score": 9.0, "reason": "use_math set, description 145 chars opening with the method name, numbers from TL;DR, fences/math fine."},
+      "X1": {"score": 7.0, "reason": "Six tags; 'Parallelized-Attention-Backward-Pass' and 'Online-Softmax-Rescaling' are long and not reusable; 'IO-Aware-Exact-Attention' is FlashAttention-1's contribution, not this paper's."},
+      "R1": {"score": 9.0, "reason": "Covers all three changes, causal masking, MQA/GQA, FLOPs accounting, A100/H100/end-to-end results and limitations with real depth."},
+      "R2": {"score": 9.0, "reason": "Intuition -> formula -> numeric example -> figure for the rescaling and warp partitioning (L65-104, L158-178)."},
+      "R3": {"score": 8.5, "reason": "TL;DR concrete with settings (L33-35). Closing assessment specific (kernel 2x vs end-to-end 1.3x, FLOPs-counting caveat, portability, L324-328). Limitations come from paper text."}
+    },
+    "principles": {
+      "claim_headings": "met (H2 headings are claims, e.g. L154)",
+      "running_example": "partly met (hypothetical 16k/batch-1 case reused L57, L90, L130, L196, but switches to fresh hypotheticals)",
+      "mechanism_reason_formula_example": "met (L65-104)",
+      "facts_said_once": "partly met (30-50%/25-35% repeated L18, L53, L215; 'FlashAttention 대비 최대 1.3배' context repeated)",
+      "numbers_with_variant_scope_unit": "met",
+      "nothing_invented": "partly met (H100 80GB SXM5 detail; copied inverted mask wording)",
+      "writer_assessment_at_end": "met (L322-328)",
+      "length_fitted": "partly met (chart-by-chart readings L233-257 long)",
+      "type_specific_shape": "met",
+      "korean_style": "partly met (repeated '예를 들어 가상의', '…것이 이 글의 해석입니다')"
+    },
+    "claims": {
+      "checked": 24,
+      "unsupported": 0,
+      "wrong": 0,
+      "error_rate": 0.0,
+      "items": [
+        {"claim": "FA forward 30-50%, backward 25-35% of max FLOPs/s on A100 (L18)", "status": "supported", "source": "forward pass only reaches 30-50%...; 25-35% of maximum throughput"},
+        {"claim": "Optimized GEMM 80-90% (L53)", "status": "supported", "source": "optimized GEMM can reach up to 80-90%"},
+        {"claim": "FlashAttention 2-4x speedup over optimized baselines (L51)", "status": "supported", "source": "2-4x wall-clock time speedup over optimized baselines"},
+        {"claim": "Matmul throughput up to 16x non-matmul (L63)", "status": "supported", "source": "each non-matmul FLOP is 16x more expensive"},
+        {"claim": "FA O^(2) update formula (L70)", "status": "supported", "source": "Sec 2.3.1 equation"},
+        {"claim": "Un-scaled Õ^(2) formula (L78)", "status": "supported", "source": "Sec 3.1.1 equation"},
+        {"claim": "Store only logsumexp L = m + log ℓ (L101)", "status": "supported", "source": "Sec 3.1.1"},
+        {"claim": "Causal mask gives ~1.7-1.8x over no mask; ~half blocks skipped (L110)", "status": "supported", "source": "around 1.7-1.8x speedup; approximately half of the blocks"},
+        {"claim": "Mask needed on 1 block per row with square blocks (L110)", "status": "supported", "source": "only need to apply causal mask to 1 block (assuming square block)"},
+        {"claim": "No mask needed for blocks with row indices strictly less than column indices (L110)", "status": "supported", "source": "verbatim paper wording, though logically inverted; post repeats it uncritically"},
+        {"claim": "dQ updated across thread blocks with atomic adds (L142)", "status": "supported", "source": "We use atomic adds to communicate between different thread blocks to update dQ"},
+        {"claim": "FA splits K,V across 4 warps (split-K); FA2 splits Q across 4 warps (L160, L170)", "status": "supported", "source": "Sec 3.3"},
+        {"claim": "Backward still requires some synchronization (L182)", "status": "supported", "source": "still requires some synchronization due to the more complicated dependency"},
+        {"claim": "Forward FLOPs 4·seqlen²·d·heads, halved for causal, backward 2.5x (L192-194)", "status": "supported", "source": "Sec 4.1"},
+        {"claim": "Hidden dim 2048, seqlen from 512 (L196)", "status": "supported", "source": "We set hidden dimension to 2048"},
+        {"claim": "1.7-3.0x vs FA, ~2x vs xformers, Triton 1.3-2.5x / fwd 1.3-1.5x / bwd ~2x (L208-212)", "status": "supported", "source": "Sec 4.1"},
+        {"claim": "3-10x vs PyTorch (L213)", "status": "supported", "source": "3-10x faster than a standard attention implementation"},
+        {"claim": "Peak 230 TFLOPs/s = 73%; backward up to 63% (L200, L215)", "status": "supported", "source": "reaches up to 230 TFLOPs/s, 73%; up to 63% ... backward"},
+        {"claim": "H100 up to 335 TFLOPs/s without TMA/4th-gen Tensor Core instructions (L261)", "status": "supported", "source": "using no special instructions ... we obtain up to 335 TFLOPs/s"},
+        {"claim": "H100 80GB SXM5 (L261)", "status": "unverifiable", "source": "not in paper text"},
+        {"claim": "Expect another 1.5-2x on H100 with new instructions (L287)", "status": "supported", "source": "we can obtain another 1.5x-2x speedup on H100"},
+        {"claim": "Table 1 values 142/189/196, 72/170/220, 149/189/205, 80/175/225 (L295-298)", "status": "supported", "source": "Table 1"},
+        {"claim": "225 TFLOPs/s per A100 (72% MFU), 1.3x vs FA, 2.8x vs baseline (L34)", "status": "supported", "source": "Sec 4 / 4.2"},
+        {"claim": "Block sizes {64,128}x{64,128}, manual tuning, auto-tuning future work; future AMD, FP8, local/dilated/block-sparse, compiler collaboration (L318-320, L328)", "status": "supported", "source": "Sec 3.3, Sec 5"}
+      ]
+    },
+    "checklist": {"repeated": 0, "avoided": 0, "na": 0, "repeated_ids": []},
+    "structure_defects": 24,
+    "structure_defect_detail": {
+      "broken_seams": ["L277 'FlashAttention-2의 라벨은 512부터 16k까지 163, 221, …' (setting not stated in body)", "L300 '같은 설정에서 미사용 기준은 80 TFLOPs/s여서' (no setting named)", "L302 '컨텍스트 길이에 따라 결과가 크게 달라집니다.' (orphan, never developed)"],
+      "references_to_unstated": ["L196 '헤드 차원과 head 수는 앞서 소개한 두 조합을 씁니다' (combinations never introduced)"],
+      "one_sentence_subsections": ["L146-148 '### 인과 마스크와 함께 보면'"],
+      "sentence_shaped_headings": 19,
+      "sentence_shaped_heading_examples": ["L39", "L61", "L96 '### backward용 통계량은 하나로 충분합니다'", "L116", "L122", "L132", "L154", "L158", "L168", "L180", "L184", "L198", "L217", "L259", "L263 '### 헤드 차원 128: 원래 FlashAttention은 거의 제자리입니다'", "L271", "L289", "L112", "L322"],
+      "non_heading_defects": 5
+    },
+    "top_issues": [
+      "Stitched seams in the end-to-end section: L300 '같은 설정에서…' and orphan L302",
+      "One-sentence subsection L146-148",
+      "Copies the paper's inverted 'row indices strictly less than column indices' mask wording (L110)",
+      "Chart-by-chart label readings (L233-257) are long and partly redundant"
+    ]
+  },
+  "Y": {
+    "scores": {
+      "A": {"score": 6.5, "reason": "Internal evidence-ledger tokens leak into the body: L53 '출력 값은 그대로 두고 행렬곱 외 연산만 덜어냅니다 [[E4], [E14]].' Numbered list split by a paragraph (L89-97: '3.' then a display equation and 'T_c는…' paragraph, then '4.'), which restarts list numbering in kramdown. Otherwise sound order (method -> mask -> parallelism -> warps -> implementation -> results)."},
+      "B": {"score": 7.5, "reason": "Clean 입니다 register; some formulaic lines: L111 '…덜어냈다는 점이 이 수정의 핵심입니다' (noun frame), L237 '두 결과의 TFLOPs/s를 같은 기준으로 비교하면 안 됩니다.' stranded; L268 fragmentary."},
+      "C": {"score": 7.0, "reason": "L268 'head 차원이 64일 때도 1k~16k에서 191~193 TFLOPs/s로 평탄합니다.' ('도' refers to hd128 forward numbers never stated in text). L294 '앞서 본 Q 기준 워프 분할과 시퀀스 길이 병렬화는 … 바꾼 개선입니다.' dangles with no point. L319 '이 작업은 향후 과제로 남겨 두었습니다' refers to new-instruction work not stated in that subsection body. Positive: consistent 8k running example (L81, L129, L153, L167, L201)."},
+      "D": {"score": 8.5, "reason": "Running 8k/B=128 example carried through mask, parallelism and warps (tile counts 2016/64/2016 correct, L129); GQA index example L217; split-K shape argument L187. No numeric softmax walk-through; the Õ derivation (L79) is terse."},
+      "E": {"score": 7.5, "reason": "Good tables (speedups L251-258, A100 numbers L278-284, Table 1). Only the FA2 warp diagram is shown; FA's split-K layout is described in words (L195 'FlashAttention의 도식은 이와 반대여서…') where the contrasting figure would help. H100 table L312-315 repeats 'head 차원 128' in header and every row."},
+      "F": {"score": 8.0, "reason": "Numbers match the paper. Deductions: L334 '어텐션 외에 MLP 같은 일반 행렬곱까지 포함한 학습 전체가 그와 거의 같은 수준의 활용률에 도달한 것입니다' equates 72% MFU (Megatron counting) with the 73% kernel figure, contradicting its own L237 warning that the two are not comparable; L302 '약 248~338 TFLOPs/s' exceeds the paper's 'up to 335' (L294) without reconciliation. Credit: L124 correctly flags the paper's inverted 'strictly less' wording."},
+      "G": {"score": 7.5, "reason": "Description 142 chars, method-first; but '[[E4], [E14]]' (L53) is unrendered internal markup that a blog lint should catch."},
+      "X1": {"score": 7.5, "reason": "Tags in the paper's terms (Sequence-Length-Parallelism, Causal-Masking, Warp-Level-Partitioning); 'Non-Matmul-FLOPs-Reduction' is long."},
+      "R1": {"score": 9.0, "reason": "Full coverage including a dedicated causal-mask section with block taxonomy, implementation details, and a deeper end-to-end analysis (2k vs 8k, L336-342)."},
+      "R2": {"score": 8.5, "reason": "Layered via running example, but the rescaling section jumps from formula to block-count arithmetic without a value-level example."},
+      "R3": {"score": 8.5, "reason": "TL;DR concise with settings (L29-31). Closing assessment specific: 2k gains single-digit, 8k 1.3x, backward 63% gap, portability (L373-379)."}
+    },
+    "principles": {
+      "claim_headings": "met",
+      "running_example": "met (8k, B=128 carried through L81-L201)",
+      "mechanism_reason_formula_example": "partly met (rescaling lacks a worked value example)",
+      "facts_said_once": "partly met (Megatron formula and causal-not-halved caveat stated twice, L229-235 and L346-352; 'backward 63%' repeated L272, L290, L377)",
+      "numbers_with_variant_scope_unit": "met",
+      "nothing_invented": "partly met (MFU vs kernel 73% equivalence L334)",
+      "writer_assessment_at_end": "met (L371-379)",
+      "length_fitted": "partly met (duplicated FLOPs section)",
+      "type_specific_shape": "met",
+      "korean_style": "partly met"
+    },
+    "claims": {
+      "checked": 24,
+      "unsupported": 1,
+      "wrong": 0,
+      "error_rate": 0.042,
+      "items": [
+        {"claim": "FA forward 30-50%, backward 25-35%; GEMM 80-90% (L18, L43)", "status": "supported", "source": "Sec 1"},
+        {"claim": "FA 2-4x faster, 10-20x memory saving, no approximation (L41)", "status": "supported", "source": "2-4x wall-clock time speedup..., up to 10-20x memory saving"},
+        {"claim": "A100 312 TFLOPs/s FP16/BF16 matmul vs 19.5 non-matmul FP32, ~16x (L47)", "status": "supported", "source": "Sec 3.1"},
+        {"claim": "Large-scale training still mostly uses standard attention despite approximate methods (L39)", "status": "supported", "source": "Sec 1"},
+        {"claim": "FA O^(2) update formula (L66)", "status": "supported", "source": "Sec 2.3.1"},
+        {"claim": "Un-scaled Õ^(2) formula; scale by diag(ℓ^last)^-1 at the end (L76-79)", "status": "supported", "source": "Sec 3.1.1"},
+        {"claim": "Store only logsumexp L = m + log ℓ (L104)", "status": "supported", "source": "Sec 3.1.1"},
+        {"claim": "Causal ~half blocks skipped, 1.7-1.8x (L123, L133)", "status": "supported", "source": "approximately half of the blocks; around 1.7-1.8x"},
+        {"claim": "Paper's 'strictly less' wording should mean blocks below the diagonal (L124)", "status": "supported", "source": "paper wording is inverted relative to its own logic; post's reading is correct"},
+        {"claim": "dQ via atomic add between thread blocks (L165)", "status": "supported", "source": "We use atomic adds ... to update dQ"},
+        {"claim": "FA split K,V across 4 warps ('split-K'); FA2 splits Q across 4 warps (L175, L183)", "status": "supported", "source": "Sec 3.3"},
+        {"claim": "Block sizes {64,128}x{64,128}, manual per head dim, auto-tuning future (L213)", "status": "supported", "source": "Sec 3.3"},
+        {"claim": "MQA/GQA via index manipulation, dK/dV summed (L217)", "status": "supported", "source": "Sec 3.1.2"},
+        {"claim": "Seqlen 512..16k, 16k total tokens, hd64 -> 32 heads, hd128 -> 16 heads (L245)", "status": "supported", "source": "Sec 4.1"},
+        {"claim": "A100 80GB SXM4 (L245)", "status": "unverifiable", "source": "not in paper text (likely figure caption)"},
+        {"claim": "Forward FLOPs formula, causal /2, backward 2.5x (L223-227)", "status": "supported", "source": "Sec 4.1"},
+        {"claim": "Speedup table 1.7-3.0x, ~2x xformers, Triton 1.3-2.5/1.3-1.5/~2x, PyTorch 3-10x (L251-258)", "status": "supported", "source": "Sec 4 / 4.1"},
+        {"claim": "230 TFLOPs/s = 73%, 50-73% range; backward 63% (L264, L272)", "status": "supported", "source": "Sec 4.1"},
+        {"claim": "H100 up to 335 TFLOPs/s, no TMA/4th-gen Tensor Core instructions (L294)", "status": "supported", "source": "Sec 4.1"},
+        {"claim": "Expect 1.5-2x more with new instructions (L369)", "status": "supported", "source": "another 1.5x-2x speedup on H100"},
+        {"claim": "Table 1 values (L329-332)", "status": "supported", "source": "Table 1"},
+        {"claim": "225 TFLOPs/s, MFU 72%; 1.3x vs FA, 2.8x vs baseline (L334, L338)", "status": "supported", "source": "Sec 4 / 4.2"},
+        {"claim": "End-to-end training reaches nearly the same utilization as the 73% kernel forward peak (L334)", "status": "unsupported", "source": "paper makes no such comparison; MFU uses Megatron counting with uncut causal attention term, kernel uses halved FLOPs"},
+        {"claim": "Future work: H100 TMA/4th-gen TC/fp8, AMD GPUs, local/dilated/block-sparse, compiler researchers (L364-367)", "status": "supported", "source": "Sec 5"}
+      ]
+    },
+    "checklist": {"repeated": 0, "avoided": 0, "na": 0, "repeated_ids": []},
+    "structure_defects": 33,
+    "structure_defect_detail": {
+      "broken_seams": ["L268 'head 차원이 64일 때도 1k~16k에서 191~193 TFLOPs/s로 평탄합니다.' (hd128 forward numbers never stated)", "L294 '앞서 본 Q 기준 워프 분할과 시퀀스 길이 병렬화는 스레드 블록과 워프 사이에 작업을 나누는 방식을 바꾼 개선입니다.' (dangling, no point drawn)"],
+      "references_to_unstated": ["L319 '이 작업은 향후 과제로 남겨 두었습니다.' (the new-instruction work is not stated in that body)"],
+      "one_sentence_subsections": [],
+      "sentence_shaped_headings": 30,
+      "sentence_shaped_heading_examples": ["L35", "L51", "L55 '### 블록 단위 소프트맥스에서 무엇이 반복되는가'", "L99", "L109", "L113", "L119", "L135", "L139", "L145", "L155", "L173", "L177", "L181", "L189", "L207", "L211", "L215", "L219", "L239", "L243", "L247", "L262", "L270", "L292", "L296", "L304", "L317", "L321", "L336"],
+      "other_markup_defects": ["L53 '[[E4], [E14]]' evidence-ledger token leak", "L89-97 ordered list broken by equation and paragraph"],
+      "non_heading_defects": 3
+    },
+    "top_issues": [
+      "Evidence-ledger tokens '[[E4], [E14]]' leak into the published body (L53)",
+      "L334 equates end-to-end 72% MFU with the 73% kernel peak, contradicting its own L237 warning",
+      "No split-K figure for FlashAttention; contrast described only in words (L195)",
+      "Megatron FLOPs formula and causal-not-halved caveat stated twice (L229-235, L346-352)"
+    ]
+  },
+  "preference": {
+    "overall": "X",
+    "per_criterion": {
+      "A": "X", "B": "tie", "C": "tie", "D": "X", "E": "X", "F": "X", "G": "X",
+      "X1": "Y", "R1": "Y", "R2": "X", "R3": "tie"
+    },
+    "reason": "Close pair with no wrong numbers in either. X wins on pedagogy (value-level online-softmax example, both split-K and Q-split diagrams) and has no visible markup leak; its weaknesses are a few stitched seams (L300-302) and a one-sentence subsection. Y has the better causal-mask section, a consistent 8k running example, a deeper 2k-vs-8k end-to-end analysis and correctly flags the paper's inverted mask wording, but publishes internal '[[E4], [E14]]' tokens, breaks an ordered list, repeats the FLOPs section, and makes one unsupported MFU-vs-kernel equivalence. Y also uses more sentence-shaped headings (30 vs 19)."
+  }
+}
