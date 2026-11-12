@@ -20,11 +20,13 @@ from datetime import UTC
 from typing import Any
 
 from scholar_lens.application.ports import (
+    FigureCheck,
     FileLocationError,
     Files,
     ObjectStore,
     PlanIndex,
     ReferenceReader,
+    SurveyDocuments,
     SurveyWriteTools,
     UsageTracker,
 )
@@ -38,6 +40,7 @@ from scholar_lens.application.run import (
 )
 from scholar_lens.application.survey_engine import EngineSettings, EvidenceSurveyEngine
 from scholar_lens.domain.constants import S3Paths
+from scholar_lens.domain.evidence import SourceDocument
 from scholar_lens.domain.ids import paper_url
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.markdown.lint import drop_unknown_images, fill_image_alts
@@ -46,6 +49,7 @@ from scholar_lens.domain.post_format import build_post_meta, render_front_matter
 from scholar_lens.domain.post_names import title_slug
 from scholar_lens.domain.publishing import PublishRequest, build_pr_body
 from scholar_lens.domain.survey.plan import (
+    PlanPaper,
     SurveyInputError,
     SurveyPlan,
     survey_slug,
@@ -183,8 +187,11 @@ async def write_survey_with_evidence(
     writing = tools.writing
     model = tools.models.language_model(writing.roles, tracker, writing.max_cost_usd)
     records = await asyncio.to_thread(index.records, [p.id for p in plan.papers])
-    documents = tools.documents(
-        reader, index, {pid: r.abstract for pid, r in records.items() if r.abstract}
+    documents = ServableDocuments(
+        tools.documents(
+            reader, index, {pid: r.abstract for pid, r in records.items() if r.abstract}
+        ),
+        tools.figures,
     )
     language = context.config.output_language
     store = tools.evidence_store(fresh=context.fresh)
@@ -243,6 +250,38 @@ async def write_survey_with_evidence(
         blocking=list(result.blocking),
         figures=figures,
     )
+
+
+class ServableDocuments:
+    """A survey's documents without the figures that cannot be downloaded
+    (arXiv HTML lists some it does not serve): the readers never record one,
+    so no section describes a figure the post cannot show."""
+
+    def __init__(self, inner: SurveyDocuments, figures: FigureCheck) -> None:
+        self.inner = inner
+        self.figures = figures
+        self.dropped: list[str] = []
+
+    async def document(self, paper: PlanPaper) -> SourceDocument | None:
+        document = await self.inner.document(paper)
+        if document is None or not document.figures:
+            return document
+        broken = set(await self.figures.unservable([f.url for f in document.figures]))
+        if not broken:
+            return document
+        self.dropped += sorted(broken)
+        return document.model_copy(
+            update={"figures": [f for f in document.figures if f.url not in broken]}
+        )
+
+    def notes(self) -> list[str]:
+        notes = self.inner.notes()
+        if self.dropped:
+            notes.append(
+                "Figures arXiv does not serve were left out before reading: "
+                + ", ".join(self.dropped[:20])
+            )
+        return notes
 
 
 def survey_body(survey: Survey, language: str) -> tuple[str, list[str]]:
