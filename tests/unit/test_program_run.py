@@ -11,13 +11,13 @@ import pytest
 
 from scholar_lens.domain.program_run import (
     BlockRun,
+    blamed,
     judge_run,
     program_blocks,
     program_script,
     read_outcomes,
     run_mark,
     run_requirements,
-    verdict,
 )
 
 
@@ -78,7 +78,6 @@ def test_a_block_over_its_time_is_stopped() -> None:
     script = program_script(["import time\ntime.sleep(30)"], block_timeout_s=1)
     (run,) = read_outcomes(_run(script, timeout=20))
     assert run.error_type == "BlockTimeout"
-    assert verdict(run, ()) == "environment"
 
 
 def test_outcomes_out_of_order_or_malformed_are_ignored() -> None:
@@ -94,163 +93,8 @@ def test_outcomes_out_of_order_or_malformed_are_ignored() -> None:
     assert [(r.index, r.ok) for r in read_outcomes(out)] == [(1, True), (2, False)]
 
 
-# ---- whose failure ------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("error_type", "module", "message", "expected"),
-    [
-        ("NameError", "builtins", "name 'client' is not defined", "code"),
-        ("SyntaxError", "builtins", "unexpected token", "code"),
-        ("TypeError", "builtins", "missing 1 required argument: 'model'", "code"),
-        # An SDK without its key raises a TypeError: the environment's.
-        (
-            "TypeError",
-            "builtins",
-            "Could not resolve authentication method. Expected either api_key",
-            "environment",
-        ),
-        ("AttributeError", "builtins", "'Agent' object has no attribute 'go'", "code"),
-        (
-            "AttributeError",
-            "builtins",
-            "'NoneType' object has no attribute 'x'",
-            "unclear",
-        ),
-        ("ModuleNotFoundError", "builtins", "No module named 'strands.tools'", "code"),
-        ("ModuleNotFoundError", "builtins", "No module named 'torch'", "environment"),
-        ("ImportError", "builtins", "cannot import name 'X' from 'y'", "unclear"),
-        (
-            "ImportError",
-            "builtins",
-            "cannot import name 'HookOrder' from 'strands.hooks' (/x.py)",
-            "code",
-        ),
-        # The product itself missing is an install that failed.
-        ("ModuleNotFoundError", "builtins", "No module named 'strands'", "environment"),
-        ("SystemExit", "builtins", "2", "unclear"),
-        # A namespace package's part: the product's install failed.
-        (
-            "ModuleNotFoundError",
-            "builtins",
-            "No module named 'google.adk'",
-            "environment",
-        ),
-        (
-            "NoCredentialsError",
-            "botocore.exceptions",
-            "Unable to locate",
-            "environment",
-        ),
-        ("KeyError", "builtins", "'OPENAI_API_KEY'", "unclear"),
-        ("KeyError", "builtins", "missing api key: 'OPENAI_API_KEY'", "environment"),
-        (
-            "TypeError",
-            "builtins",
-            "make_agent() got an unexpected keyword argument 'max_tokens'",
-            "code",
-        ),
-        (
-            "TypeError",
-            "builtins",
-            "call() got an unexpected keyword argument 'timeout'",
-            "code",
-        ),
-        (
-            "AttributeError",
-            "builtins",
-            "'Result' object has no attribute 'token_usage'",
-            "code",
-        ),
-        (
-            "TypeError",
-            "builtins",
-            "f() missing 1 required positional argument: 'api_key'",
-            "code",
-        ),
-        ("ConnectionError", "builtins", "refused", "environment"),
-        ("ValueError", "builtins", "bad shape", "unclear"),
-    ],
-)
-def test_verdict(error_type: str, module: str, message: str, expected: str) -> None:
-    run = BlockRun(
-        index=1, ok=False, error_type=error_type, error_module=module, message=message
-    )
-    assert verdict(run, {"strands", "strands.hooks", "google.adk"}) == expected
-
-
 def _blocks() -> list[tuple[str, str, bool]]:
     return [("설치", "import os", False), ("사용", "b = os.c", True), ("끝", "d", True)]
-
-
-def test_a_code_failure_in_a_runnable_section_is_a_finding() -> None:
-    run = judge_run(
-        _blocks(),
-        [
-            BlockRun(index=1, ok=True),
-            BlockRun(index=2, ok=False, error_type="AttributeError", message="no c"),
-        ],
-        (),
-    )
-    (finding,) = run.findings
-    assert finding.section == "사용"
-    assert "AttributeError" in finding.problem
-    assert (run.blocks_run, run.blocks_total, run.limited) == (2, 3, "")
-
-
-def test_failures_the_post_is_not_blamed_for_limit_the_check() -> None:
-    not_runnable = judge_run(
-        _blocks(), [BlockRun(index=1, ok=False, error_type="NameError")], ()
-    )
-    environment = judge_run(
-        _blocks(),
-        [
-            BlockRun(index=1, ok=True),
-            BlockRun(index=2, ok=False, error_type="ConnectionError"),
-        ],
-        (),
-    )
-    killed = judge_run(_blocks(), [BlockRun(index=1, ok=True)], ())
-    complete = judge_run(_blocks(), [BlockRun(index=i, ok=True) for i in (1, 2, 3)], ())
-    assert not (not_runnable.findings or environment.findings or killed.findings)
-    assert "not meant to run" in not_runnable.limited
-    assert "lacks" in environment.limited
-    assert "killed" in killed.limited
-    assert complete.limited == "" and complete.blocks_run == 3
-
-
-@pytest.mark.parametrize(
-    ("error_type", "message", "counts"),
-    [
-        ("NameError", "name 'result' is not defined", False),
-        ("AttributeError", "'Agent' object has no attribute 'go'", False),
-        ("AttributeError", "module 'strands' has no attribute 'Agnet'", True),
-        ("TypeError", "Agent.__init__() got an unexpected keyword argument 'x'", True),
-        ("TypeError", "unsupported operand type(s)", False),
-        ("ModuleNotFoundError", "No module named 'strands.tool'", True),
-    ],
-)
-def test_after_a_gap_only_failures_that_cannot_come_from_it_count(
-    error_type: str, message: str, counts: bool
-) -> None:
-    """The first block cannot reach the model; what a later block does not
-    find may be what that block would have made."""
-    run = judge_run(
-        [("시작", "r = agent('hi')", True), ("다음", "r.message", True)],
-        [
-            BlockRun(
-                index=1,
-                ok=False,
-                error_type="NoCredentialsError",
-                error_module="botocore.exceptions",
-            ),
-            BlockRun(index=2, ok=False, error_type=error_type, message=message),
-        ],
-        {"strands"},
-    )
-    assert bool(run.findings) is counts
-    assert ("does not depend on it" in run.findings[0].problem) if counts else True
-    assert "NoCredentialsError" in run.limited
 
 
 def test_the_sandbox_installs_the_docs_pins_and_what_the_post_installs() -> None:
@@ -316,34 +160,6 @@ def test_the_code_cannot_hide_or_forge_its_outcomes() -> None:
     ]
 
 
-def test_a_failure_through_an_illustrations_definition_is_not_blamed() -> None:
-    """A section not meant to run shows a simplified class of the product;
-    the usage section's call fails against it, not against the product."""
-    blocks = [
-        ("설치", "from strands import Agent", True),
-        ("원리", "class Agent:\n    def __init__(self, model):\n        pass", False),
-        ("사용", "agent = Agent(a=1)", True),
-    ]
-    fails = [
-        BlockRun(index=1, ok=True),
-        BlockRun(index=2, ok=True),
-        BlockRun(
-            index=3,
-            ok=False,
-            error_type="TypeError",
-            message="Agent.__init__() got an unexpected keyword argument 'a'",
-        ),
-    ]
-    run = judge_run(blocks, fails, {"strands"})
-    assert not run.findings and "cannot attribute" in run.limited
-    # Imported again in a runnable block, the name is the product's.
-    blocks.insert(2, ("다시", "from strands import Agent", True))
-    fails = [BlockRun(index=i, ok=True) for i in (1, 2, 3)] + [
-        fails[-1].model_copy(update={"index": 4})
-    ]
-    assert judge_run(blocks, fails, {"strands"}).findings
-
-
 def test_top_level_await_runs() -> None:
     script = program_script(
         ["import asyncio\nawait asyncio.sleep(0)\nx = 1", "print(x)"],
@@ -359,58 +175,6 @@ def test_post_installs_pairs_fences() -> None:
         "```\npip install boto3\n```\n"
     )
     assert run_requirements([], post) == ["strands-agents-tools", "boto3"]
-
-
-def test_a_name_the_run_skipped_binding_is_not_blamed() -> None:
-    blocks = [
-        (
-            "호출",
-            "try:\n    resp = client.list()\nexcept Exception as e:\n    print(e)",
-            True,
-        ),
-        ("출력", "print(resp['Buckets'])\nprint(typo)", True),
-    ]
-    skipped = BlockRun(
-        index=2, ok=False, error_type="NameError", message="name 'resp' is not defined"
-    )
-    typo = skipped.model_copy(update={"message": "name 'typo' is not defined"})
-    ok = BlockRun(index=1, ok=True)
-    assert not judge_run(blocks, [ok, skipped], ()).findings
-    assert judge_run(blocks, [ok, typo], ()).findings
-
-
-def test_packages_off_their_versions_blame_only_the_codes_text() -> None:
-    blocks = [("사용", "import pandas\npandas.new_api()", True)]
-    attr = BlockRun(
-        index=1,
-        ok=False,
-        error_type="AttributeError",
-        message="module 'pandas' has no attribute 'new_api'",
-    )
-    syntax = BlockRun(index=1, ok=False, error_type="SyntaxError", message="bad")
-    assert judge_run(blocks, [attr], {"pandas"}).findings
-    assert not judge_run(blocks, [attr], {"pandas"}, exact=False).findings
-    assert judge_run(blocks, [syntax], (), exact=False).findings
-
-
-def test_a_module_attribute_a_skipped_import_binds_is_not_blamed() -> None:
-    blocks = [
-        ("설치", "import pkg", True),
-        ("설정", "import os\nos.environ['PKG_ENDPOINT']\nimport pkg.storage", True),
-        ("저장", "pkg.storage.save(1)", True),
-    ]
-    gap = BlockRun(index=2, ok=False, error_type="KeyError", message="'PKG_ENDPOINT'")
-    attr = BlockRun(
-        index=3,
-        ok=False,
-        error_type="AttributeError",
-        message="module 'pkg' has no attribute 'storage'",
-    )
-    assert not judge_run(
-        blocks, [BlockRun(index=1, ok=True), gap, attr], {"pkg"}
-    ).findings
-    blocks[1] = ("설정", "import os\nos.environ['PKG_ENDPOINT']", True)
-    assert judge_run(blocks, [BlockRun(index=1, ok=True), gap, attr], {"pkg"}).findings
 
 
 def test_spawned_children_write_no_outcomes_and_futures_carry_over(tmp_path) -> None:  # type: ignore[no-untyped-def]
@@ -438,99 +202,6 @@ def test_spawned_children_write_no_outcomes_and_futures_carry_over(tmp_path) -> 
     ).stdout
     assert out.count(mark) == 4, out
     assert [r.ok for r in read_outcomes(out, mark)] == [True, True, True, True]
-
-
-def test_a_gap_limits_only_the_blocks_that_use_what_it_binds() -> None:
-    """An internals excerpt that cannot run alone leaves the unrelated
-    usage block judged in full."""
-    blocks = [
-        ("구조", "result = self.event_loop_cycle(messages)", False),
-        ("사용", "import json\njson.dumps({}).decode()", True),
-        ("이어서", "print(result.stop_reason)", True),
-    ]
-    excerpt = BlockRun(
-        index=1, ok=False, error_type="NameError", message="name 'self' is not defined"
-    )
-    attr = BlockRun(
-        index=2,
-        ok=False,
-        error_type="AttributeError",
-        message="'str' object has no attribute 'decode'",
-    )
-    run = judge_run(blocks, [excerpt, attr], ())
-    assert run.findings and "not depend" not in run.findings[0].problem
-    uses = BlockRun(
-        index=3,
-        ok=False,
-        error_type="AttributeError",
-        message="'Result' object has no attribute 'stop_reason'",
-    )
-    assert not judge_run(
-        blocks, [excerpt, BlockRun(index=2, ok=True), uses], ()
-    ).findings
-
-
-def test_state_a_failed_call_would_have_set_is_not_blamed() -> None:
-    blocks = [
-        (
-            "색인",
-            "class DocumentIndex:\n    def build(self, docs):\n        self.vectors = embed(docs)\nindex = DocumentIndex()",
-            True,
-        ),
-        ("빌드", "index.build(['a'])", True),
-        ("확인", "print(len(index.vectors))", True),
-    ]
-    runs = [
-        BlockRun(index=1, ok=True),
-        BlockRun(
-            index=2,
-            ok=False,
-            error_type="NoCredentialsError",
-            error_module="botocore.exceptions",
-            message="Unable to locate credentials",
-        ),
-        BlockRun(
-            index=3,
-            ok=False,
-            error_type="AttributeError",
-            message="'DocumentIndex' object has no attribute 'vectors'",
-        ),
-    ]
-    assert not judge_run(blocks, runs, ()).findings
-
-
-def test_a_gap_does_not_spread_through_builtins_or_modules() -> None:
-    blocks = [
-        ("설정", "import json\ncfg = {'a': 1}", True),
-        ("호출", "print(json.dumps(cfg))\nfetch()", True),
-        ("사용", "print(json.dumps([1]).decode())", True),
-    ]
-    runs = [
-        BlockRun(index=1, ok=True),
-        BlockRun(index=2, ok=False, error_type="ConnectionError", message="refused"),
-        BlockRun(
-            index=3,
-            ok=False,
-            error_type="AttributeError",
-            message="'str' object has no attribute 'decode'",
-        ),
-    ]
-    assert judge_run(blocks, runs, ()).findings
-
-
-@pytest.mark.parametrize(
-    "message",
-    [
-        "requires_access_token() got an unexpected keyword argument 'scope'",
-        "count_tokens() missing 1 required positional argument: 'text'",
-        "Client.get_credentials() takes 1 positional argument but 2 were given",
-    ],
-)
-def test_a_signature_error_is_the_codes_whatever_the_callee_is_called(
-    message: str,
-) -> None:
-    run = BlockRun(index=1, ok=False, error_type="TypeError", message=message)
-    assert verdict(run, ()) == "code"
 
 
 def test_a_notebook_cell_keeps_its_code_without_the_magics() -> None:
@@ -590,34 +261,6 @@ def test_a_module_a_cell_writes_is_importable_and_runnable() -> None:
     assert [r.ok for r in read_outcomes(_run(script))] == [True, True, True]
 
 
-def test_a_cells_pip_lines_install_and_a_namespace_part_is_the_environments() -> None:
-    from scholar_lens.domain.guide.sdk_index import SdkIndex
-
-    post = _py("%pip install llama-index-core llama-index-llms-bedrock-converse\nx = 1")
-    assert run_requirements([("llama-index-core", "0.12.0")], post) == [
-        "llama-index-core==0.12.0",
-        "llama-index-llms-bedrock-converse",
-    ]
-    sdk = SdkIndex.from_sources(
-        {"llama_index/core/__init__.py": "X = 1\n"},
-        "0.12.0",
-        top_levels=["llama_index"],
-    )
-    assert "llama_index" in sdk.namespace_modules
-    modules = set(sdk.modules) - sdk.namespace_modules
-    missing = BlockRun(
-        index=1,
-        ok=False,
-        error_type="ModuleNotFoundError",
-        message="No module named 'llama_index.llms'",
-    )
-    assert verdict(missing, modules) == "environment"
-    wrong = missing.model_copy(
-        update={"message": "No module named 'llama_index.core.nope'"}
-    )
-    assert verdict(wrong, modules) == "code"
-
-
 def test_a_timing_magic_runs_its_statement() -> None:
     from scholar_lens.domain.program import python_code_problems
 
@@ -632,82 +275,11 @@ def test_a_timing_magic_runs_its_statement() -> None:
     assert python_code_problems(sections) == []
 
 
-def test_an_error_raised_inside_a_package_is_not_the_posts(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    lib = tmp_path / "mylib.py"
-    lib.write_text(
-        "def _dep(**kw):\n    pass\n"
-        "class Client:\n    def __init__(self):\n        _dep2(proxies=None)\n"
-        "def _dep2():\n    pass\n"
-    )
-    script = program_script(
-        [
-            f"import sys\nsys.path.insert(0, {str(tmp_path)!r})\nfrom mylib import Client",
-            "client = Client()",
-            "def f(a):\n    pass\nf(b=1)",
-        ],
-        block_timeout_s=10,
-    )
-    runs = read_outcomes(_run(script))
-    assert [r.in_post for r in runs if not r.ok] == [False, True]
-    blocks = [
-        ("설치", "", True),
-        ("사용", "client = Client()", True),
-        ("함수", "f(b=1)", True),
-    ]
-    assert verdict(runs[1], ()) == "unclear"
-    assert verdict(runs[2], ()) == "code"
-    assert not judge_run(blocks[:2], runs[:2], ()).findings
-
-
 def test_an_indented_shell_line_keeps_the_cell_valid() -> None:
     cell = "try:\n    import json5\nexcept ImportError:\n    !pip install -q json5\nprint('ready')"
     ((_, code, _),) = program_blocks([("설정", _py(cell), True)])
     script = program_script([code], block_timeout_s=10)
     assert [r.ok for r in read_outcomes(_run(script))] == [True]
-
-
-def test_an_error_in_a_module_the_post_wrote_is_the_posts() -> None:
-    blocks = program_blocks(
-        [
-            ("도구", _py("%%writefile weather_tools.py\nimport json\njson.nope"), True),
-            ("사용", _py("import weather_tools"), True),
-        ]
-    )
-    script = program_script([c for _, c, _ in blocks], block_timeout_s=10)
-    runs = read_outcomes(_run(script))
-    assert runs[1].error_type == "AttributeError" and runs[1].in_post
-    assert judge_run(blocks, runs, ()).findings
-
-
-def test_a_signature_error_after_a_gap_that_redefined_the_callee_is_not_blamed() -> (
-    None
-):
-    blocks = [
-        ("v1", "def run_agent(prompt):\n    return prompt", True),
-        (
-            "v2",
-            "client.list()\ndef run_agent(prompt, session_id):\n    return prompt",
-            True,
-        ),
-        ("사용", "run_agent('hello', session_id='s1')", True),
-    ]
-    runs = [
-        BlockRun(index=1, ok=True),
-        BlockRun(
-            index=2,
-            ok=False,
-            error_type="NoCredentialsError",
-            error_module="botocore.exceptions",
-            message="Unable to locate credentials",
-        ),
-        BlockRun(
-            index=3,
-            ok=False,
-            error_type="TypeError",
-            message="run_agent() got an unexpected keyword argument 'session_id'",
-        ),
-    ]
-    assert not judge_run(blocks, runs, ()).findings
 
 
 def test_a_transcript_showing_a_traceback_is_not_judged() -> None:
@@ -719,132 +291,112 @@ def test_a_transcript_showing_a_traceback_is_not_judged() -> None:
     assert not checked
 
 
-def test_a_helper_that_swallows_an_environment_error_is_not_blamed() -> None:
-    code = (
-        "import socket\n"
-        "def ask(p):\n    try:\n        socket.create_connection(('10.255.255.1', 9), timeout=0.2)\n"
-        "    except Exception as e:\n        return f'Error: {e}'\n"
-        "reply = ask('hi')\nprint(reply.text)"
-    )
-    script = program_script([code], block_timeout_s=10)
-    runs = read_outcomes(_run(script))
-    assert runs[0].error_type == "AttributeError" and runs[0].raised
-    assert not judge_run([("사용", code, True)], runs, ()).findings
+# ---- what the post is blamed for -------------------------------------------------
+
+_PRODUCT = {"strands", "strands.hooks", "llama_index.core"}
 
 
-def test_a_written_script_run_from_a_cell_is_checked_and_timeit_options_drop() -> None:
-    blocks = program_blocks(
-        [
-            ("앱", _py("%%writefile app.py\nprint(anser)"), True),
-            ("실행", _py("!python app.py"), True),
-            ("측정", _py("%timeit -n 10 -r 2 sum([1])\ndisplay(1)"), True),
-        ]
-    )
-    assert blocks[2][1].strip() == "sum([1])\ndisplay(1)"
-    script = program_script([c for _, c, _ in blocks], block_timeout_s=10)
-    runs = read_outcomes(_run(script))
-    assert runs[1].error_type == "NameError" and runs[1].in_post
-    assert runs[2].ok
-    assert judge_run(blocks, runs, ()).findings
-
-
-def test_an_attribute_a_packages_getattr_refuses_is_the_callers(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    (tmp_path / "sdk.py").write_text(
-        "class Client:\n    def __getattr__(self, name):\n"
-        "        raise AttributeError(f\"'Client' object has no attribute '{name}'\")\n"
-    )
-    script = program_script(
-        [
-            f"import sys\nsys.path.insert(0, {str(tmp_path)!r})\nimport sdk\nsdk.Client().nope()"
-        ],
-        block_timeout_s=10,
-    )
-    (run,) = read_outcomes(_run(script))
-    assert run.error_type == "AttributeError" and run.in_post
-
-
-def test_what_a_package_catches_inside_itself_does_not_excuse_the_post(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    (tmp_path / "sdk2.py").write_text(
-        "def client():\n    try:\n        raise ConnectionError('no endpoint data')\n"
-        "    except ConnectionError:\n        pass\n    return object()\n"
-    )
-    code = (
-        f"import sys\nsys.path.insert(0, {str(tmp_path)!r})\nimport sdk2\n"
-        "c = sdk2.client()\nrequest = {'messages': []}\nprint(request.messages)"
-    )
-    runs = read_outcomes(_run(program_script([code], block_timeout_s=10)))
-    assert runs[0].raised == []
-    assert judge_run([("사용", code, True)], runs, ()).findings
+def _failed(error_type: str, message: str, index: int = 1) -> BlockRun:
+    return BlockRun(index=index, ok=False, error_type=error_type, message=message)
 
 
 @pytest.mark.parametrize(
-    ("error_type", "message"),
+    ("error_type", "message", "is_blamed"),
     [
-        ("ParamValidationError", 'Unknown parameter in inferenceConfig: "max_tokens"'),
-        ("ParamValidationError", 'Missing required parameter in input: "Key"'),
-        ("UnknownServiceError", "Unknown service: 'bedrock-agent-runtimes'"),
-    ],
-)
-def test_an_sdks_own_call_validation_is_the_codes(
-    error_type: str, message: str
-) -> None:
-    run = BlockRun(
-        index=1,
-        ok=False,
-        error_type=error_type,
-        error_module="botocore.exceptions",
-        message=message,
-        in_post=False,
-    )
-    assert verdict(run, ()) == "code"
-    assert judge_run([("사용", "client.converse()", True)], [run], ()).findings
-
-
-def test_a_none_from_an_unset_variable_in_an_sdk_call_is_not_blamed() -> None:
-    run = BlockRun(
-        index=1,
-        ok=False,
-        error_type="ParamValidationError",
-        error_module="botocore.exceptions",
-        in_post=False,
-        message="Invalid type for parameter knowledgeBaseId, value: None, "
-        "type: <class 'NoneType'>, valid types: <class 'str'>",
-    )
-    assert verdict(run, ()) == "unclear"
-
-
-def test_an_empty_setting_or_a_caught_errors_value_in_an_sdk_call_is_not_blamed() -> (
-    None
-):
-    empty = BlockRun(
-        index=1,
-        ok=False,
-        error_type="ParamValidationError",
-        error_module="botocore.exceptions",
-        in_post=False,
-        message="Invalid length for parameter knowledgeBaseId, value: 0, valid min length: 10",
-    )
-    assert verdict(empty, ()) == "unclear"
-    blocks = [
+        # The product's API itself.
+        ("TypeError", "Agent.__init__() got an unexpected keyword argument 'x'", True),
+        ("TypeError", "Agent() missing 1 required positional argument: 'model'", True),
         (
-            "헬퍼",
-            "def kb():\n    try:\n        return lookup()\n    except Exception:\n        return ''\nKB = kb()",
+            "ImportError",
+            "cannot import name 'HookOrder' from 'strands.hooks' (/x.py)",
             True,
         ),
-        ("검색", "runtime.retrieve(knowledgeBaseId=KB)", True),
+        ("ModuleNotFoundError", "No module named 'strands.tool'", True),
+        ("AttributeError", "module 'strands' has no attribute 'Agnet'", True),
+        (
+            "ParamValidationError",
+            'Unknown parameter in inferenceConfig: "max_tokens"',
+            True,
+        ),
+        ("ParamValidationError", 'Missing required parameter in input: "Key"', True),
+        ("UnknownServiceError", "Unknown service: 'bedrock-agent-runtimes'", True),
+        # Anything else leaves the check partial.
+        ("TypeError", "helper() got an unexpected keyword argument 'x'", False),
+        (
+            "TypeError",
+            "Client.__init__() got an unexpected keyword argument 'proxies'",
+            False,
+        ),
+        ("TypeError", "Could not resolve authentication method", False),
+        ("ImportError", "cannot import name 'X' from 'numpy'", False),
+        ("ModuleNotFoundError", "No module named 'strands'", False),
+        ("ModuleNotFoundError", "No module named 'llama_index.llms'", False),
+        ("AttributeError", "module 'numpy' has no attribute 'float_'", False),
+        ("AttributeError", "'str' object has no attribute 'text'", False),
+        ("ParamValidationError", "Invalid type for parameter id, value: None", False),
+        ("NameError", "name 'client' is not defined", False),
+        ("KeyError", "'OPENAI_API_KEY'", False),
+        ("NoCredentialsError", "Unable to locate credentials", False),
+    ],
+)
+def test_only_the_products_api_is_blamed(
+    error_type: str, message: str, is_blamed: bool
+) -> None:
+    assert blamed(_failed(error_type, message), _PRODUCT, {"Agent"}) is is_blamed
+
+
+def test_a_finding_names_the_first_blamed_block_and_the_rest_limits_the_check() -> None:
+    blocks = [
+        ("설치", "from strands import Agent", True),
+        ("호출", "agent = Agent()\nagent('hi')", True),
+        ("설정", "agent2 = Agent(bad=1)", True),
     ]
-    caught = BlockRun(
-        index=1,
-        ok=True,
-        raised=[
-            (
-                "NoCredentialsError",
-                "botocore.exceptions",
-                "Unable to locate credentials",
-            )
-        ],
+    outcomes = [
+        BlockRun(index=1, ok=True),
+        _failed("NoCredentialsError", "Unable to locate credentials", 2),
+        _failed(
+            "TypeError", "Agent.__init__() got an unexpected keyword argument 'bad'", 3
+        ),
+    ]
+    run = judge_run(blocks, outcomes, _PRODUCT)
+    (finding,) = run.findings
+    assert finding.section == "설정" and "NoCredentialsError" in run.limited
+    # Off the docs' versions, the product's API may differ: nothing is blamed.
+    assert not judge_run(blocks, outcomes, _PRODUCT, exact=False).findings
+    # A section not meant to run is not blamed.
+    blocks[2] = ("원리", blocks[2][1], False)
+    assert not judge_run(blocks, outcomes, _PRODUCT).findings
+
+
+def test_a_callee_the_post_redefines_is_its_own() -> None:
+    blocks = [
+        ("설치", "from strands import Agent", True),
+        ("원리", "class Agent:\n    def __init__(self, model):\n        pass", False),
+        ("사용", "Agent(a=1)", True),
+    ]
+    failed = _failed(
+        "TypeError", "Agent.__init__() got an unexpected keyword argument 'a'", 3
     )
-    bad = empty.model_copy(
-        update={"index": 2, "message": "Invalid type for parameter x, value: 3"}
-    )
-    assert not judge_run(blocks, [caught, bad], ()).findings
+    outcomes = [BlockRun(index=1, ok=True), BlockRun(index=2, ok=True), failed]
+    assert not judge_run(blocks, outcomes, _PRODUCT).findings
+
+
+def test_a_module_attribute_a_skipped_import_binds_is_not_blamed() -> None:
+    blocks = [
+        ("설치", "import strands", True),
+        ("설정", "import os\nos.environ['X']\nimport strands.storage", True),
+        ("저장", "strands.storage.save(1)", True),
+    ]
+    attr = _failed("AttributeError", "module 'strands' has no attribute 'storage'", 3)
+    outcomes = [BlockRun(index=1, ok=True), _failed("KeyError", "'X'", 2), attr]
+    assert not judge_run(blocks, outcomes, _PRODUCT).findings
+    blocks[1] = ("설정", "import os\nos.environ['X']", True)
+    assert judge_run(blocks, outcomes, _PRODUCT).findings
+
+
+def test_a_cells_pip_lines_install() -> None:
+    post = _py("%pip install llama-index-core llama-index-llms-bedrock-converse\nx = 1")
+    assert run_requirements([("llama-index-core", "0.12.0")], post) == [
+        "llama-index-core==0.12.0",
+        "llama-index-llms-bedrock-converse",
+    ]

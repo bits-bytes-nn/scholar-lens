@@ -3,10 +3,15 @@
 The static program check (:mod:`scholar_lens.domain.program`) reads the
 code; this module decides what runs, wraps each block so its outcome comes
 back as one line of JSON, and reads that outcome. Running it is a port's
-(a sandbox with no credentials): a failure that only an environment with
-credentials, network or a model would avoid stops the run without blaming
-the post, and a failure of the code itself becomes a finding for the
-section that holds it.
+(a sandbox without the reader's credentials, network settings or data).
+
+The post is blamed only for failures that point at the product's API
+itself, whatever the sandbox lacks: a call that does not match a product
+callable's signature, an import of a product name or submodule that does
+not exist, a product module's missing attribute, and an SDK's own
+parameter or service validation. Every other failure leaves the check
+partial (a PR note), never a fix: telling a missing credential from a
+wrong value is guesswork the sandbox cannot settle.
 """
 
 from __future__ import annotations
@@ -15,7 +20,6 @@ import ast
 import json
 import re
 from collections.abc import Collection, Sequence
-from typing import Literal
 
 from pydantic import BaseModel, field_validator
 
@@ -28,47 +32,9 @@ from scholar_lens.domain.program import (
 
 # The line a wrapped block prints its outcome on (stdout may hold more).
 RESULT_MARK = "@@SCHOLAR_LENS_RESULT@@"
-
-# Exceptions a block's own text causes: the reader's paste fails the same
-# way anywhere.
-_SOURCE_ERRORS = frozenset(
-    {"SyntaxError", "IndentationError", "TabError", "NameError", "UnboundLocalError"}
-)
-# SDK exceptions that check the call before it leaves for the service: the
-# code's whatever module raises them (botocore validates parameters and
-# service names before it looks for credentials).
-_SDK_CODE_ERRORS = frozenset(
-    {"ParamValidationError", "UnknownServiceError", "UnknownParameterError"}
-)
-# Modules whose exceptions mean the sandbox lacks what the reader would have
-# (credentials, network, a model or service endpoint).
-_ENVIRONMENT_MODULES = (
-    "botocore",
-    "boto3",
-    "urllib3",
-    "requests",
-    "httpx",
-    "httpcore",
-    "aiohttp",
-    "socket",
-    "ssl",
-    "openai",
-    "anthropic",
-    "google",
-    "grpc",
-)
-_ENVIRONMENT_ERRORS = frozenset(
-    {
-        "TimeoutError",
-        "ConnectionError",
-        "ConnectionRefusedError",
-        "ConnectionResetError",
-        "PermissionError",
-        "BlockTimeout",
-        "KeyboardInterrupt",
-    }
-)
-# A TypeError of a call that does not match the callee's signature.
+_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+# A TypeError of a call that does not match the callee's signature, and the
+# callee it names ("Agent.__init__() got an unexpected keyword argument").
 _SIGNATURE_PHRASES = (
     "unexpected keyword argument",
     "required positional argument",
@@ -76,27 +42,14 @@ _SIGNATURE_PHRASES = (
     "positional argument but",
     "positional arguments but",
 )
-# Words of a message that point at the environment, not the code.
-_ENVIRONMENT_WORDS = (
-    "credential",
-    "authenticat",
-    "api key",
-    "api_key",
-    "token",
-    "unauthorized",
-    "forbidden",
-    "connection",
-    "timed out",
-    "timeout",
-    "network",
-    "no such host",
-    "name resolution",
-    "cuda",
-    "gpu",
-)
-
-
-_ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+_CALLEE = re.compile(r"^([A-Za-z_][\w.]*)\(\)")
+# An SDK's own validation of a call before it is sent (botocore): a wrong
+# parameter or service name. A wrong value (None from an unset variable,
+# an empty string) is not among them.
+_SDK_CALL_ERRORS = {
+    "ParamValidationError": ("unknown parameter", "missing required parameter"),
+    "UnknownServiceError": ("",),
+}
 
 
 class BlockRun(BaseModel):
@@ -108,19 +61,11 @@ class BlockRun(BaseModel):
     error_type: str = ""
     error_module: str = ""
     message: str = ""
-    # The innermost frame that raised it is a block's (False: a package's).
-    in_post: bool = True
-    # (type, module, message) of the exceptions of the environment the
-    # post's own code caught while it ran (at most 20).
-    raised: list[tuple[str, str, str]] = []
 
     @field_validator("message")
     @classmethod
     def _plain(cls, value: str) -> str:
         return " ".join(_ANSI.sub("", value).split())
-
-
-Verdict = Literal["ok", "code", "environment", "unclear"]
 
 
 class RunFinding(BaseModel):
@@ -289,8 +234,9 @@ def program_script(
     each under an alarm, writing each block's outcome as one JSON line after
     ``mark`` (:data:`RESULT_MARK` and a per-run nonce, so code printing
     a mark by accident is not read as an outcome; code set on forging one
-    could, but gains nothing outside the sandbox). A failing block's later statements are skipped, the next
-    block still runs (what it needs may be defined). A fresh interpreter,
+    could, but gains nothing outside the sandbox). A failing block's later
+    statements are skipped, the next block still runs (what it needs may be
+    defined). A fresh interpreter,
     not a notebook kernel: ``asyncio.run`` works as pasted.
 
     The outcomes go to a copy of the output descriptor taken before any
@@ -299,39 +245,17 @@ def program_script(
     ``except Exception`` retry loop does not swallow it)."""
     return f"""
 import json as _sl_json, os as _sl_os, signal as _sl_signal, sys as _sl_sys
-import ast as _sl_ast, asyncio as _sl_asyncio, inspect as _sl_inspect, re as _sl_re
+import ast as _sl_ast, asyncio as _sl_asyncio, inspect as _sl_inspect
 _SL_CODES = {list(codes)!r}
 _SL_MARK = {mark!r}
 _sl_fd = _sl_os.dup(1)
 # The working directory is importable, as in a notebook (a module a
 # %%writefile cell wrote).
 _sl_sys.path.insert(0, _sl_os.getcwd())
-_SL_CWD = _sl_os.path.realpath(_sl_os.getcwd())
 class BlockTimeout(BaseException):
     pass
 def _sl_alarm(signum, frame):
     raise BlockTimeout("the block ran over {block_timeout_s}s")
-def _sl_in_post(e):
-    # Whether the innermost frame that raised it (import machinery aside)
-    # is a block's: else an installed package raised it.
-    # A file under the working directory is the post's too (a module a
-    # %%writefile cell wrote).
-    tb, last = e.__traceback__, ""
-    while tb is not None:
-        code = tb.tb_frame.f_code
-        # An object's __getattr__ raising AttributeError reports the
-        # attribute the caller asked for: the caller's frame counts.
-        if not code.co_filename.startswith("<frozen") and code.co_name not in (
-            "__getattr__",
-            "__getattribute__",
-        ):
-            last = code.co_filename
-        tb = tb.tb_next
-    if last.startswith("<block "):
-        return True
-    if last.startswith("<"):
-        return False
-    return _sl_os.path.realpath(last).startswith(_SL_CWD + _sl_os.sep)
 def _sl_text(e):
     try:
         return str(e)[:400]
@@ -356,48 +280,9 @@ else:
 _SL_FUTURE = 0
 for _sl_f in _sl_future.all_feature_names:
     _SL_FUTURE |= getattr(_sl_future, _sl_f).compiler_flag
-# Exceptions of the environment the post's own code caught (a helper that
-# swallows a credential error leaves a result the next line misreads);
-# what a package catches inside itself is its business.
-_sl_raised = []
-_SL_ENV_TYPES = {sorted(_ENVIRONMENT_ERRORS)!r}
-_SL_ENV_MODULES = {list(_ENVIRONMENT_MODULES)!r}
-_SL_ENV_WORDS = {list(_ENVIRONMENT_WORDS)!r}
-def _sl_posts(filename):
-    if filename.startswith("<block "):
-        return True
-    if filename.startswith("<"):
-        return False
-    return _sl_os.path.realpath(filename).startswith(_SL_CWD + _sl_os.sep)
-def _sl_on_handled(code, offset, exc):
-    if len(_sl_raised) >= 20 or not _sl_posts(code.co_filename):
-        return
-    kind = type(exc)
-    if kind.__name__ in {sorted(_SDK_CODE_ERRORS)!r}:
-        return
-    module = str(getattr(kind, "__module__", ""))
-    text = _sl_text(exc)
-    if (
-        kind.__name__ in _SL_ENV_TYPES
-        or module.split(".")[0] in _SL_ENV_MODULES
-        or any(
-            word in _sl_re.sub("'[^']*'", "", text.lower())
-            for word in _SL_ENV_WORDS
-        )
-    ):
-        _sl_raised.append([kind.__name__, module, text[:200]])
-_sl_mon = getattr(_sl_sys, "monitoring", None)
-if _sl_mon is not None:
-    try:
-        _sl_mon.use_tool_id(5, "scholar-lens")
-        _sl_mon.register_callback(5, _sl_mon.events.EXCEPTION_HANDLED, _sl_on_handled)
-        _sl_mon.set_events(5, _sl_mon.events.EXCEPTION_HANDLED)
-    except ValueError:
-        pass
 # A __future__ import holds for the later blocks, as in one file.
 _sl_flags = 0
 for _sl_i, _sl_code in enumerate(_SL_CODES, 1):
-    _sl_raised.clear()
     _sl_name = f"<block {{_sl_i}}>"
     _sl_linecache.cache[_sl_name] = (
         len(_sl_code), None, _sl_code.splitlines(True), _sl_name
@@ -427,11 +312,9 @@ for _sl_i, _sl_code in enumerate(_SL_CODES, 1):
             "error_type": type(_sl_e).__name__,
             "error_module": str(getattr(type(_sl_e), "__module__", "")),
             "message": _sl_text(_sl_e),
-            "in_post": _sl_in_post(_sl_e),
         }}
     finally:
         _sl_signal.alarm(0)
-    _sl_out["raised"] = list(_sl_raised)
     try:
         _sl_sys.stdout.flush()
     except BaseException:
@@ -467,134 +350,77 @@ def run_mark(nonce: str) -> str:
     return f"{RESULT_MARK}{nonce}@@"
 
 
-def _environment(run: BlockRun) -> bool:
-    """Whether ``run``'s exception points at the environment: its type or
-    module, or a word of its message outside the quoted names ("unexpected
-    keyword argument 'max_tokens'" is the code's, "Could not resolve
-    authentication" is not) and the callee's name ("requires_access_token()
-    got ...")."""
-    unquoted = re.sub(r"'[^']*'|\"[^\"]*\"|`[^`]*`", "", run.message.lower())
-    unquoted = re.sub(r"^[\w.<>]+\(\)\s*", "", unquoted)
-    if run.error_type in _SDK_CODE_ERRORS:
-        return False
-    return (
-        run.error_type in _ENVIRONMENT_ERRORS
-        or run.error_module.split(".")[0] in _ENVIRONMENT_MODULES
-        or any(word in unquoted for word in _ENVIRONMENT_WORDS)
-    )
+def _product_names(
+    blocks: Sequence[tuple[str, str, bool]], products: Collection[str]
+) -> set[str]:
+    """Names the blocks import from a product module and never rebind
+    (a ``def``, ``class`` or assignment of the same name, an illustration
+    of the product's class, makes it the post's own)."""
+    imported: set[str] = set()
+    rebound: set[str] = set()
+    for _, code, _ in blocks:
+        try:
+            tree = ast.parse(code)
+        except (SyntaxError, ValueError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                if _is_product(node.module, products):
+                    imported |= {a.asname or a.name for a in node.names}
+            elif isinstance(node, ast.Import):
+                imported |= {
+                    (a.asname or a.name).split(".")[0]
+                    for a in node.names
+                    if _is_product(a.name, products)
+                }
+            elif isinstance(
+                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+            ):
+                rebound.add(node.name)
+            elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
+                rebound.add(node.id)
+    return imported - rebound
 
 
-_BUILTIN_MISUSE = re.compile(
-    r"'(?:str|nonetype|dict|list|tuple|int|float|bytes|bool)' object|"
-    r"string indices|nonetype|not subscriptable"
-)
+def _is_product(module: str, products: Collection[str]) -> bool:
+    """Whether ``module`` is one of the product's (``products``: its module
+    names, dotted, lower-cased; a namespace package's root is not)."""
+    module = module.lower()
+    return any(module == p or module.startswith(p + ".") for p in products)
 
 
-def _misused_builtin(run: BlockRun) -> bool:
-    """Whether ``run`` failed on a plain value (a str, None, a dict) used as
-    something else: what an error caught earlier may have left."""
-    return bool(_BUILTIN_MISUSE.search(run.message.lower()))
+def _quoted(message: str) -> list[str]:
+    return message.split("'")[1::2]
 
 
-def _none_value(message: str) -> bool:
-    """Whether a (lowercased) validation message is about a missing value: a
-    None, or an empty string or list (``os.getenv(name, "")`` of a variable
-    the reader exports)."""
-    return (
-        "value: none" in message
-        or "nonetype" in message
-        or bool(re.search(r"invalid length for parameter .*value: 0\b", message))
-    )
-
-
-def caught_environment(run: BlockRun) -> str:
-    """The first exception of the environment ``run``'s code raised and
-    caught ("" when none): what it computed may stand in for what the
-    reader's environment would give."""
-    for error_type, module, message in run.raised:
-        probe = BlockRun(
-            index=run.index,
-            ok=False,
-            error_type=error_type,
-            error_module=module,
-            message=message,
-        )
-        if _environment(probe):
-            return f"{error_type}: {probe.message[:120]}"
-    return ""
-
-
-def verdict(run: BlockRun, product_modules: Collection[str]) -> Verdict:
-    """Whose failure ``run`` is: the code's (a reader's paste fails the
-    same), the environment's (credentials, network, a service, time), or
-    unclear (an exception the code may or may not cause)."""
+def blamed(run: BlockRun, products: Collection[str], product_names: set[str]) -> bool:
+    """Whether ``run`` failed on the product's API itself (the module
+    docstring's four cases), whatever else the sandbox lacks."""
     if run.ok:
-        return "ok"
-    message = run.message.lower()
-    if run.error_type in _SOURCE_ERRORS:
-        return "code"
-    if run.error_type in _SDK_CODE_ERRORS:
-        # A None where a value belongs is a setting the reader exports
-        # (os.environ.get of an unset variable), as the None rule below.
-        return "unclear" if _none_value(message) else "code"
-    if run.error_type in ("ModuleNotFoundError", "ImportError"):
-        if not run.in_post:
-            # A package's own import failed (a dependency at another
-            # version).
-            return "environment"
-        products = {m.lower() for m in product_modules}
-        named = message.split("'")[1] if message.count("'") >= 2 else ""
-        if run.error_type == "ImportError" and "cannot import name" in message:
-            # "cannot import name 'X' from 'pkg.mod' (...)": a product's.
-            quoted = message.split("'")
-            source = quoted[3] if len(quoted) > 3 else ""
-            return "code" if source in products else "unclear"
-        # A product module's submodule that does not exist is the code's
-        # (its parent imported, so the product is installed); a product
-        # root or a namespace package's part missing is an install that
-        # failed (or a sandbox that installs nothing).
-        parent = named.rpartition(".")[0]
-        return "code" if parent and parent in products else "environment"
-    if run.error_type == "TypeError" and any(
-        phrase in message for phrase in _SIGNATURE_PHRASES
-    ):
-        # A call that does not match its signature is the code's, whatever
-        # the callee is called, when the post's own line raised it (inside
-        # a package, a keyword forwarded down or a dependency at another
-        # version may be to blame).
-        return "code" if run.in_post else "unclear"
-    if _environment(run):
-        # Before the call checks: an SDK raises a TypeError for a missing
-        # key ("Could not resolve authentication method").
-        return "environment"
-    if run.error_type in ("TypeError", "AttributeError"):
-        # A wrong call or attribute on the post's line, unless a missing
-        # setting made a value None.
-        if not run.in_post or "nonetype" in message:
-            return "unclear"
-        return "code"
-    return "unclear"
-
-
-def run_finding(
-    title: str, block: str, run: BlockRun, *, after_gap: bool = False
-) -> RunFinding:
-    """A finding for the section whose block failed."""
-    first = next((ln for ln in block.splitlines() if ln.strip()), "")[:80]
-    gap = (
-        " (an earlier block could not run in the sandbox; this failure does "
-        "not depend on it)"
-        if after_gap
-        else ""
-    )
-    return RunFinding(
-        section=title,
-        problem=(
-            f"a python block fails when run after the earlier blocks "
-            f"({run.error_type}: {run.message[:200]}){gap}; block starts: {first}"
-        ),
-        block=block,
-    )
+        return False
+    message = run.message
+    lowered = message.lower()
+    quoted = _quoted(message)
+    if run.error_type in _SDK_CALL_ERRORS:
+        return any(phrase in lowered for phrase in _SDK_CALL_ERRORS[run.error_type])
+    if run.error_type == "TypeError":
+        callee = _CALLEE.match(message)
+        return bool(
+            callee
+            and callee.group(1).split(".")[0] in product_names
+            and any(phrase in message for phrase in _SIGNATURE_PHRASES)
+        )
+    if run.error_type == "ImportError" and "cannot import name" in lowered:
+        # "cannot import name 'X' from 'pkg.mod' (...)".
+        return len(quoted) > 1 and _is_product(quoted[1], products)
+    if run.error_type == "ModuleNotFoundError" and quoted:
+        # A submodule missing under a product module that imported fine.
+        parent = quoted[0].rpartition(".")[0]
+        return bool(parent) and parent.lower() in {p.lower() for p in products}
+    if run.error_type == "AttributeError" and message.startswith("module "):
+        # "module 'pkg' has no attribute 'X'".
+        return len(quoted) > 1 and quoted[0].lower() in {p.lower() for p in products}
+    return False
 
 
 def _imported_modules(code: str) -> set[str]:
@@ -612,113 +438,17 @@ def _imported_modules(code: str) -> set[str]:
     return names
 
 
-def _reliable_after_gap(
-    run: BlockRun,
-    blocks: Sequence[tuple[str, str, bool]] = (),
-    gap_names: Collection[str] = (),
-) -> bool:
-    """Whether a code failure after a block that could not run still says
-    the code is wrong: an import, a module attribute or a call signature
-    does not depend on what the failed block would have made (a name it
-    would have bound, or an attribute of its object, may)."""
-    message = run.message
-    if run.error_type in ("ModuleNotFoundError", "ImportError") or (
-        run.error_type in _SDK_CODE_ERRORS and not _none_value(message.lower())
-    ):
-        return True
-    if run.error_type == "AttributeError":
-        # "module 'pkg' has no attribute 'storage'": unless an earlier block
-        # imports pkg.storage (the import the gap may have skipped binds it).
-        quoted = message.split("'")
-        if not message.startswith("module ") or len(quoted) < 4:
-            return False
-        submodule = f"{quoted[1]}.{quoted[3]}"
-        return not any(
-            name == submodule or name.startswith(submodule + ".")
-            for _, code, _ in blocks[: run.index]
-            for name in _imported_modules(code)
-        )
-    if run.error_type == "TypeError":
-        # Unless the gap would have (re)defined the callee: "run_agent()
-        # got an unexpected keyword argument" after a skipped redefinition.
-        callee = re.match(r"([\w.]+)\(\)", message)
-        root = callee.group(1).split(".")[0] if callee else ""
-        return root not in gap_names and any(
-            phrase in message for phrase in _SIGNATURE_PHRASES
-        )
-    return False
-
-
-def _bindings(code: str) -> tuple[set[str], set[str]]:
-    """(names the block's top level defines or assigns, names it imports);
-    empty when it does not parse."""
-    try:
-        tree = ast.parse(code)
-    except (SyntaxError, ValueError):
-        return set(), set()
-    defined: set[str] = set()
-    imported: set[str] = set()
-    for node in tree.body:
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            defined.add(node.name)
-        elif isinstance(node, (ast.Import, ast.ImportFrom)):
-            imported |= {(a.asname or a.name).split(".")[0] for a in node.names}
-        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
-            for target in targets:
-                defined |= {n.id for n in ast.walk(target) if isinstance(n, ast.Name)}
-    return defined, imported
-
-
-def _used(code: str) -> set[str]:
-    try:
-        tree = ast.parse(code)
-    except (SyntaxError, ValueError):
-        return set()
-    return {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}
-
-
-def _missing_name(run: BlockRun) -> str:
-    quoted = run.message.split("'")
-    return quoted[1] if len(quoted) > 2 else ""
-
-
-def _stored(blocks: Sequence[tuple[str, str, bool]], upto: int) -> set[str]:
-    """Every name blocks 1..``upto`` bind anywhere (any depth, imports,
-    function parameters and handlers included)."""
-    names: set[str] = set()
-    for _, code, _ in blocks[:upto]:
-        try:
-            tree = ast.parse(code)
-        except (SyntaxError, ValueError):
-            continue
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Store):
-                names.add(node.id)
-            elif isinstance(node, (ast.Import, ast.ImportFrom)):
-                names |= {(a.asname or a.name).split(".")[0] for a in node.names}
-            elif isinstance(
-                node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
-            ):
-                names.add(node.name)
-            elif isinstance(node, ast.ExceptHandler) and node.name:
-                names.add(node.name)
-    return names
-
-
-def _shadowed(blocks: Sequence[tuple[str, str, bool]], before: int) -> set[str]:
-    """Names the blocks before index ``before`` (1-based) last bound in an
-    excerpt or a section not meant to run, by a definition or assignment
-    (an illustration, such as a simplified class of the product, that the
-    runnable code then uses in place of the real one)."""
-    shadowed: set[str] = set()
-    for _, code, checked in blocks[: before - 1]:
-        defined, imported = _bindings(code)
-        if checked:
-            shadowed -= defined | imported
-        else:
-            shadowed = (shadowed - imported) | defined
-    return shadowed
+def run_finding(title: str, block: str, run: BlockRun) -> RunFinding:
+    """A finding for the section whose block failed."""
+    first = next((ln for ln in block.splitlines() if ln.strip()), "")[:80]
+    return RunFinding(
+        section=title,
+        problem=(
+            "a python block fails when run after the earlier blocks "
+            f"({run.error_type}: {run.message[:200]}); block starts: {first}"
+        ),
+        block=block,
+    )
 
 
 def judge_run(
@@ -729,122 +459,45 @@ def judge_run(
     exact: bool = True,
 ) -> ProgramRun:
     """What running ``blocks`` (:func:`program_blocks`) showed: a finding
-    for the first block of a runnable section that fails because of its
-    code, and otherwise what limited the check.
+    for the first block of a runnable section that fails on the product's
+    API (:func:`blamed`), and otherwise what limited the check.
 
-    With ``exact`` False (the docs' packages are not at their versions)
-    only failures of the code's own text count. A name the code binds
-    somewhere but the run never bound is not blamed.
-
-    A block that fails for the environment (or a reason the check cannot
-    attribute, or in a section not meant to run) leaves a gap: what it would
-    have defined is missing later, so after it only failures that cannot
-    come from the gap count (:func:`_reliable_after_gap`). Blocks after a
-    finding are not judged (they may fail only because of it)."""
+    With ``exact`` False (the docs' packages are not at their versions) the
+    product's API may differ from the post's version: nothing is blamed. A
+    module attribute a skipped import would have bound (an earlier block
+    failed before ``import pkg.sub``) is not blamed either."""
+    products = {m.lower() for m in product_modules}
+    names = _product_names(blocks, products)
     total = len(blocks)
-    gap = ""
-    gap_names: set[str] = set()
-    # Blocks that ran but caught an error of the environment (an SDK client
-    # that looked for credentials, a helper that returned the error's
-    # text): a later misuse of a str or None from them is not blamed.
-    caught_gap = ""
-    caught_names: set[str] = set()
+    limited = ""
+    failed_before = False
     for run in outcomes:
         if run.ok:
-            if caught := caught_environment(run):
-                # It ran, but on what an error of the environment left (a
-                # helper that returns the error's text): a gap all the same.
-                title, code, _ = blocks[run.index - 1]
-                made = set().union(
-                    *(_bindings(c)[0] for _, c, _ in blocks[: run.index - 1])
-                )
-                caught_names |= _stored(blocks[run.index - 1 : run.index], 1) | (
-                    _used(code) & made
-                )
-                caught_gap = caught_gap or (
-                    f"block {run.index} of {total} ({title}) caught an error of "
-                    f"the environment: {caught}"
-                )
             continue
         title, code, checked = blocks[run.index - 1]
-        whose = verdict(run, product_modules)
-        caught = caught_environment(run)
-        if (
-            whose == "code"
-            and caught
-            and _misused_builtin(run)
-            and run.error_type not in _SOURCE_ERRORS
-            and not (
-                run.error_type == "TypeError"
-                and run.in_post
-                and any(p in run.message for p in _SIGNATURE_PHRASES)
+        is_code = exact and checked and blamed(run, products, names)
+        if is_code and run.error_type == "AttributeError" and failed_before:
+            quoted = _quoted(run.message)
+            submodule = f"{quoted[0]}.{quoted[1]}"
+            is_code = not any(
+                name == submodule or name.startswith(submodule + ".")
+                for _, earlier, _ in blocks[: run.index]
+                for name in _imported_modules(earlier)
             )
-        ):
-            # The code caught an error of the environment first: the value
-            # it then misused may be what that error left.
-            whose = "unclear"
-        if (
-            whose == "code"
-            and checked
-            and _used(code) & _shadowed(blocks, run.index)
-            and run.error_type not in _SOURCE_ERRORS
-        ):
-            # It may fail only because it calls an illustration's version.
-            whose = "unclear"
-        if whose == "code" and not exact and run.error_type not in _SOURCE_ERRORS:
-            # The packages are not at the docs' versions: an import, an
-            # attribute or a signature may differ in the installed one.
-            whose = "unclear"
-        if (
-            whose == "code"
-            and run.error_type in ("NameError", "UnboundLocalError")
-            and _missing_name(run) in _stored(blocks, run.index)
-        ):
-            # The code binds it (the static check found the binding): a
-            # binding the run skipped (a try whose body failed, a branch not
-            # taken) is the environment's as likely as the code's.
-            whose = "unclear"
-        if (
-            whose == "code"
-            and (_misused_builtin(run) or run.error_type in _SDK_CODE_ERRORS)
-            and _used(code) & caught_names
-            and run.error_type not in _SOURCE_ERRORS
-        ):
-            whose = "unclear"
-            gap = gap or caught_gap
-        # A gap matters to a block that uses what the gap's blocks bind
-        # (an unrelated later block is judged as if there were none).
-        related = bool(gap) and bool(_used(code) & gap_names)
-        if (
-            whose == "code"
-            and checked
-            and (not related or _reliable_after_gap(run, blocks, gap_names))
-        ):
+        if is_code:
             return ProgramRun(
-                findings=[run_finding(title, code, run, after_gap=related)],
+                findings=[run_finding(title, code, run)],
                 blocks_run=run.index,
                 blocks_total=total,
-                limited=gap,
+                limited=limited,
             )
-        # What the failed block binds, and the objects earlier blocks made
-        # that it uses (a method it called may have been meant to set their
-        # state); not modules or builtins it uses.
-        made = set().union(*(_bindings(c)[0] for _, c, _ in blocks[: run.index - 1]))
-        gap_names |= _stored(blocks[run.index - 1 : run.index], 1) | (
-            _used(code) & made
+        failed_before = True
+        limited = limited or (
+            f"block {run.index} of {total} ({title}) failed in the sandbox: "
+            f"{run.error_type}: {run.message[:160]}"
         )
-        if not gap:
-            reason = {
-                "code": "fails, but is an excerpt or in a section not meant to run",
-                "environment": "needs what the sandbox lacks",
-                "unclear": "raised an error the check cannot attribute",
-            }[whose]
-            gap = (
-                f"block {run.index} of {total} ({title}) {reason}: "
-                f"{run.error_type}: {run.message[:160]}"
-            )
     done = len(outcomes)
     if done < total:
         ended = f"the run ended after block {done} of {total} (killed or timed out)"
-        gap = f"{gap}; {ended}" if gap else ended
-    return ProgramRun(blocks_run=done, blocks_total=total, limited=gap)
+        limited = f"{limited}; {ended}" if limited else ended
+    return ProgramRun(blocks_run=done, blocks_total=total, limited=limited)

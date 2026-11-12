@@ -1353,13 +1353,11 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 + " | ".join(f"{f.section}: {f.problem}"[:240] for f in ran.findings)
             )
         elif ran.limited:
-            note = f"The sandbox check of the code examples was partial: {ran.limited}"
-            if "the run ended" not in ran.limited:
-                note += (
-                    "; later blocks were checked for imports, module attributes "
-                    "and call signatures only"
-                )
-            self.notes.append(note[:400])
+            self.notes.append(
+                f"The sandbox check of the code examples was partial: {ran.limited}"[
+                    :400
+                ]
+            )
 
     def program_findings(
         self, written: Sequence[tuple[SectionT, str]]
