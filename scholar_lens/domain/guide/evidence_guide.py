@@ -265,7 +265,7 @@ def cited_sources(markdown: str, ledger: EvidenceLedger) -> list[str]:
     """Source ids the draft's markers cite, in order of first citation."""
     ids: list[str] = []
     for m in MARKER.finditer(markdown):
-        for eid in re.findall(r"E\d+", m.group(1)):
+        for eid in re.findall(r"E\d+", m.group(0)):
             if (e := ledger.get(eid)) and e.paper_id not in ids:
                 ids.append(e.paper_id)
     return ids
@@ -288,7 +288,7 @@ def name_sources(markdown: str, titles: Mapping[str, str]) -> str:
     )
 
 
-_MARKER_RUN = re.compile(r"[ \t]*" + MARKER.pattern, MARKER.flags)
+_MARKER_RUN = re.compile(r"[ \t]*(?:" + MARKER.pattern + ")", MARKER.flags)
 _ONLY_PUNCTUATION = re.compile(r"^[ \t]*[.,]?[ \t]*$")
 
 

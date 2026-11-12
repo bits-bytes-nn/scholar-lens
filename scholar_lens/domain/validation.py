@@ -1372,7 +1372,7 @@ def _check_description(lines: Lines, offset: int, add: Add) -> None:
 # What is left of an evidence marker in any shape a writer gives it
 # ("[[E12]]", "[[E4], [E14]]", "[E12]]"): the engine strips the markers it
 # knows; one it does not know must not reach the blog.
-_EVIDENCE_LEFTOVER = re.compile(r"\[\[?\s*\[?E(?:\d+|X)\b\]?(?:\s*,|\]\])", re.I)
+_EVIDENCE_LEFTOVER = re.compile(r"\[\[\s*\[?E(?:\d+|X)\b|\bE(?:\d+|X)\]\]")
 
 
 def _check_text(lines: Lines, offset: int, add: Add) -> None:

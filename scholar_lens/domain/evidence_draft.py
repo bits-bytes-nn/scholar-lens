@@ -25,8 +25,11 @@ from scholar_lens.domain.verifiers import Problem, item_problems
 # An evidence marker ("[[E12]]", "[[E12, E15]]", and the "[[E12], [E15]]" a
 # writer sometimes writes) or the illustration mark below; code removes both
 # before publishing.
+_MARK_ID = r"(?:E\d+|EX)"
 MARKER = re.compile(
-    r"\[\[\s*(\[?(?:E\d+|EX)\]?(?:\s*,\s*\[?(?:E\d+|EX)\]?)*)\s*\]\]",
+    # The ids as one group either way, brackets paired.
+    rf"\[\[\s*({_MARK_ID}(?:\s*,\s*{_MARK_ID})*)\s*\]\]"
+    rf"|\[(\[{_MARK_ID}\](?:\s*,\s*\[{_MARK_ID}\])+)\]",
     re.IGNORECASE,
 )
 
@@ -149,7 +152,7 @@ def claim_units(markdown: str) -> list[str]:
 
 def cited_ids(sentence: str) -> list[str]:
     return [
-        i.upper() for m in MARKER.finditer(sentence) for i in _ID.findall(m.group(1))
+        i.upper() for m in MARKER.finditer(sentence) for i in _ID.findall(m.group(0))
     ]
 
 
@@ -196,14 +199,18 @@ _NAMED_NUMBER = re.compile(
 _NAME_VERSION = re.compile(r"\b[A-Z][A-Za-z]+ \d+\.\d+(?:\.\d+)?\b")
 
 
-def named_versions(texts: Iterable[str]) -> list[str]:
+def named_versions(texts: Iterable[str], results: Iterable[str] = ()) -> list[str]:
     """The name-version pairs the sources write ("Llama 3.1"): a sentence
     that writes the same pair names that model; the version alone, or the
-    pair's number elsewhere, is still a stated number."""
+    pair's number elsewhere, is still a stated number. A pair whose number
+    is a recorded result (``results``: the table cells of number evidence,
+    "MMLU 86.4") is a score, not a name, and is never exempt."""
+    scores = {n for cell in results for n in re.findall(r"\d+(?:\.\d+)?", cell)}
     found: dict[str, None] = {}
     for text in texts:
         for m in _NAME_VERSION.finditer(text):
-            found.setdefault(m.group(0), None)
+            if m.group(0).rsplit(" ", 1)[1] not in scores:
+                found.setdefault(m.group(0), None)
     return list(found)
 
 
@@ -229,7 +236,7 @@ _BLANK_CELL = re.compile(r"\|\s*(?:—|–|-|N/A|n/a)?\s*(?=\|)")
 
 # A marker written as a word of its sentence ("근거는 [[E3]]입니다"): removing it
 # breaks the sentence.
-_MARKER_AS_WORD = re.compile(MARKER.pattern + r"(?=[^\W\d_])")
+_MARKER_AS_WORD = re.compile("(?:" + MARKER.pattern + r")(?=[^\W\d_])")
 
 
 # A parameter count names a model ("Llama 2 7B", "350M"), not a result; a

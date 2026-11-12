@@ -190,3 +190,46 @@ def test_a_marker_with_bracketed_ids_is_read_and_stripped() -> None:
     sentence = "출력 값은 그대로 두고 행렬곱 외 연산만 덜어냅니다 [[E4], [E14]]."
     assert cited_ids(sentence) == ["E4", "E14"]
     assert "[[" not in MARKER.sub("", sentence)
+
+
+def test_a_recorded_score_is_never_a_name() -> None:
+    from scholar_lens.domain.evidence_draft import (
+        free_numbers,
+        named_versions,
+        stated_numbers,
+    )
+
+    sources = ["Ours reaches MMLU 86.4, built on Llama 3.1."]
+    free = free_numbers().with_names(named_versions(sources, ["MMLU 86.4"]))
+    assert stated_numbers("GPT-4는 MMLU 86.4를 기록했다.", free) == ["86.4"]
+    assert stated_numbers("Llama 3.1을 기반으로 한다.", free) == []
+
+
+def test_a_marker_inside_link_text_keeps_the_link() -> None:
+    from scholar_lens.domain.evidence_draft import MARKER
+
+    assert MARKER.sub("", "[FlashAttention [[E4]]](https://x)") == (
+        "[FlashAttention ](https://x)"
+    )
+
+
+def test_every_pattern_built_on_the_marker_reads_both_shapes() -> None:
+    from scholar_lens.domain.evidence import EvidenceLedger, SourceDocument
+    from scholar_lens.domain.evidence_draft import _MARKER_AS_WORD
+    from scholar_lens.domain.guide.evidence_guide import strip_markers
+    from scholar_lens.domain.survey.evidence_post import cite_papers
+
+    doc = SourceDocument.from_markdown(
+        "2401.00001", "t", "full_text", "## 1 A\n\nq q q q q.\n"
+    )
+    ledger = EvidenceLedger()
+    ledger.add(
+        doc, kind="finding", claim="c", quote="q q q q q", anchor=doc.sections[0].anchor
+    )
+    ledger.add(
+        doc, kind="finding", claim="d", quote="q q q q q", anchor=doc.sections[0].anchor
+    )
+    for text in ("결과입니다 [[E1, E2]].", "결과입니다 [[E1], [E2]]."):
+        assert cite_papers(text, ledger) == "결과입니다 [@2401.00001]."
+        assert strip_markers(text).strip() == "결과입니다."
+        assert not _MARKER_AS_WORD.search(text)

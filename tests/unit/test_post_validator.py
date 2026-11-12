@@ -632,3 +632,15 @@ def test_a_leaked_evidence_marker_blocks_the_post() -> None:
 
     assert _EVIDENCE_LEFTOVER.search("관점 [[E120], [E128]]도 설득력이 있습니다.")
     assert not _EVIDENCE_LEFTOVER.search("배열 [[1, 2]]와 E12 규격")
+
+
+def test_math_and_lists_in_brackets_are_no_leftover_marker() -> None:
+    from scholar_lens.domain.validation import _EVIDENCE_LEFTOVER
+
+    for text in (
+        "기저 벡터 [e1, e2, e3]",
+        "$[e1, e2]$",
+        "[E5, E6] 등급",
+        "x = [[e0, e1], [e2, e3]]",
+    ):
+        assert not _EVIDENCE_LEFTOVER.search(text)
