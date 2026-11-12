@@ -123,7 +123,7 @@ class PaperReviewStack(Stack):
         s3_prefix: str = "",
         bedrock_region_name: str | None = None,
         environment_vars: dict[str, str] | None = None,
-        cost_alarm_usd: float = 120.0,
+        cost_alarm_usd: float,
         **kwargs: Any,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)

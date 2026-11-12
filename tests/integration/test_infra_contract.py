@@ -326,10 +326,8 @@ def test_the_cost_alarm_follows_the_run_ceilings() -> None:
     from scholar_lens.configs.config import Config
     from scripts.deploy_infra import cost_alarm_usd
 
+    # Defaults: review 40, summary 12, guide 60, survey 60.
+    assert cost_alarm_usd(Config()) == 120.0
     config = Config()
-    assert cost_alarm_usd(config) == 2 * max(
-        config.explanation.max_cost_usd or 0,
-        config.summary.max_cost_usd or 0,
-        config.tech_guide.max_cost_usd or 0,
-        config.survey.write_max_cost_usd or 0,
-    )
+    config.tech_guide.max_cost_usd = 90.0
+    assert cost_alarm_usd(config) == 180.0

@@ -159,6 +159,19 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
+name = "The application's ports import nothing else of the application"
+# The adapter and sections-engine contracts allow the ports: this keeps the
+# ports at the bottom, so no chain through them reaches the core. A new
+# application module fails here until it is listed.
+type = "layers"
+containers = ["scholar_lens.application"]
+layers = [
+    "checkpoints : evidence_writer : guide_engine : paper_engine : post_engine : run : survey_engine : use_cases",
+    "ports",
+]
+exhaustive = true
+
+[[tool.importlinter.contracts]]
 name = "The adapters import the domain and the application's ports only"
 type = "forbidden"
 source_modules = ["scholar_lens.adapters"]

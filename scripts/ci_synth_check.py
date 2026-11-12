@@ -20,7 +20,12 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from scholar_lens.adapters.aws.metrics import COST_METRIC_NAME
 from scholar_lens.cli import APP_REPORTED_EXIT_CODES  # noqa: E402
-from scripts.deploy_infra import JOB_COMMAND, PaperReviewStack  # noqa: E402
+from scholar_lens.configs.config import Config  # noqa: E402
+from scripts.deploy_infra import (  # noqa: E402
+    JOB_COMMAND,
+    PaperReviewStack,
+    cost_alarm_usd,
+)
 
 FAKE_ACCOUNT = "123456789012"
 FAKE_REGION = "ap-northeast-2"
@@ -39,6 +44,7 @@ def synth_template() -> dict[str, Any]:
         s3_prefix="scholar-lens",
         bedrock_region_name="us-west-2",
         environment_vars={},
+        cost_alarm_usd=cost_alarm_usd(Config()),
         env=Environment(account=FAKE_ACCOUNT, region=FAKE_REGION),
     )
     return app.synth().get_stack_by_name(STACK_NAME).template

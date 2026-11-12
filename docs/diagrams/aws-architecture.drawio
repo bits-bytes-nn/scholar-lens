@@ -69,7 +69,7 @@
     <mxCell id="eb" value="EventBridge&#10;Batch FAILED rule" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#E7157B;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.eventbridge;" vertex="1" parent="1">
       <mxGeometry x="860" y="900" width="78" height="78" as="geometry"/>
     </mxCell>
-    <mxCell id="alarms" value="CloudWatch Alarm&#10;• EstimatedCostUSD &#8805; $50 / h&#10;(metric sent when a run ends)" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=middle;spacingLeft=10;fillColor=#F5EEFB;strokeColor=#7D3FB3;fontSize=11;fontColor=#232F3E;" vertex="1" parent="1">
+    <mxCell id="alarms" value="CloudWatch Alarm&#10;• EstimatedCostUSD &gt; 2 &#215; run ceiling / h&#10;(metric sent when a run ends)" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=middle;spacingLeft=10;fillColor=#F5EEFB;strokeColor=#7D3FB3;fontSize=11;fontColor=#232F3E;" vertex="1" parent="1">
       <mxGeometry x="1120" y="890" width="280" height="100" as="geometry"/>
     </mxCell>
     <mxCell id="sns" value="Amazon SNS&#10;success + failure &#8594; email" style="sketch=0;outlineConnect=0;fontColor=#232F3E;gradientColor=none;fillColor=#E7157B;strokeColor=none;dashed=0;verticalLabelPosition=bottom;verticalAlign=top;align=center;html=1;fontSize=11;fontStyle=0;aspect=fixed;shape=mxgraph.aws4.resourceIcon;resIcon=mxgraph.aws4.sns;" vertex="1" parent="1">
