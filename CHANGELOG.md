@@ -6,6 +6,7 @@ Notable changes, newest first. Undated entries predate November 2026. Design dec
   - The evidence engine's claim check caches its earlier-section evidence and its own section's evidence as two parts. The earlier evidence is split where the previous check's ended, so each section's check reads the previous one's cache entry and writes only the new evidence (checked on Bedrock). Before, every section rewrote the whole earlier evidence. A structured answer's retry cycle now reads its context back too.
   - The sections engine (the default for reviews and summaries) caches the section writer's and checker's system prompts and the writer's run-wide prefix (outline, glossary, translation guideline). Before, it cached nothing. A section's own prefix is not cached: most sections take one call.
   - The saving per run is estimated, not yet measured on a real run.
+- 2026-11-14: a whole-post fix of a section sees what its claim check judges it against: the earlier sections' evidence and the source and SDK passages the section was checked with, not only its own evidence.
   - Cache writes that langchain-aws reports per TTL are counted as writes.
 - 2026-11-12: a controlled tag is optional, as in the blog's lint: a post gets one only when one names its topic (a post with none shows no related reading, which beats wrong related reading). The taxonomy calls no longer ask again for a missing one, and the publish check no longer rejects a post without one; such a post's PR carries a note to add one if one names its topic.
 - 2026-11-12: a review-and-cleanup pass.

@@ -369,8 +369,6 @@ def test_a_whole_post_fix_runs_the_sections_verifier_set() -> None:
             [finding],
             _ledger(),
             title_of=lambda s: s,
-            own_of=lambda _s: list(_ledger()),
-            reference_of=lambda _e: "",
         )
     )
     # The edit adds a problem the section's own set finds: not taken.
@@ -393,8 +391,6 @@ def test_a_whole_post_fix_settles_only_the_sentences_it_adds() -> None:
             [PostFinding(section="캐시", problem="p", fix="f")],
             _ledger(),
             title_of=lambda s: s,
-            own_of=lambda _s: list(_ledger()),
-            reference_of=lambda _e: "",
         )
     )
     assert added not in out[0][1] and all(s in out[0][1] for s in sentences)
@@ -450,8 +446,6 @@ def _whole_post_fix(writer: EvidenceWriter, md: str) -> list[tuple[str, str]]:
             [PostFinding(section="캐시", problem="p", fix="f")],
             _ledger(),
             title_of=lambda s: s,
-            own_of=lambda _s: list(_ledger()),
-            reference_of=lambda _e: "",
         )
     )
 
@@ -525,8 +519,6 @@ def test_a_whole_post_fix_that_breaks_a_later_sections_code_is_not_taken(
             [PostFinding(section="캐시", problem="p", fix="f")],
             _ledger(),
             title_of=lambda s: s,
-            own_of=lambda _s: list(_ledger()),
-            reference_of=lambda _e: "",
             post_check=_program if checked else None,
         )
     )
@@ -554,8 +546,6 @@ def test_a_whole_post_fix_may_not_delete_the_first_copy_of_a_code_block() -> Non
                     [PostFinding(section="캐시", problem="p", fix="f")],
                     _ledger(),
                     title_of=lambda s: s,
-                    own_of=lambda _s: list(_ledger()),
-                    reference_of=lambda _e: "",
                 )
             )
         )
@@ -892,3 +882,50 @@ def test_an_unjudged_item_after_a_deleted_sentence_still_blocks() -> None:
     out = _verify(writer, _section(s))
     assert s[0] not in out and s[1] in out
     assert writer.blocking
+
+
+class _FixContexts(Model):
+    """Records the context each fix call is given."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.fix_contexts: list[str] = []
+
+    async def structured(self, *, schema: Any, prompt: str, **kwargs: Any) -> Any:
+        if schema is SectionEdits:
+            self.fix_contexts.append(str(kwargs.get("context", "")))
+        return await super().structured(schema=schema, prompt=prompt, **kwargs)
+
+
+def test_a_whole_post_fix_sees_what_the_claim_check_judges_it_against() -> None:
+    model = _FixContexts()
+    writer = _writer(model)
+    # The section is checked with earlier evidence and its source (SDK) passages.
+    writer.reference = "def run(x): the SDK definition"
+    md = asyncio.run(
+        writer.verify_and_fix(
+            _section(_sentences(2)),
+            title="캐시",
+            review_context="",
+            verifiers=no_checks(),
+            ledger=_ledger(),
+            own=list(_ledger()),
+            earlier=[_earlier()],
+            free="",
+            section=SECTION,
+        )
+    )
+    writer.reference = ""
+    model.fix_contexts.clear()
+    asyncio.run(
+        writer.apply_findings(
+            [(SECTION, md)],
+            [PostFinding(section="캐시", problem="p", fix="f")],
+            _ledger(),
+            title_of=lambda s: s,
+        )
+    )
+    (context,) = model.fix_contexts
+    assert "[E9]" in context and "[E1]" in context
+    assert "the SDK definition" in context
+    assert writer.reference == ""

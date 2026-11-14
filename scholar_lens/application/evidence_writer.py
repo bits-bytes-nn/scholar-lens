@@ -1341,14 +1341,14 @@ class EvidenceWriter:
         ledger: EvidenceLedger,
         *,
         title_of: Callable[[SectionT], str],
-        own_of: Callable[[SectionT], list[Evidence]],
-        reference_of: Callable[[Sequence[Evidence]], str],
         post_check: (
             Callable[[Sequence[tuple[SectionT, str]]], list[Problem]] | None
         ) = None,
     ) -> list[tuple[SectionT, str]]:
-        """Each section a whole-post review names, fixed with its evidence
-        and source passages as an edit transaction that runs the section's
+        """Each section a whole-post review names, fixed with what its claim
+        check judges against (its own and the earlier evidence, its source
+        passages and SDK definitions: the section's registered checks) as an
+        edit transaction that runs the section's
         registered verifier set (a fix that adds a problem, or loses
         structure, is not taken); the sentences the fix adds are settled
         like a section's (narrowed, checked, deleted), and what the
@@ -1399,8 +1399,9 @@ class EvidenceWriter:
                 )
                 out.append((section, md))
                 continue
-            own = own_of(section)
-            self.reference = reference_of(own)
+            # What the claim check judges the fix against, the fix sees.
+            evidence = self.fix_evidence(md, checks.own, checks.earlier)
+            self.reference = checks.reference
             later = "\n\n".join(m for _, m in written[i + 1 :])
             rest = "\n\n".join([m for _, m in out] + [m for _, m in written[i + 1 :]])
             verifiers = checks.verifiers
@@ -1410,7 +1411,7 @@ class EvidenceWriter:
                 )
             fixing = dataclasses.replace(checks, verifiers=verifiers)
             revision = await self._fix(
-                md, own, issues, verifiers=verifiers, rest=rest, later=later
+                md, evidence, issues, verifiers=verifiers, rest=rest, later=later
             )
             if not revision.taken or revision.text.strip() == md.strip():
                 self.notes.append(
@@ -1426,7 +1427,7 @@ class EvidenceWriter:
                     title=title,
                     ledger=ledger,
                     checks=fixing,
-                    evidence=own,
+                    evidence=evidence,
                     rest=rest,
                     later=later,
                     baseline=md,
