@@ -60,6 +60,34 @@ def test_cached_tokens_are_split_out_and_priced_at_their_multiples() -> None:
     assert tracker.input_tokens == 10_000
 
 
+def test_cache_writes_reported_per_ttl_are_still_writes() -> None:
+    # With a per-TTL breakdown, langchain-aws sets cache_creation to 0.
+    message = SimpleNamespace(
+        usage_metadata={
+            "input_tokens": 10_000,
+            "output_tokens": 500,
+            "input_token_details": {
+                "cache_read": 8_000,
+                "cache_creation": 0,
+                "ephemeral_5m_input_tokens": 1_000,
+            },
+        },
+        response_metadata={"model_name": OPUS},
+    )
+    tracker = TokenUsageTracker()
+    tracker.on_llm_end(
+        SimpleNamespace(
+            llm_output=None, generations=[[SimpleNamespace(message=message)]]
+        )
+    )
+    (event,) = tracker.events
+    assert (event.input_tokens, event.cache_read_tokens, event.cache_write_tokens) == (
+        1_000,
+        8_000,
+        1_000,
+    )
+
+
 def test_failed_calls_are_counted_by_stage() -> None:
     tracker = TokenUsageTracker()
     with usage_stage("review"):

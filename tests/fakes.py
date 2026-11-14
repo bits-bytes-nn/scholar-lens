@@ -13,13 +13,17 @@ from scholar_lens.application.evidence_writer import (
     EvidenceVerdict,
     SentenceVerdict,
 )
+from scholar_lens.application.ports import ModelContext
 
 
-def with_context(context: str | tuple[str, ...], prompt: str) -> str:
-    """A scripted model's view of a call: its context parts (one string, or
-    the parts a cached call passes) before its prompt."""
+def with_context(context: ModelContext, prompt: str) -> str:
+    """A scripted model's view of a call: the text the model reads, its
+    context parts (one string, or the parts a cached call passes, each one
+    text or several blocks) and its prompt back to back, as they are sent."""
     parts = (context,) if isinstance(context, str) else context
-    return "\n\n".join([*parts, prompt])
+    return "".join(
+        [*("".join((p,) if isinstance(p, str) else p) for p in parts), prompt]
+    )
 
 
 _ITEM = re.compile(r"^(\d+)\. (.*)$", re.M)

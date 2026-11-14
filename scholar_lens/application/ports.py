@@ -92,14 +92,22 @@ class AgentOutcome:
     stop_reason: str
 
 
+# A part of a context: one text, or texts sent as separate content blocks
+# before the part's one cache point. A part that grows by appending blocks
+# (a section's earlier evidence, one block per earlier call) keeps the
+# boundary where the previous call's cache point sat, and Bedrock reads that
+# entry back from a later call (it looks back about 20 blocks).
+ContextPart = str | tuple[str, ...]
 # What repeated calls share, before the call's own prompt: one part, or
 # parts ordered from the most stable (shared by the most calls) to the least.
-ModelContext = str | tuple[str, ...]
-# Cache points the adapter places in a call's messages; parts past it join
-# the last. One: the calls that repeat a context (a section's check rounds)
-# repeat all of it, and a section's earlier evidence grows from one section
-# to the next, so a second point would not be read back.
-MAX_CONTEXT_PARTS = 1
+# Parts, their blocks and the prompt are sent back to back: the caller writes
+# the separators.
+ModelContext = str | tuple[ContextPart, ...]
+# Cache points the adapter places in a call's messages, one after each part;
+# parts past the last join it. Two: with the tools' and the system prompt's,
+# a request's four. A claim check's earlier evidence is shared with the next
+# section's check, its own evidence only with its own rounds.
+MAX_CONTEXT_PARTS = 2
 
 
 class LanguageModel(Protocol):

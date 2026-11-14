@@ -14,9 +14,11 @@ an agent's tool calls up to then stand.
 
 Cache policy: the system prompt and tool definitions are cached (every call
 of a role repeats them). A message is cached only where a call names a shared
-prefix: a ``context`` (before a cache point) or an agent's conversation, which
-is re-sent every cycle. A one-shot call without ``context`` writes no message
-cache entry, which nothing would read back at the cache-write price.
+prefix: a ``context`` (a cache point after each part, placed here; Strands
+leaves them as placed) or an agent's conversation, which is re-sent every
+cycle (Strands places that point). A one-shot call without ``context``
+writes no message cache entry, which nothing would read back at the
+cache-write price.
 """
 
 from __future__ import annotations
@@ -29,7 +31,6 @@ from typing import Any
 import boto3
 from botocore.config import Config
 from strands import Agent, ModelRetryStrategy, tool
-from strands.middleware import InvokeModelContext, InvokeModelStage
 from strands.models import BedrockModel
 from strands.models.model import CacheConfig
 from strands.telemetry.metrics import EventLoopMetrics
@@ -39,6 +40,7 @@ from scholar_lens.application.ports import (
     MAX_CONTEXT_PARTS,
     AgentLimits,
     AgentOutcome,
+    ContextPart,
     ModelContext,
     ModelRole,
     ModelText,
@@ -75,44 +77,42 @@ class RoleModel:
     fallback: RoleModel | None = None
 
 
-def _context_parts(context: ModelContext) -> list[str]:
-    """The non-empty parts of ``context``, at most :data:`MAX_CONTEXT_PARTS`:
-    parts past the last allowed one join it (the earlier, more stable parts
-    keep their own cache points)."""
+def _blocks(part: ContextPart) -> list[str]:
+    """The part's content blocks (a text part is one), blank ones left out."""
+    blocks = (part,) if isinstance(part, str) else part
+    return [b for b in blocks if b.strip()]
+
+
+def _context_parts(context: ModelContext) -> list[list[str]]:
+    """The non-empty parts of ``context`` as their content blocks, at most
+    :data:`MAX_CONTEXT_PARTS`: parts past the last allowed one join it as
+    one text, back to back as every part is sent (the earlier, more stable
+    parts keep their own cache points)."""
     given = (context,) if isinstance(context, str) else context
-    parts = [p for p in given if p.strip()]
+    parts = [blocks for p in given if (blocks := _blocks(p))]
     if len(parts) > MAX_CONTEXT_PARTS:
         last = MAX_CONTEXT_PARTS - 1
-        parts = [*parts[:last], "\n\n".join(parts[last:])]
+        parts = [
+            *parts[:last],
+            ["".join("".join(blocks) for blocks in parts[last:])],
+        ]
     return parts
-
-
-def _has_context(context: ModelContext) -> bool:
-    return bool(_context_parts(context))
 
 
 def _content(context: ModelContext, prompt: str) -> str | list[dict[str, object]]:
     """The user turn: each part of ``context`` (what repeated calls share:
     evidence, source passages; the most stable first) followed by a cache
     point, then ``prompt``. Calls that share a part and everything before
-    it read that prefix at the cache-read rate."""
+    it read that prefix at the cache-read rate. A blank ``prompt`` (the
+    context is the whole ask) is left out: Bedrock rejects a blank block."""
     parts = _context_parts(context)
     if not parts:
         return prompt
     content: list[dict[str, object]] = []
-    for part in parts:
-        content += [{"text": part}, {"cachePoint": {"type": "default"}}]
-    return [*content, {"text": prompt}]
-
-
-def _no_message_cache_point(context: InvokeModelContext) -> InvokeModelContext:
-    """Marks every block of the last user message as rebuilt per call, so
-    Strands places no cache point in the messages (no durable prefix)."""
-    last_user = next(
-        (m for m in reversed(context.messages) if m.get("role") == "user"), None
-    )
-    blocks = len(last_user.get("content", [])) if last_user else 0
-    return context.replace(dynamic_trailing_blocks=blocks)
+    for blocks in parts:
+        content += [{"text": b} for b in blocks]
+        content.append({"cachePoint": {"type": "default"}})
+    return [*content, {"text": prompt}] if prompt.strip() else content
 
 
 class StrandsLanguageModel:
@@ -132,6 +132,7 @@ class StrandsLanguageModel:
         *,
         thinking: bool | None = None,
         spec: RoleModel | None = None,
+        conversation: bool = False,
     ) -> BedrockModel:
         spec = spec or self._roles[role]
         fields: dict[str, Any] = {"output_config": {"effort": spec.effort}}
@@ -143,26 +144,22 @@ class StrandsLanguageModel:
             boto_client_config=_CLIENT_CONFIG,
             max_tokens=spec.max_tokens,
             additional_request_fields=fields,
-            # System prompt and tools are cached; a message only where the
-            # call allows it (see _agent). "auto" does not recognize an
-            # application profile ARN as Claude, so the format is named.
+            # System prompt and tools are cached. The messages: an agent's
+            # conversation (re-sent every cycle) by Strands, at its last
+            # durable block; a one-shot call only where it names a context
+            # (_content places the points, which Strands leaves as placed).
+            # "auto" does not recognize an application profile ARN as
+            # Claude, so the format is named.
             cache_config=CacheConfig(
-                strategy="anthropic", system_prompt_ttl=True, tools_ttl=True
+                strategy="anthropic",
+                system_prompt_ttl=True,
+                tools_ttl=True,
+                messages_ttl=None if conversation else False,
             ),
         )
 
-    def _agent(
-        self,
-        model: BedrockModel,
-        system: str,
-        *,
-        cache_messages: bool,
-        **kwargs: Any,
-    ) -> Agent:
-        """An agent on ``model``. ``cache_messages``: the call has a shared
-        prefix (a caller-placed cache point, or an agent conversation re-sent
-        every cycle); without one no message is written to the cache."""
-        agent = Agent(
+    def _agent(self, model: BedrockModel, system: str, **kwargs: Any) -> Agent:
+        return Agent(
             model=model,
             system_prompt=system,
             callback_handler=None,
@@ -171,9 +168,6 @@ class StrandsLanguageModel:
             ),
             **kwargs,
         )
-        if not cache_messages:
-            agent.add_middleware(InvokeModelStage.Input, _no_message_cache_point)
-        return agent
 
     def _usage(
         self, role: ModelRole, metrics: EventLoopMetrics, label: str | None = None
@@ -235,7 +229,6 @@ class StrandsLanguageModel:
             agent = self._agent(
                 self._model(role, thinking=thinking, spec=model),
                 system,
-                cache_messages=_has_context(context),
             )
             result, _, stop = await self._invoke(
                 agent,
@@ -274,7 +267,6 @@ class StrandsLanguageModel:
             agent = self._agent(
                 self._model(role, thinking=thinking, spec=model),
                 system,
-                cache_messages=_has_context(context),
             )
             _, text, stop = await self._invoke(
                 agent, role, model.model_label, _content(context, prompt)
@@ -307,9 +299,8 @@ class StrandsLanguageModel:
         limits: AgentLimits,
     ) -> AgentOutcome:
         agent = self._agent(
-            self._model(role),
+            self._model(role, conversation=True),
             system,
-            cache_messages=True,
             tools=[tool(fn) for fn in tools],
         )
         request_limits: dict[str, int] = {"turns": limits.turns}

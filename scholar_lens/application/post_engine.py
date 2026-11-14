@@ -1209,8 +1209,6 @@ class PostEngine[OutlineT: PostOutline, SectionT: PostSection, ResultT](Evidence
                 issues,
                 ledger,
                 title_of=lambda s: s.title,
-                own_of=lambda s: self.own(s, ledger),
-                reference_of=self.reference_for,
                 post_check=self.program_check if self.spec.runnable_kinds else None,
             )
         # The fixes are checked again, not trusted: what is left goes on the

@@ -154,6 +154,13 @@ class PaperPlanningPrompt(BasePrompt):
 class PaperSectionPrompt(BasePrompt):
     """Writes (continues, or revises) one planned section of the review."""
 
+    # Every section's writer calls share the system prompt and the run's
+    # outline, glossary and guideline. (A section's own prefix is not cached:
+    # most sections are written in one call, and a write nothing reads back
+    # costs more than it saves.)
+    cache_system = True
+    cache_after = ("</translation_guideline>",)
+
     input_variables: list[str] = [
         "plan_outline",
         "glossary",
@@ -313,6 +320,10 @@ Write the section described in the brief, in {language}.
 
 class PaperSectionCheckPrompt(BasePrompt):
     """Checks one drafted section against its brief and the source."""
+
+    # Every check shares the system prompt (a section's own prefix opens the
+    # message, and most sections are checked once).
+    cache_system = True
 
     input_variables: list[str] = [
         "section_brief",
