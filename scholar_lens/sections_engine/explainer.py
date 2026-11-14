@@ -28,13 +28,13 @@ from typing import Any
 import boto3
 import nltk
 from langchain_core.output_parsers import BaseOutputParser, StrOutputParser
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnableLambda
 from nltk.tokenize.punkt import PunktTokenizer
 
 from scholar_lens.adapters.aws.environment import is_running_in_aws
 from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
 from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
-from scholar_lens.adapters.bedrock.prompts.base import BasePrompt
+from scholar_lens.adapters.bedrock.prompts.base import BasePrompt, with_cache_points
 from scholar_lens.adapters.bedrock.usage import TokenBudgetGuard
 from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.domain.constants import LanguageModelId
@@ -299,7 +299,12 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         llm = self.llm_factory.get_model(
             model_id, temperature=0.0, callbacks=self.callbacks or None, **kwargs
         )
-        return prompt_cls.get_prompt() | llm | output_parser
+        return (
+            prompt_cls.get_prompt()
+            | RunnableLambda(with_cache_points(prompt_cls))
+            | llm
+            | output_parser
+        )
 
     @RetryableBase._retry("paper_review_llm_call")
     async def _call(self, chain: Runnable, payload: dict[str, Any]) -> Any:

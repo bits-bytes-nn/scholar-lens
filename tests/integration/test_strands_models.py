@@ -414,29 +414,51 @@ def test_an_agent_conversation_keeps_its_message_cache_point(monkeypatch) -> Non
     assert [_message_cache_points(r) for r in stub.requests] == [1]
 
 
-def test_context_parts_share_one_cache_point() -> None:
+def test_each_context_part_ends_at_its_own_cache_point() -> None:
     from scholar_lens.adapters.bedrock.strands_models import _content
 
     point = {"cachePoint": {"type": "default"}}
-    # Parts join, most stable first, before the one cache point.
+    # Parts in order, most stable first, each before its cache point.
     assert _content(("earlier", "section"), "check") == [
-        {"text": "earlier\n\nsection"},
+        {"text": "earlier"},
+        point,
+        {"text": "section"},
         point,
         {"text": "check"},
     ]
-    # Empty parts are left out; no part, no cache point.
+    # A part of several blocks keeps them, before its one cache point: a
+    # later call that appends a block reads this call's entry back.
+    assert _content((("<e>\nE1", "\nE2"), "\n</e>\nown"), "check") == [
+        {"text": "<e>\nE1"},
+        {"text": "\nE2"},
+        point,
+        {"text": "\n</e>\nown"},
+        point,
+        {"text": "check"},
+    ]
+    # Empty parts and blocks are left out; no part, no cache point.
     assert _content(("", "section"), "check") == [
         {"text": "section"},
         point,
         {"text": "check"},
     ]
-    assert _content(("", " "), "check") == "check"
+    assert _content((("", " "), " "), "check") == "check"
+    # Parts past the last allowed join it, back to back as all parts are sent.
+    assert _content(("a", "b", ("c", "d")), "check") == [
+        {"text": "a"},
+        point,
+        {"text": "bcd"},
+        point,
+        {"text": "check"},
+    ]
+    # The context is the whole ask: no blank prompt block.
+    assert _content("evidence", "") == [{"text": "evidence"}, point]
 
 
 @pytest.mark.parametrize(
-    "context, points", [(("", ""), 0), (("earlier", ""), 1), (("earlier", "own"), 1)]
+    "context, points", [(("", ""), 0), (("earlier", ""), 1), (("earlier", "own"), 2)]
 )
-def test_a_structured_call_caches_its_context_once(
+def test_a_structured_call_caches_each_context_part(
     monkeypatch, context: tuple[str, ...], points: int
 ) -> None:
     from pydantic import BaseModel

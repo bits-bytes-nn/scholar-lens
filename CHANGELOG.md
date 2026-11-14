@@ -2,6 +2,11 @@
 
 Notable changes, newest first. Undated entries predate November 2026. Design decisions are recorded in [docs/adr/](./docs/adr/) and measurement results in [eval/RESULTS.md](./eval/RESULTS.md).
 
+- 2026-11-14: prompt caching without any change to what the models read.
+  - The evidence engine's claim check caches its earlier-section evidence and its own section's evidence as two parts. The earlier evidence is split where the previous check's ended, so each section's check reads the previous one's cache entry and writes only the new evidence (checked on Bedrock). Before, every section rewrote the whole earlier evidence. A structured answer's retry cycle now reads its context back too.
+  - The sections engine (the default for reviews and summaries) caches the section writer's and checker's system prompts and the writer's run-wide prefix (outline, glossary, translation guideline). Before, it cached nothing. A section's own prefix is not cached: most sections take one call.
+  - The saving per run is estimated, not yet measured on a real run.
+  - Cache writes that langchain-aws reports per TTL are counted as writes.
 - 2026-11-12: a controlled tag is optional, as in the blog's lint: a post gets one only when one names its topic (a post with none shows no related reading, which beats wrong related reading). The taxonomy calls no longer ask again for a missing one, and the publish check no longer rejects a post without one; such a post's PR carries a note to add one if one names its topic.
 - 2026-11-12: a review-and-cleanup pass.
   - The guide sandbox check (`tech_guide.run_examples`) blames a post only for misusing the product's API: a wrong call signature of a name imported from the product, an import of a product name or submodule that does not exist, a product module's missing attribute, or an SDK's own parameter or service-name validation. Any other failure makes the check partial, shown as a PR note.

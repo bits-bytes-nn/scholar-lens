@@ -482,6 +482,21 @@ def block(tag: str, text: str) -> str:
     return fenced(tag, text)
 
 
+def split_block(tag: str, chunks: Sequence[str]) -> tuple[tuple[str, ...], str]:
+    """``block(tag, "\\n".join(chunks))`` as (one text per chunk, the
+    closing tag): the texts and the tag joined are that block, character for
+    character, so a later call that appends a chunk shares every earlier
+    chunk's boundary. A fence a chunk's own text changes at the joins
+    (a strip, a tag split across chunks) comes back as one text."""
+    whole = block(tag, "\n".join(chunks))
+    opening, closing = f"<{tag}>\n", f"\n</{tag}>"
+    bodies = [block(tag, c)[len(opening) : -len(closing)] for c in chunks]
+    texts = (opening + bodies[0], *("\n" + b for b in bodies[1:]))
+    if not chunks or "".join(texts) + closing != whole:
+        return (whole[: -len(closing)],), closing
+    return texts, closing
+
+
 def claim_lines(items: Sequence[Evidence]) -> str:
     """Evidence without its quotes (the writer's fallback when quoted source
     text derails it, e.g. injection examples in a security paper)."""
@@ -586,6 +601,12 @@ class EvidenceWriter:
         # By section object (two sections may share a title).
         self.checked: dict[int, SectionChecks] = {}
         self._names: dict[str, str] = {}
+        # The longest earlier evidence a claim check sent (ids) and where its
+        # blocks ended: the earlier evidence only grows from one section to
+        # the next, so a check splits its own where the previous ones ended,
+        # and reads their cache entries back (:meth:`_earlier_part`).
+        self._earlier_ids: tuple[str, ...] = ()
+        self._earlier_ends: tuple[int, ...] = ()
         # Source passages the current section's evidence comes from (guides):
         # the claim check and the fix read them besides the evidence.
         self.reference = ""
@@ -1553,6 +1574,35 @@ class EvidenceWriter:
         ]
         return found
 
+    def _earlier_part(self, earlier: Sequence[Evidence]) -> tuple[tuple[str, ...], str]:
+        """The claim check's earlier evidence as (its blocks, the closing
+        tag that opens the next part). It is split where the earlier checks'
+        evidence ended (it only grows by appending, and a section is checked
+        after the one before it), so each block boundary is a cache entry an
+        earlier check wrote: only the new evidence is written again."""
+        if not earlier:
+            return (), ""
+        ids = tuple(e.id for e in earlier)
+        known = self._earlier_ids
+        shared = next(
+            (n for n, (a, b) in enumerate(zip(ids, known, strict=False)) if a != b),
+            min(len(ids), len(known)),
+        )
+        ends = sorted({n for n in self._earlier_ends if n <= shared} | {len(ids)})
+        if shared < len(ids):
+            # More evidence than the remembered (or other evidence after a
+            # shared start): what later checks split by. A shorter one (a
+            # whole-post check of an early section) leaves it.
+            self._earlier_ids, self._earlier_ends = ids, tuple(ends)
+        starts = [0, *ends[:-1]]
+        return split_block(
+            "earlier_evidence",
+            [
+                evidence_lines(list(earlier[a:b]))
+                for a, b in zip(starts, ends, strict=True)
+            ],
+        )
+
     async def check_claims(
         self,
         draft: str,
@@ -1573,7 +1623,8 @@ class EvidenceWriter:
 
         The shared context is two cached parts (docs/engine.md, 4.10): the
         evidence earlier sections cite first (it only grows, so it is the
-        most stable prefix), then this section's evidence and source
+        most stable prefix; split where earlier checks' ended,
+        :meth:`_earlier_part`), then this section's evidence and source
         passages.
 
         Args:
@@ -1591,7 +1642,6 @@ class EvidenceWriter:
         sentences, keys = self._claim_keys(draft, own, earlier, reference)
         if not sentences:
             return []
-        earlier_text = evidence_lines(list(earlier))
         own_text = evidence_lines(list(own))
         sent: list[int] = []
         queued = set()
@@ -1600,9 +1650,12 @@ class EvidenceWriter:
                 queued.add(key)
                 sent.append(n)
         heading = section_heading(draft) or "a section"
+        earlier_part, closing = self._earlier_part(earlier)
         context = (
-            block("earlier_evidence", earlier_text) if earlier else "",
-            block("section_evidence", own_text)
+            earlier_part,
+            closing
+            + ("\n\n" if earlier else "")
+            + block("section_evidence", own_text)
             + ("\n\n" + block("source_sections", reference) if reference else ""),
         )
         # An item the answer leaves out is unchecked, not supported: it is
@@ -1660,7 +1713,7 @@ class EvidenceWriter:
         sent: list[int],
         sentences: list[str],
         ledger: EvidenceLedger,
-        context: tuple[str, str],
+        context: tuple[tuple[str, ...], str],
         attempt: int,
     ) -> dict[int, str] | None:
         """One claim-check call for the units ``sent``: each answered unit's
