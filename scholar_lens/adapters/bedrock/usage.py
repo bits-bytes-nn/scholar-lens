@@ -229,7 +229,13 @@ def _extract_usage(response: Any) -> UsageEvent:  # noqa: ANN401
                     if meta:
                         details = meta.get("input_token_details") or {}
                         read = int(details.get("cache_read") or 0)
-                        write = int(details.get("cache_creation") or 0)
+                        # With a per-TTL breakdown langchain-aws reports
+                        # the writes there and cache_creation as 0.
+                        write = max(
+                            int(details.get("cache_creation") or 0),
+                            int(details.get("ephemeral_5m_input_tokens") or 0)
+                            + int(details.get("ephemeral_1h_input_tokens") or 0),
+                        )
                         cache_read += read
                         cache_write += write
                         in_tok += max(

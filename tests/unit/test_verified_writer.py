@@ -369,8 +369,6 @@ def test_a_whole_post_fix_runs_the_sections_verifier_set() -> None:
             [finding],
             _ledger(),
             title_of=lambda s: s,
-            own_of=lambda _s: list(_ledger()),
-            reference_of=lambda _e: "",
         )
     )
     # The edit adds a problem the section's own set finds: not taken.
@@ -393,8 +391,6 @@ def test_a_whole_post_fix_settles_only_the_sentences_it_adds() -> None:
             [PostFinding(section="캐시", problem="p", fix="f")],
             _ledger(),
             title_of=lambda s: s,
-            own_of=lambda _s: list(_ledger()),
-            reference_of=lambda _e: "",
         )
     )
     assert added not in out[0][1] and all(s in out[0][1] for s in sentences)
@@ -450,8 +446,6 @@ def _whole_post_fix(writer: EvidenceWriter, md: str) -> list[tuple[str, str]]:
             [PostFinding(section="캐시", problem="p", fix="f")],
             _ledger(),
             title_of=lambda s: s,
-            own_of=lambda _s: list(_ledger()),
-            reference_of=lambda _e: "",
         )
     )
 
@@ -525,8 +519,6 @@ def test_a_whole_post_fix_that_breaks_a_later_sections_code_is_not_taken(
             [PostFinding(section="캐시", problem="p", fix="f")],
             _ledger(),
             title_of=lambda s: s,
-            own_of=lambda _s: list(_ledger()),
-            reference_of=lambda _e: "",
             post_check=_program if checked else None,
         )
     )
@@ -554,8 +546,6 @@ def test_a_whole_post_fix_may_not_delete_the_first_copy_of_a_code_block() -> Non
                     [PostFinding(section="캐시", problem="p", fix="f")],
                     _ledger(),
                     title_of=lambda s: s,
-                    own_of=lambda _s: list(_ledger()),
-                    reference_of=lambda _e: "",
                 )
             )
         )
@@ -616,18 +606,20 @@ class _Contexts(Model):
         return await super().structured(schema=schema, prompt=prompt, **kwargs)
 
 
-def _earlier() -> Evidence:
+def _earlier(n: int = 9) -> Evidence:
     return Evidence(
-        id="E9",
+        id=f"E{n}",
         paper_id="P",
         kind="finding",
-        claim="앞 절의 사실입니다",
-        quote="an earlier fact",
+        claim=f"앞 절의 사실 {n}입니다",
+        quote=f"an earlier fact {n}",
         anchor="S2",
     )
 
 
 def test_the_claim_check_context_puts_earlier_evidence_first() -> None:
+    from scholar_lens.application.evidence_writer import block, evidence_lines
+
     model = _Contexts()
     writer = _writer(model)
     draft = _section(_sentences(1))
@@ -637,12 +629,21 @@ def test_the_claim_check_context_puts_earlier_evidence_first() -> None:
         )
     )
     ((earlier, section),) = model.contexts
-    # Two parts, each cached on its own: what only grows across sections,
-    # then this section's evidence and its source passages.
-    assert earlier.startswith("<earlier_evidence>") and "[E9]" in earlier
-    assert "[E1]" not in earlier
-    assert section.startswith("<section_evidence>") and "[E1]" in section
+    # Two parts, each cached on its own: what only grows across sections
+    # (its blocks open the fence; the next part closes it), then this
+    # section's evidence and its source passages.
+    assert earlier[0].startswith("<earlier_evidence>") and "[E9]" in earlier[0]
+    assert "[E1]" not in "".join(earlier)
+    assert section.startswith("</earlier_evidence>", 1) and "[E1]" in section
     assert "<source_sections>\npassage" in section
+    # The text the model reads is the two fenced blocks, as one string.
+    assert "".join(earlier) + section == (
+        block("earlier_evidence", evidence_lines([_earlier()]))
+        + "\n\n"
+        + block("section_evidence", evidence_lines(list(_ledger())))
+        + "\n\n"
+        + block("source_sections", "passage")
+    )
 
 
 def test_the_first_section_has_no_earlier_part() -> None:
@@ -652,7 +653,46 @@ def test_the_first_section_has_no_earlier_part() -> None:
         writer.check_claims(_section(_sentences(1)), _ledger(), list(_ledger()))
     )
     ((earlier, section),) = model.contexts
-    assert earlier == "" and "[E1]" in section
+    assert earlier == () and section.startswith("<section_evidence>")
+
+
+def test_a_later_check_splits_its_earlier_evidence_where_the_last_one_ended() -> None:
+    model = _Contexts()
+    writer = _writer(model)
+    first, more = [_earlier(9)], [_earlier(9), _earlier(8), _earlier(7)]
+
+    def check(earlier: list[Evidence], n: int) -> None:
+        asyncio.run(
+            writer.check_claims(
+                _section(_sentences(n)), _ledger(), list(_ledger()), earlier
+            )
+        )
+
+    check(first, 1)
+    check(more, 2)
+    check([*more, _earlier(6)], 3)
+    # A shorter one (a whole-post check of an early section) splits at the
+    # ends it shares and leaves the longest for the next check.
+    check(more[:2], 4)
+    check([*more, _earlier(6), _earlier(5)], 5)
+    parts = [c[0] for c in model.contexts]
+    assert [len(p) for p in parts] == [1, 2, 3, 2, 4]
+    # Each check's blocks start with the previous (longer) check's blocks:
+    # the boundary where that check's cache point sat.
+    assert parts[1][:1] == parts[0]
+    assert parts[2][:2] == parts[1]
+    assert parts[4][:3] == parts[2]
+    assert "[E8]" in parts[3][1] and "[E7]" not in parts[3][1]
+
+
+def test_a_block_split_that_would_change_the_text_comes_back_whole() -> None:
+    from scholar_lens.application.evidence_writer import block, split_block
+
+    texts, closing = split_block("e", ["one", "two"])
+    assert texts == ("<e>\none", "\ntwo") and closing == "\n</e>"
+    # A chunk the fence would strip at its edge: one text, as before.
+    texts, closing = split_block("e", ["one ", "two"])
+    assert "".join(texts) + closing == block("e", "one \ntwo") and len(texts) == 1
 
 
 class _FailingEvidenceCheck(Model):
@@ -842,3 +882,50 @@ def test_an_unjudged_item_after_a_deleted_sentence_still_blocks() -> None:
     out = _verify(writer, _section(s))
     assert s[0] not in out and s[1] in out
     assert writer.blocking
+
+
+class _FixContexts(Model):
+    """Records the context each fix call is given."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.fix_contexts: list[str] = []
+
+    async def structured(self, *, schema: Any, prompt: str, **kwargs: Any) -> Any:
+        if schema is SectionEdits:
+            self.fix_contexts.append(str(kwargs.get("context", "")))
+        return await super().structured(schema=schema, prompt=prompt, **kwargs)
+
+
+def test_a_whole_post_fix_sees_what_the_claim_check_judges_it_against() -> None:
+    model = _FixContexts()
+    writer = _writer(model)
+    # The section is checked with earlier evidence and its source (SDK) passages.
+    writer.reference = "def run(x): the SDK definition"
+    md = asyncio.run(
+        writer.verify_and_fix(
+            _section(_sentences(2)),
+            title="캐시",
+            review_context="",
+            verifiers=no_checks(),
+            ledger=_ledger(),
+            own=list(_ledger()),
+            earlier=[_earlier()],
+            free="",
+            section=SECTION,
+        )
+    )
+    writer.reference = ""
+    model.fix_contexts.clear()
+    asyncio.run(
+        writer.apply_findings(
+            [(SECTION, md)],
+            [PostFinding(section="캐시", problem="p", fix="f")],
+            _ledger(),
+            title_of=lambda s: s,
+        )
+    )
+    (context,) = model.fix_contexts
+    assert "[E9]" in context and "[E1]" in context
+    assert "the SDK definition" in context
+    assert writer.reference == ""
