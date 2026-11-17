@@ -537,6 +537,20 @@ class PaperReviewStack(Stack):
             job_queue_name=self._get_resource_name("paper-review"),
             priority=1,
             compute_environments=[],
+            # A job that can never start would wait in RUNNABLE unnoticed:
+            # cancel it, so the failure rule below sends its alert. A job
+            # waiting for the running ones (the environment at its vCPU cap)
+            # is normal queueing and is left alone.
+            job_state_time_limit_actions=[
+                batch.JobStateTimeLimitAction(
+                    max_time=Duration.minutes(60),
+                    reason=batch.JobStateTimeLimitActionsReason.INSUFFICIENT_INSTANCE_CAPACITY,
+                ),
+                batch.JobStateTimeLimitAction(
+                    max_time=Duration.minutes(10),
+                    reason=batch.JobStateTimeLimitActionsReason.JOB_RESOURCE_REQUIREMENT,
+                ),
+            ],
         )
         launch_template = self._launch_template()
         # Explicit kwargs (not a **dict splat) keep mypy checking these calls.
