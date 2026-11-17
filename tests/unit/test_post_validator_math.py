@@ -314,6 +314,9 @@ def test_list_restart_reads_the_previous_items_column(body: str, warns: bool) ->
         ("1. a\n- b\n\n$$x$$\n\n2. c", True),  # a glued bullet nests in item 1
         ("1.  a\n\n   $$x$$\n\n2.  b", True),  # two spaces: content column 4
         ("   1. a\n\n## 제목\n   $$x$$\n\n2. b", False),  # the heading ended it
+        ("1. a\n\n   ## 소제목\n\n$$x$$\n\n2. b", True),  # a heading inside item 1
+        ("1.    a\n\n    $$x$$\n\n2. b", False),  # column capped at 4
+        ("1. a\n\n   ```\n   code\n   ```\n- b\n\n$$x$$\n\n2. c", True),  # glued
     ],
 )
 def test_list_restart_compares_siblings(body: str, warns: bool) -> None:

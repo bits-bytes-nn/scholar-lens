@@ -987,17 +987,23 @@ def _check_list_restarts(
         stripped = line.strip()
         if not stripped:
             continue
-        glued, previous = i == previous + 1, i
+        # Glued: right under the last line (a fence line is never blank).
+        glued = i == previous + 1 or (i - 1 not in bare_by_index and i > 0)
+        previous = i
         # A quoted line: the indent before its ">" (a callout in a step) plus
         # the indent inside the quote (a list in a quote).
         indent = width(line) + (width(raw) if raw.lstrip().startswith(">") else 0)
         item = _ORDERED_ITEM.match(stripped)
         if item and _STARTS_ITEM.match(stripped):
-            # kramdown's content column: 1–4 spaces after the marker count,
-            # more mean one (the rest starts an indented code block).
+            # kramdown's content column: the text after the marker, capped
+            # at the enclosing item's content column plus 4.
             marker = len(item.group(1)) + 1
             gap = len(stripped[: item.end()].expandtabs(4)) - marker
-            column = indent + marker + (gap if gap <= 4 else 1)
+            base = max(
+                (v for k, v in columns.items() if k < indent and v <= indent),
+                default=0,
+            )
+            column = min(indent + marker + gap, base + 4)
             if (
                 int(item.group(1)) > 1
                 and display_indent is not None
@@ -1017,7 +1023,10 @@ def _check_list_restarts(
             display_indent = None
             continue
         if _STARTS_HEADING.match(stripped):
-            columns, display_indent = {}, None
+            # A heading at or left of a marker ends that list (one inside an
+            # item does not).
+            columns = {k: v for k, v in columns.items() if k < indent}
+            display_indent = None
         elif _BULLET.match(stripped):
             # A bullet at an ordered list's indent ends that list, unless it
             # is glued under an item (GFM nests it there).
