@@ -315,9 +315,9 @@ BLOG_SINGLE_DOLLAR_MATH = re.compile(
 )
 # TeX next to a single `$` (lint-posts.rb): math that never opened.
 LONE_DOLLAR_TEX = re.compile(r"\}\$(?!\$)|(?<!\$)\$\\[a-zA-Z]")
-# What a single-dollar formula is looked for in: text outside inline code and
-# $$ spans.
-_KEPT_SPANS = re.compile(r"(`+)[^`\n]*?\1|\$\$.+?\$\$")
+# What a single-dollar formula is looked for in: text outside inline code, $$
+# spans and link destinations.
+_KEPT_SPANS = re.compile(r"(`+)[^`\n]*?\1|\$\$.+?\$\$|\]\([^)\s]*\)")
 # A Markdown link's destination: "](" up to its ")".
 _LINK_DESTINATION = re.compile(r"\]\([a-z][\w+.\-]*://[^)\s]*\)", re.IGNORECASE)
 

@@ -816,3 +816,9 @@ def test_single_dollar_tex_is_doubled_unless_the_pairing_fails(
 ) -> None:
     out = norm(src)
     assert out == expected and norm(out) == out
+
+
+def test_a_dollar_in_a_link_destination_stays() -> None:
+    assert (
+        norm("[t](https://a.b/$c_d$) 와 $x_1$") == "[t](https://a.b/$c_d$) 와 $$x_1$$"
+    )

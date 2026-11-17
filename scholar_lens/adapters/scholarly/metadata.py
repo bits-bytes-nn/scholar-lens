@@ -237,7 +237,7 @@ class CrossrefProvider(MetadataProvider):
             )
             items = data.get("message", {}).get("items", [])
         except (httpx.HTTPError, ValueError) as e:
-            logger.warning("Crossref lookup failed for '%s': %s", title, _described(e))
+            logger.warning("Crossref lookup failed for '%s': %s", title, e)
             return None
         # The top fuzzy hit is often another paper (a survey of ResNet ranks
         # above ResNet itself); take the matching record whose title is
@@ -324,7 +324,7 @@ class OpenAlexProvider(MetadataProvider):
                 ),
             ).get("results", [])
         except (httpx.HTTPError, ValueError) as e:
-            logger.warning("OpenAlex lookup failed for '%s': %s", title, _described(e))
+            logger.warning("OpenAlex lookup failed for '%s': %s", title, e)
             return None
         # The top hit is often a sibling paper ("QA-LoRA" for "LoRA") or a
         # record pairing the right title with another work's abstract and DOI;
@@ -380,9 +380,7 @@ class SemanticScholarProvider(MetadataProvider):
                 headers={"x-api-key": self.api_key} if self.api_key else None,
             ).get("data", [])
         except (httpx.HTTPError, ValueError) as e:
-            logger.warning(
-                "Semantic Scholar lookup failed for '%s': %s", title, _described(e)
-            )
+            logger.warning("Semantic Scholar lookup failed for '%s': %s", title, e)
             return None
         if not data:
             return None

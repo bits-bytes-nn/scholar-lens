@@ -875,7 +875,8 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                     ),
                     "number_sources": number_sources(article, paper, max_chars=16_000)
                     or "- none",
-                    "text": article,
+                    # The article may quote code or paper text: defanged too.
+                    "text": neutralize_prompt_tags(article),
                     "text_name": "review body",
                     "language": self.language,
                 },

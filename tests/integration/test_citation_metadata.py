@@ -812,3 +812,14 @@ def test_an_index_error_carries_no_query_string(
         OpenAlexIndex(mailto="secret@example.org")._works({"filter": "x"})
     assert "secret" not in str(caught.value) and "mailto" not in str(caught.value)
     assert caught.value.response.status_code == 404
+
+
+def test_a_transport_error_keeps_its_cause_without_the_query() -> None:
+    from scholar_lens.adapters.scholarly.metadata import _described
+
+    request = httpx.Request(
+        "GET", "https://api.x.org/works", params={"mailto": "a@b.c"}
+    )
+    error = httpx.ConnectError("nodename nor servname provided", request=request)
+    text = _described(error)
+    assert "nodename nor servname" in text and "a@b.c" not in text

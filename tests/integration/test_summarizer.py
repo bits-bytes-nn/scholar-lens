@@ -607,3 +607,13 @@ async def test_the_claim_check_reads_the_paper_defanged_in_every_block() -> None
     for block in ("paper_text", "number_sources"):
         assert "</number_sources>" not in sent[block] and "</text>" not in sent[block]
     assert "87.5" in sent["number_sources"]
+
+
+async def test_a_spent_budget_skips_the_summary_check_with_a_note() -> None:
+    from scholar_lens.domain.usage import TokenBudgetExceeded
+
+    summarizer = _make_summarizer_with_stub_chain({})
+    summarizer.claim_chain.ainvoke = AsyncMock(side_effect=TokenBudgetExceeded("spent"))
+    summary = "> 요약입니다.\n\n## 질문\n\n본문입니다."
+    assert await summarizer._checked_claims(summary, "paper") == summary
+    assert any("budget was spent" in n for n in summarizer.notes)

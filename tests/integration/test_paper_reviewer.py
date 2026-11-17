@@ -1512,3 +1512,20 @@ async def test_the_body_check_is_skipped_with_a_note_once_the_budget_is_spent() 
     review = await reviewer.run()
     assert reviewer.body_checker.calls == []  # type: ignore[attr-defined]
     assert any("body was not checked" in n and "budget" in n for n in review.notes)
+
+
+async def test_a_body_fix_that_guts_the_prose_is_rejected() -> None:
+    problem = {"problems": f"- {WRONG_BODY} || wrong: 순서가 반대입니다"}
+
+    def edit(payload: dict[str, Any]) -> str:
+        if "fact checker" in payload["round_note"]:
+            return (
+                "<edit><find>## 실험 결과</find><replace></replace></edit>"
+                "<missing_coverage>none</missing_coverage>"
+            )
+        return "<missing_coverage>none</missing_coverage>"
+
+    checker = FakeChain(problem)
+    review = await _reviewer(editor=FakeChain(edit), body_checker=checker).run()
+    assert WRONG_BODY in review.body and "## 실험 결과" in review.body
+    assert any("Review body claims to check" in n for n in review.notes)

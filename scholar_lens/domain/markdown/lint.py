@@ -519,7 +519,7 @@ def escape_active_html(markdown: str) -> str:
         if end == -1 or inside(start, end):
             continue
         text = markdown[start:end]
-        if _URL_AUTOLINK.fullmatch(text) and safe_url(text[1:-1]):
+        if _URL_AUTOLINK.fullmatch(text) and "=" not in text and safe_url(text[1:-1]):
             # A link kramdown renders (<https://x/online_serving>), not a tag
             # with an "on…" attribute.
             continue
