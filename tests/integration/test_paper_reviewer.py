@@ -1504,3 +1504,11 @@ async def test_a_failed_body_check_is_noted() -> None:
 
     review = await _reviewer(body_checker=FakeChain(fail)).run()
     assert any("body was not checked" in n for n in review.notes)
+
+
+async def test_the_body_check_is_skipped_with_a_note_once_the_budget_is_spent() -> None:
+    reviewer = _reviewer(body_checker=FakeChain({"problems": "- x || wrong: y"}))
+    reviewer._over_soft_token_budget = lambda: True  # type: ignore[method-assign]
+    review = await reviewer.run()
+    assert reviewer.body_checker.calls == []  # type: ignore[attr-defined]
+    assert any("body was not checked" in n and "budget" in n for n in review.notes)

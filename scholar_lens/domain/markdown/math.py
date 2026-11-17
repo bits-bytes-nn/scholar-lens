@@ -1314,16 +1314,19 @@ def _double_single_dollars(markdown: str) -> str:
             prefix = closed + "$$"
         opens = line.count("$$") % 2 == 1
         head, tail = line.rsplit("$$", 1) if opens else (line, None)
-        if LONE_DOLLAR_TEX.search(_KEPT_SPANS.sub("", head)):
-            in_display = opens
-            continue
         out, pos = [], 0
         for kept in _KEPT_SPANS.finditer(head):
             out.append(_doubled(head[pos : kept.start()]))
             out.append(kept.group(0))
             pos = kept.end()
         out.append(_doubled(head[pos:]))
-        lines[k] = prefix + "".join(out) + ("" if tail is None else "$$" + tail)
+        doubled = "".join(out)
+        if LONE_DOLLAR_TEX.search(_KEPT_SPANS.sub("", doubled)):
+            # TeX still glued to a single `$` ("Adapter$^{H}$"): the pairing
+            # went wrong on this line, so it stays as written.
+            in_display = opens
+            continue
+        lines[k] = prefix + doubled + ("" if tail is None else "$$" + tail)
         # Text after an unpaired $$ opens a block: math, left alone.
         in_display = opens
     return "\n".join(lines)

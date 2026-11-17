@@ -793,3 +793,26 @@ def test_single_dollar_math_the_blog_rejects_is_doubled(
 ) -> None:
     out = norm(src)
     assert out == expected and norm(out) == out
+
+
+@pytest.mark.parametrize(
+    "src,expected",
+    [
+        (
+            "The loss $\\mathcal{L}$ is minimized.",
+            "The loss $$\\mathcal{L}$$ is minimized.",
+        ),
+        ("값 $x_{i}$와 $\\alpha = 0.5$", "값 $$x_{i}$$와 $$\\alpha = 0.5$$"),
+        # TeX glued to a word's `$`: pairing would swallow the prose between.
+        (
+            "이를 **Adapter$^{\\text{H}}$**라 하고 **Adapter$^{\\text{L}}$**라",
+            "이를 **Adapter$^{\\text{H}}$**라 하고 **Adapter$^{\\text{L}}$**라",
+        ),
+        ("식 $$a +\nb$$ 에서 $x_1$ 은 입력", "식 $$a + b$$ 에서 $$x_1$$ 은 입력"),
+    ],
+)
+def test_single_dollar_tex_is_doubled_unless_the_pairing_fails(
+    src: str, expected: str
+) -> None:
+    out = norm(src)
+    assert out == expected and norm(out) == out

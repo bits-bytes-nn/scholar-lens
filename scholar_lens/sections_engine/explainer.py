@@ -103,6 +103,7 @@ from scholar_lens.sections_engine.prompts.review import (
     PaperSectionPrompt,
     PaperTextCheckPrompt,
 )
+from scholar_lens.sections_engine.section_loop import lost_structure
 from scholar_lens.sections_engine.timing import measure_execution_time
 
 logger = logging.getLogger(__name__)
@@ -954,7 +955,9 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         edited, applied, _ = apply_edits(
             article, parse_edits(raw), max_edits=self.MAX_EDITS
         )
-        if applied:
+        if applied and (lost := lost_structure(article, edited)):
+            logger.warning("Review body claim fix rejected (%s).", lost)
+        elif applied:
             after = await self._body_problems(edited)
             if after is not None and fix_kept(
                 problems, after, {"body": article}, {"body": edited}

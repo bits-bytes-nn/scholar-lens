@@ -346,8 +346,10 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         try:
             self._enforce_token_budget()
             result = await self._check(summary, paper)
-        except TokenBudgetExceeded:
-            raise  # an exhausted budget fails fast
+        except TokenBudgetExceeded as e:
+            # The summary is written; the check is optional.
+            logger.warning("Summary claim check skipped: %s", e)
+            return None
         except Exception as e:  # noqa: BLE001 - the summary is still usable
             if is_access_error(e):
                 raise
@@ -371,7 +373,8 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         if problems is None:
             self.notes.append(
                 "The summary was not checked against the paper (the check "
-                "failed); check its numbers and comparisons by hand."
+                "failed or the budget was spent); check its numbers and "
+                "comparisons by hand."
             )
             return summary
         if not problems:
@@ -383,8 +386,9 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         try:
             self._enforce_token_budget()
             fixed = ((await self._fix(request, summary)).get("summary") or "").strip()
-        except TokenBudgetExceeded:
-            raise
+        except TokenBudgetExceeded as e:
+            logger.warning("Summary claim fix skipped: %s", e)
+            fixed = ""
         except Exception as e:  # noqa: BLE001 - the summary is still usable
             if is_access_error(e):
                 raise

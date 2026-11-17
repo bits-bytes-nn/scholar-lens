@@ -667,3 +667,12 @@ def test_number_sources_name_the_table_and_heading_a_number_comes_from() -> None
     assert "- 9.2:" in found and "[Qwen3 8B / | Method | Length |]" in found
     assert "- 7.5:" not in found  # only the numbers the checked text states
     assert number_sources("숫자가 없습니다.", paper) == ""
+
+
+def test_number_sources_past_the_cap_are_counted_not_listed() -> None:
+    from scholar_lens.domain.validation import number_sources
+
+    paper = "\n".join(f"Row {n} scores {n}.5 on the task." for n in range(10, 40))
+    text = " ".join(f"{n}.5" for n in range(10, 40))
+    found = number_sources(text, paper, max_chars=200)
+    assert "more number(s) not listed" in found and found.count("\n- ") < 29

@@ -494,5 +494,7 @@ def _described(error: Exception) -> str:
             where = str(error.request.url.copy_with(query=None))
         except RuntimeError:  # no request attached
             where = "?"
-        return f"{type(error).__name__} for {where}"
+        # The transport's own message, with any URL query cut out.
+        cause = re.sub(r"\?[^\s'\"]*", "", str(error))
+        return f"{type(error).__name__} for {where}: {cause}"
     return f"{type(error).__name__}: {error}"
