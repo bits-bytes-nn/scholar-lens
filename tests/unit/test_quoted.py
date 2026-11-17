@@ -72,3 +72,9 @@ def test_a_finding_quoting_two_passages_stays_open_while_one_remains() -> None:
 )
 def test_claim_fixed(problem: str, edited: str, fixed: bool) -> None:
     assert claim_fixed(problem, "LoRA는 모든 기준선을 이깁니다.", edited) is fixed
+
+
+def test_markup_added_around_a_passage_does_not_fix_it() -> None:
+    finding = '"하지만 보상 계산이 느리면 강화학습은 표본 효율이 떨어집니다." → 완화'
+    edited = "하지만 **보상 계산**이 느리면 [강화학습](https://x.org)은 표본 효율이 떨어집니다."
+    assert not finding_fixed(finding, DRAFT, edited)

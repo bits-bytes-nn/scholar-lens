@@ -1171,7 +1171,8 @@ def _fold_glued_runs(markdown: str) -> str:
     return "\n".join(out)
 
 
-_ORDERED_MARKER = re.compile(r"^[ \t]*(\d+)[.)][ \t]+")
+# kramdown reads only "1." as an ordered item ("1)" is a paragraph).
+_ORDERED_MARKER = re.compile(r"^[ \t]*(\d+)\.[ \t]+")
 
 
 def _fold_spaced_runs(markdown: str) -> str:
@@ -1282,7 +1283,11 @@ def normalize_math(markdown: str) -> str:
     text = _rewrite_spans(_fold_glued_runs(markdown))
     text = _isolate_display_blocks(text)
     text = _isolate_nested_displays(text)
-    text = _fold_spaced_runs(text)
+    folded = _fold_spaced_runs(text)
+    if folded != text:
+        # A display it moved to the item's column may be glued to another.
+        folded = _isolate_nested_displays(folded)
+    text = folded
     text = _vert_inline_bars(text)
     text = _unnest_text_math(text)
     return _collapse_blank_runs(text)

@@ -751,6 +751,10 @@ def test_conditional_bars_and_operator_macros(src: str, expected: str) -> None:
             "10. 열째\n\n$$a$$\n\n11. 열한째\n",
             "10. 열째\n\n    $$a$$\n\n11. 열한째\n",
         ),
+        (  # under-indented displays glued to each other: set apart once moved
+            "1. a\n\n  $$x$$\n  $$y$$\n\n2. b\n",
+            "1. a\n\n   $$x$$\n\n   $$y$$\n\n2. b\n",
+        ),
     ],
 )
 def test_spaced_display_between_steps_stays_in_the_list(
@@ -768,6 +772,7 @@ def test_spaced_display_between_steps_stays_in_the_list(
         "1. 첫째\n\n## 제목\n\n$$a$$\n\n2. 둘째\n",  # a heading in between
         "1. 첫째\n\n다음 문단\n\n2. 둘째\n",  # no display in between
         "- 첫째\n\n$$a$$\n\n- 둘째\n",  # bullets: nothing renumbers
+        "10) 열째\n\n$$a$$\n\n11) 열한째\n",  # "10)" is no list to kramdown
     ],
 )
 def test_spaced_run_that_does_not_continue_the_list_is_left_alone(src: str) -> None:

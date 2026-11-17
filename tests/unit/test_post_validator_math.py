@@ -278,3 +278,22 @@ def test_list_inside_a_quote_does_not_warn() -> None:
 @pytest.mark.parametrize("body", ["$$\nL = a + 손실\n$$", "$$L = a + 손실$$"])
 def test_korean_in_display_math_is_an_error_like_the_blog_lint(body: str) -> None:
     assert any("Korean" in e for e in math_errors(body))
+
+
+@pytest.mark.parametrize(
+    "body,warns",
+    [
+        ("9. 아홉째\n\n   $$x$$\n\n10. 열째", False),  # inside item 9's column
+        ("10. 열째\n\n   $$x$$\n\n3. 셋째", True),  # left of item 10's column (4)
+        ("1) 첫째\n\n$$x$$\n\n2) 둘째", False),  # "1)" is no list to kramdown
+    ],
+)
+def test_list_restart_reads_the_previous_items_column(body: str, warns: bool) -> None:
+    from tests.unit.test_post_validator import warnings
+
+    found = [
+        v
+        for v in warnings(validate_post(make_post(body), SPEC, "review"))
+        if v.rule == "list"
+    ]
+    assert bool(found) is warns

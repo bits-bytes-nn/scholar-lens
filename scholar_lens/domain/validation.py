@@ -952,14 +952,15 @@ def _check_math(front: dict[str, Any], body: str, offset: int, add: Add) -> None
     _check_list_restarts(text_lines, bare_by_index, offset, add)
 
 
-_ORDERED_ITEM = re.compile(r"(\d+)[.)][ \t]")
+# kramdown reads only "1." as an ordered item ("1)" is a paragraph).
+_ORDERED_ITEM = re.compile(r"(\d+)\.[ \t]")
 
 
 def _check_list_restarts(
     lines: Lines, bare_by_index: dict[int, str], offset: int, add: Add
 ) -> None:
     """An ordered item numbered above 1 after a display indented less than the
-    item's content (at the margin, or glued and under-indented), with or
+    previous item's content (at the margin, or glued and under-indented), with or
     without a paragraph between them: the display ended the list, so kramdown
     starts a new one and shows "1."."""
 
@@ -967,6 +968,9 @@ def _check_list_restarts(
         return len(text.expandtabs(4)) - len(text.expandtabs(4).lstrip())
 
     display_indent: int | None = None  # least indent of a display since an item
+    # The content column of the previous ordered item: a display left of it
+    # ended that item, whatever the next item's marker width.
+    previous_column: int | None = None
     for i, raw in lines:
         line = bare_by_index[i]
         stripped = line.strip()
@@ -981,7 +985,8 @@ def _check_list_restarts(
             if (
                 int(item.group(1)) > 1
                 and display_indent is not None
-                and display_indent < column
+                and previous_column is not None
+                and display_indent < previous_column
             ):
                 add(
                     "warning",
@@ -991,7 +996,7 @@ def _check_list_restarts(
                     "it renders as 1.; indent the display (and any paragraph after "
                     "it) into the item above",
                 )
-            display_indent = None
+            display_indent, previous_column = None, column
             continue
         if _STARTS_ITEM.match(stripped):
             display_indent = None

@@ -19,8 +19,16 @@ _ELLIPSIS = re.compile(r"\s*(?:\.\.\.|…)\s*")
 _MIN_FRAGMENT = 6
 
 
+# Markup an edit may add or drop without touching the words: emphasis,
+# inline code marks and a link's target.
+_LINK = re.compile(r"\[([^\]\n]*)\]\([^)\n]*\)")
+_MARKS = re.compile(r"\*\*|__|`")
+
+
 def _squash(text: str) -> str:
-    return " ".join(text.split())
+    """``text``'s words: whitespace folded, emphasis, code marks and link
+    targets dropped (on both sides of a comparison)."""
+    return " ".join(_MARKS.sub("", _LINK.sub(r"\1", text)).split())
 
 
 def _fragments(span: str) -> list[str]:

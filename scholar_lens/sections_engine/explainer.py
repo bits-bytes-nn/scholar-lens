@@ -164,11 +164,44 @@ class SectionCheck:
         )
 
 
+_LINE_SUFFIX = re.compile(r" \(line \d+\)$")
+
+
+def _rule_key(issue: str) -> str:
+    """A rule hit without its position: a publish blocker without its
+    ``(line N)`` (relative to the text checked), a writing issue as its rule
+    and offending match without the surrounding snippet (as
+    :func:`quality_gate.added_slips` keys them)."""
+    if _LINE_SUFFIX.search(issue):
+        return _LINE_SUFFIX.sub("", issue)
+    return issue.split(":", 1)[0]
+
+
+def _rule_keys(text: str) -> set[str]:
+    return {_rule_key(i) for i in [*writing_issues(text), *publish_blockers(text)]}
+
+
+def _section_text(article: str, title: str) -> str:
+    """The section of ``article`` under its ``## title`` heading, up to the
+    next ``## `` heading (the edit pass keeps the headings); the whole
+    article when the heading is not found."""
+    lines = article.split("\n")
+    heading = f"## {title.strip()}"
+    start = next((i for i, line in enumerate(lines) if line.strip() == heading), None)
+    if start is None:
+        return article
+    end = next(
+        (j for j in range(start + 1, len(lines)) if lines[j].startswith("## ")),
+        len(lines),
+    )
+    return "\n".join(lines[start:end])
+
+
 @dataclass(frozen=True)
 class _OpenSection:
     """A section kept below the bar: the checked draft and what its check
     left open. ``rule_items`` are the must-fix lines a deterministic rule
-    found (rechecked on the edited article, not by quote)."""
+    found (rechecked by rule, not by quote)."""
 
     title: str
     score: int
@@ -177,17 +210,20 @@ class _OpenSection:
     must_fix: list[str]
     rule_items: frozenset[str]
 
-    def still_open(self, article: str, rule_hits: set[str]) -> list[str]:
-        """The must-fix lines ``article`` still carries: a rule's line when
-        the rule still reports it, a checker's line unless the passage it
-        quotes from the draft is gone (one that quotes nothing stays)."""
+    def still_open(self, article: str) -> list[str]:
+        """The must-fix lines this section of ``article`` still carries: a
+        rule's line when the rule still reports the same hit, a checker's
+        line unless the passage it quotes from the draft is gone (one that
+        quotes nothing stays)."""
+        text = _section_text(article, self.title)
+        hits = _rule_keys(text)
         return [
             item
             for item in self.must_fix
             if (
-                item in rule_hits
+                _rule_key(item) in hits
                 if item in self.rule_items
-                else not finding_fixed(item, self.draft, article)
+                else not finding_fixed(item, self.draft, text)
             )
         ]
 
@@ -667,17 +703,18 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         cannot be told apart from a reworded addition, so it stays."""
         if not self.open_sections:
             return []
-        rule_hits = set(writing_issues(article)) | set(publish_blockers(article))
         notes: list[str] = []
         for section in self.open_sections:
-            must_fix = section.still_open(article, rule_hits)
+            must_fix = section.still_open(article)
             fixed = len(section.must_fix) - len(must_fix)
             open_items = [*section.missing, *must_fix]
             if not open_items:
                 logger.info(
-                    "Review section '%s': the edit pass fixed its %d open item(s).",
+                    "Review section '%s': its %d open item(s) are no longer in "
+                    "the review%s.",
                     section.title,
                     fixed,
+                    " after the edit pass" if edited else "",
                 )
                 continue
             when = "after the edit pass" if edited else "(no edit pass ran)"
@@ -1078,15 +1115,23 @@ def _fix_kept(
     new: dict[str, str],
 ) -> bool:
     """Whether a corrected TL;DR, closing and description (``new``) replace
-    ``old``: their recheck finds fewer problems, or no more and every
-    sentence the first check disputed in ``old`` is gone from ``new``. The
-    recheck's count alone is noisy: another reading finds another problem
-    even in a fixed text."""
+    ``old``: their recheck finds fewer problems, or as many, no more of them
+    wrong (rather than unsupported), and every sentence the first check
+    disputed in ``old`` gone from ``new``. The recheck's count alone is
+    noisy: a second reading finds another problem even in a fixed text. A
+    reworded sentence still flagged also counts as gone; the note then lists
+    the recheck's problems, which quote the new text."""
     if len(after) < len(before):
         return True
+
+    def wrong(problems: list[str]) -> int:
+        return sum("|| wrong" in p for p in problems)
+
     old_text, new_text = "\n".join(old.values()), "\n".join(new.values())
-    return len(after) <= len(before) and all(
-        claim_fixed(problem, old_text, new_text) for problem in before
+    return (
+        len(after) == len(before)
+        and wrong(after) <= wrong(before)
+        and all(claim_fixed(problem, old_text, new_text) for problem in before)
     )
 
 
