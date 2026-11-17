@@ -952,14 +952,24 @@ def _check_math(front: dict[str, Any], body: str, offset: int, add: Add) -> None
     _check_list_restarts(text_lines, bare_by_index, offset, add)
 
 
-_ORDERED_ITEM = re.compile(r"(\d+)[.)][ \t]")
+# kramdown reads only "1." as an ordered item ("1)" is a paragraph).
+_ORDERED_ITEM = re.compile(r"(\d+)\.[ \t]+")
+_BULLET = re.compile(r"[-*+][ \t]")
+
+
+def _sibling_column(columns: dict[int, int], indent: int) -> int | None:
+    """The content column of the item an item at ``indent`` continues: the
+    one whose marker indent is nearest within 3 spaces (kramdown reads such
+    markers as siblings), else None."""
+    near = [k for k in columns if abs(k - indent) <= 3]
+    return columns[min(near, key=lambda k: abs(k - indent))] if near else None
 
 
 def _check_list_restarts(
     lines: Lines, bare_by_index: dict[int, str], offset: int, add: Add
 ) -> None:
     """An ordered item numbered above 1 after a display indented less than the
-    item's content (at the margin, or glued and under-indented), with or
+    previous item's content (at the margin, or glued and under-indented), with or
     without a paragraph between them: the display ended the list, so kramdown
     starts a new one and shows "1."."""
 
@@ -967,21 +977,38 @@ def _check_list_restarts(
         return len(text.expandtabs(4)) - len(text.expandtabs(4).lstrip())
 
     display_indent: int | None = None  # least indent of a display since an item
+    # Per marker indent, the content column of the last ordered item there:
+    # a display left of the previous sibling's content ended it, whatever
+    # the next item's marker width. A shallower item ends the deeper lists.
+    columns: dict[int, int] = {}
+    previous = -2  # the last non-blank line's index
     for i, raw in lines:
         line = bare_by_index[i]
         stripped = line.strip()
         if not stripped:
             continue
+        # Glued: right under the last line (a fence line is never blank).
+        glued = i == previous + 1 or (i - 1 not in bare_by_index and i > 0)
+        previous = i
         # A quoted line: the indent before its ">" (a callout in a step) plus
         # the indent inside the quote (a list in a quote).
         indent = width(line) + (width(raw) if raw.lstrip().startswith(">") else 0)
         item = _ORDERED_ITEM.match(stripped)
         if item and _STARTS_ITEM.match(stripped):
-            column = indent + len(item.group(0))
+            # kramdown's content column: the text after the marker, capped
+            # at the enclosing item's content column plus 4.
+            marker = len(item.group(1)) + 1
+            gap = len(stripped[: item.end()].expandtabs(4)) - marker
+            base = max(
+                (v for k, v in columns.items() if k < indent and v <= indent),
+                default=0,
+            )
+            column = min(indent + marker + gap, base + 4)
             if (
                 int(item.group(1)) > 1
                 and display_indent is not None
-                and display_indent < column
+                and (sibling := _sibling_column(columns, indent)) is not None
+                and display_indent < sibling
             ):
                 add(
                     "warning",
@@ -991,10 +1018,23 @@ def _check_list_restarts(
                     "it renders as 1.; indent the display (and any paragraph after "
                     "it) into the item above",
                 )
+            columns = {k: v for k, v in columns.items() if k < indent}
+            columns[indent] = column
             display_indent = None
             continue
-        if _STARTS_ITEM.match(stripped):
+        if _STARTS_HEADING.match(stripped):
+            # A heading at or left of a marker ends that list (one inside an
+            # item does not).
+            columns = {k: v for k, v in columns.items() if k < indent}
             display_indent = None
+        elif _BULLET.match(stripped):
+            # A bullet at an ordered list's indent ends that list, unless it
+            # is glued under an item (GFM nests it there).
+            if not glued:
+                columns = {k: v for k, v in columns.items() if k < indent}
+            display_indent = None
+        elif _STARTS_ITEM.match(stripped):
+            pass  # "1)": text to kramdown, not a list item
         elif stripped.startswith("$$") and (
             stripped.endswith("$$") or stripped.count("$$") % 2
         ):  # a whole-line display or a block's opening line

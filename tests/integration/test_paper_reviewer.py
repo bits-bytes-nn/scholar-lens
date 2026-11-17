@@ -1247,3 +1247,174 @@ async def test_a_corrected_tldr_takes_the_repaired_description_and_rechecks_it()
     # The checker's report reaches the finalizer fenced and defanged.
     note = finalizer.calls[1]["repair_note"]
     assert note.count("</claim_problems>") == 1  # the paper cannot close it
+
+
+async def test_a_fix_whose_disputed_sentence_is_gone_is_kept_on_a_tie() -> None:
+    # The recheck finds as many problems, but not the one the fix addressed:
+    # another reading of the fixed text, not the same defect left in it.
+    other = "- LoRA는 GLUE에서 전체 미세 조정과 비슷합니다. || unsupported: 범위"
+    answers = iter(
+        [
+            _final_with(WRONG_CLAIM)({}),
+            _final_with("LoRA는 GLUE에서 전체 미세 조정과 비슷합니다.")({}),
+        ]
+    )
+    verdicts = iter(
+        [
+            {"problems": f"- {WRONG_CLAIM} || wrong: 일부 과제에서만 앞섭니다"},
+            {"problems": other},
+        ]
+    )
+    review = await _reviewer(
+        finalizer=FakeChain(lambda _: next(answers)),
+        final_checker=FakeChain(lambda _: next(verdicts)),
+    ).run()
+    assert WRONG_CLAIM not in review.closing
+    note = next(n for n in review.notes if "claims to check" in n)
+    assert "unsupported: 범위" in note and WRONG_CLAIM not in note
+
+
+def _quoting_checker(passage: str) -> FakeChain:
+    def check(payload: dict[str, Any]) -> dict[str, str]:
+        if passage not in payload["draft"]:
+            return _pass(payload)
+        return {
+            "quality_score": "80",
+            "missing_items": "none",
+            "must_fix": f'- "{passage}" → 원문은 가능성만 말합니다',
+        }
+
+    return FakeChain(check)
+
+
+async def test_an_open_defect_the_edit_pass_edited_gets_a_short_note() -> None:
+    passage = "실험 결과 본문입니다."
+
+    def edit(payload: dict[str, Any]) -> str:
+        assert passage in payload["round_note"]
+        return (
+            f"<edit><find>{passage}</find><replace>GLUE 결과 본문입니다.</replace>"
+            "</edit><missing_coverage>none</missing_coverage>"
+        )
+
+    reviewer = _reviewer(checker=_quoting_checker(passage), editor=FakeChain(edit))
+    review = await reviewer.run()
+    assert passage not in review.body
+    assert not any("open must-fix/missing item" in n for n in review.notes)
+    # Edited is not proof of fixed: the section keeps a short note.
+    assert sum("1 item(s) were edited by the edit pass" in n for n in review.notes) == 1
+
+
+async def test_an_open_defect_the_edit_pass_left_is_noted() -> None:
+    passage = "실험 결과 본문입니다."
+    no_edits = FakeChain("<missing_coverage>none</missing_coverage>")
+    review = await _reviewer(checker=_quoting_checker(passage), editor=no_edits).run()
+    note = next(n for n in review.notes if "open must-fix/missing item" in n)
+    assert "after the edit pass" in note and passage in note
+
+
+async def test_a_rule_slip_still_in_a_later_section_stays_noted() -> None:
+    # Rule hits carry positions ("(line N)", a snippet around the match): the
+    # recheck reads the section's own text and compares the hits without them.
+    def write(payload: dict[str, Any]) -> str:
+        text = _writer(payload)
+        if TARGET in payload["section_brief"]:  # the second section only
+            return text.replace("본문입니다.", "본문입니다." + BAD_TABLE)
+        return text
+
+    no_edits = FakeChain("<missing_coverage>none</missing_coverage>")
+    reviewer = _reviewer(
+        writer=FakeChain(write), editor=no_edits, max_synthesis_attempts=1
+    )
+    review = await reviewer.run()
+    notes = [n for n in review.notes if "open must-fix/missing item" in n]
+    assert len(notes) == 1 and "empty header cell" in notes[0]
+
+
+async def test_a_rule_slip_beside_an_unrelated_edit_stays_noted() -> None:
+    def write(payload: dict[str, Any]) -> str:
+        text = _writer(payload)
+        if TARGET not in payload["section_brief"]:
+            return text
+        return text.replace(
+            "본문입니다.", "모델을 fine-tune합니다. 이후 결과는 매우 좋습니다."
+        )
+
+    def edit(_: dict[str, Any]) -> str:
+        return (
+            "<edit><find>이후 결과는 매우 좋습니다.</find><replace>이후 결과가 "
+            "좋습니다.</replace></edit><missing_coverage>none</missing_coverage>"
+        )
+
+    review = await _reviewer(
+        writer=FakeChain(write), editor=FakeChain(edit), max_synthesis_attempts=1
+    ).run()
+    assert "fine-tune합니다" in review.body
+    note = next(n for n in review.notes if "open must-fix/missing item" in n)
+    assert "fine-tune" in note
+
+
+async def test_a_tie_with_more_wrong_claims_keeps_the_original() -> None:
+    answers = iter(
+        [_final_with(WRONG_CLAIM)({}), _final_with("LoRA는 언제나 최고입니다.")({})]
+    )
+    verdicts = iter(
+        [
+            {"problems": f"- {WRONG_CLAIM} || unsupported: 범위"},
+            {"problems": "- LoRA는 언제나 최고입니다. || wrong: 아닙니다"},
+        ]
+    )
+    review = await _reviewer(
+        finalizer=FakeChain(lambda _: next(answers)),
+        final_checker=FakeChain(lambda _: next(verdicts)),
+    ).run()
+    assert WRONG_CLAIM in review.closing
+
+
+async def test_a_section_below_the_bar_with_no_item_listed_is_noted() -> None:
+    def check(_: dict[str, Any]) -> dict[str, str]:
+        return {"quality_score": "50", "missing_items": "none", "must_fix": "none"}
+
+    review = await _reviewer(checker=FakeChain(check), max_synthesis_attempts=1).run()
+    sections = len(json.loads(_plan()[6:-7])["sections"])
+    notes = [n for n in review.notes if "below the quality bar (score 50)" in n]
+    assert len(notes) == sections
+
+
+PASSAGE = "하지만 보상 계산이 느리면 강화학습은 표본 효율이 떨어집니다."
+
+
+def _open(title: str, draft: str) -> Any:
+    from scholar_lens.sections_engine.explainer import _OpenSection
+
+    return _OpenSection(
+        title=title,
+        score=70,
+        draft=draft,
+        missing=[],
+        must_fix=[f'- "{PASSAGE}" → 가능성만 말합니다'],
+        rule_items=frozenset(),
+    )
+
+
+@pytest.mark.parametrize(
+    "article",
+    [  # the passage is in the section, past a fenced "## " line
+        f"## 개요\n\n설명입니다.\n\n```bash\n## install\n```\n\n{PASSAGE}\n\n## 다음\n\n끝.",
+        # two sections share the title: the passage is in the second
+        f"## 개요\n\n첫 설명입니다.\n\n## 개요\n\n{PASSAGE}",
+    ],
+)
+def test_a_quoted_passage_still_in_its_section_stays_open(article: str) -> None:
+    assert _open("개요", f"## 개요\n\n{PASSAGE}").still_open(article)
+
+
+def test_a_sub_heading_in_a_section_does_not_cut_it_short() -> None:
+    draft = f"## 개요\n\n설명입니다.\n\n## 2단계\n\n{PASSAGE}"
+    article = f"{draft}\n\n## 다음\n\n끝."
+    assert _open("개요", draft).still_open(article)
+
+
+def test_a_quoted_passage_only_in_another_section_is_settled() -> None:
+    article = f"## 개요\n\n고친 설명입니다.\n\n## 다음\n\n{PASSAGE}"
+    assert _open("개요", f"## 개요\n\n{PASSAGE}").still_open(article) == []

@@ -278,3 +278,53 @@ def test_list_inside_a_quote_does_not_warn() -> None:
 @pytest.mark.parametrize("body", ["$$\nL = a + 손실\n$$", "$$L = a + 손실$$"])
 def test_korean_in_display_math_is_an_error_like_the_blog_lint(body: str) -> None:
     assert any("Korean" in e for e in math_errors(body))
+
+
+@pytest.mark.parametrize(
+    "body,warns",
+    [
+        ("9. 아홉째\n\n   $$x$$\n\n10. 열째", False),  # inside item 9's column
+        ("10. 열째\n\n   $$x$$\n\n3. 셋째", True),  # left of item 10's column (4)
+        ("1) 첫째\n\n$$x$$\n\n2) 둘째", False),  # "1)" is no list to kramdown
+    ],
+)
+def test_list_restart_reads_the_previous_items_column(body: str, warns: bool) -> None:
+    from tests.unit.test_post_validator import warnings
+
+    found = [
+        v
+        for v in warnings(validate_post(make_post(body), SPEC, "review"))
+        if v.rule == "list"
+    ]
+    assert bool(found) is warns
+
+
+@pytest.mark.parametrize(
+    "body,warns",
+    [  # a nested list's display inside its parent item; a bullet ends a list
+        ("1. 첫째\n   1. 하위\n   2. 하위둘\n\n   $$x$$\n\n2. 둘째", False),
+        ("1. 첫째\n   1. 하위\n\n$$x$$\n\n2. 둘째", True),
+        ("10. 열째\n\n- 불릿\n\n   $$x$$\n\n2. 둘", False),
+        # the parent's column, not the deeper sub-list's (a single "previous
+        # item" would warn here)
+        ("1. 첫째\n   10. 하위\n\n   $$x$$\n\n2. 둘째", False),
+        ("1. a\n\n$$\nx = 1\n$$\n\n 2. b", True),  # sibling one space off
+        ("  1. a\n\n$$x$$\n\n2. b", True),  # first item two spaces in
+        ("1. a\n2) b\n\n$$x$$\n\n3. c", True),  # "2) b" is text in item 1
+        ("1. a\n- b\n\n$$x$$\n\n2. c", True),  # a glued bullet nests in item 1
+        ("1.  a\n\n   $$x$$\n\n2.  b", True),  # two spaces: content column 4
+        ("   1. a\n\n## 제목\n   $$x$$\n\n2. b", False),  # the heading ended it
+        ("1. a\n\n   ## 소제목\n\n$$x$$\n\n2. b", True),  # a heading inside item 1
+        ("1.    a\n\n    $$x$$\n\n2. b", False),  # column capped at 4
+        ("1. a\n\n   ```\n   code\n   ```\n- b\n\n$$x$$\n\n2. c", True),  # glued
+    ],
+)
+def test_list_restart_compares_siblings(body: str, warns: bool) -> None:
+    from tests.unit.test_post_validator import warnings
+
+    found = [
+        v
+        for v in warnings(validate_post(make_post(body), SPEC, "review"))
+        if v.rule == "list"
+    ]
+    assert bool(found) is warns

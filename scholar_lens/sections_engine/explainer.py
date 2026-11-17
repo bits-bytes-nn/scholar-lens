@@ -40,6 +40,7 @@ from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.ids import arxiv_link_key, paper_url
 from scholar_lens.domain.markdown.lint import writing_issues
+from scholar_lens.domain.markdown.math import fence_roles, indented_code_lines
 from scholar_lens.domain.paper.models import (
     Paper,
     ReviewText,
@@ -48,6 +49,7 @@ from scholar_lens.domain.post_format import same_as_title
 from scholar_lens.domain.post_spec import sentence_title_problems
 from scholar_lens.domain.prompt_safety import fenced, neutralize_prompt_tags
 from scholar_lens.domain.quality_gate import publish_blockers
+from scholar_lens.domain.quoted import claim_fixed, finding_fixed
 from scholar_lens.domain.review_plan import (
     RANGE_PADDING,
     PlanError,
@@ -163,6 +165,83 @@ class SectionCheck:
         )
 
 
+_WRONG = re.compile(r"\|\|\s*wrong\b", re.IGNORECASE)
+_LINE_SUFFIX = re.compile(r" \(line \d+\)$")
+
+
+def _rule_key(issue: str) -> str:
+    """A rule hit without its position: a publish blocker without its
+    ``(line N)`` (relative to the text checked), a writing issue as its rule
+    and offending match without the surrounding snippet (as
+    :func:`quality_gate.added_slips` keys them)."""
+    if _LINE_SUFFIX.search(issue):
+        return _LINE_SUFFIX.sub("", issue)
+    return issue.split(":", 1)[0]
+
+
+def _rule_keys(text: str) -> set[str]:
+    return {_rule_key(i) for i in [*writing_issues(text), *publish_blockers(text)]}
+
+
+def _h2_lines(lines: list[str]) -> list[int]:
+    """The ``## `` heading lines outside fences and indented code."""
+    code = indented_code_lines(lines)
+    return [
+        i
+        for i, role in enumerate(fence_roles(lines))
+        if role == "prose" and i not in code and lines[i].startswith("## ")
+    ]
+
+
+def _section_text(article: str, title: str, draft: str) -> str:
+    """The section of ``article`` under its ``## title`` heading, as many
+    ``## `` headings long as ``draft`` (the section as checked; the edit pass
+    keeps every heading, so a stray ``## `` sub-heading in it does not cut
+    the section short). The whole article when the heading is not found or
+    is not unique: reading more text only ever keeps an item open."""
+    lines = article.split("\n")
+    headings = _h2_lines(lines)
+    heading = f"## {title.strip()}"
+    starts = [i for i in headings if lines[i].strip() == heading]
+    if len(starts) != 1:
+        return article
+    own = max(1, len(_h2_lines(ensure_section_heading(draft, title).split("\n"))))
+    after = [i for i in headings if i >= starts[0]]
+    end = after[own] if len(after) > own else len(lines)
+    return "\n".join(lines[starts[0] : end])
+
+
+@dataclass(frozen=True)
+class _OpenSection:
+    """A section kept below the bar: the checked draft and what its check
+    left open. ``rule_items`` are the must-fix lines a deterministic rule
+    found (rechecked by rule, not by quote)."""
+
+    title: str
+    score: int
+    draft: str
+    missing: list[str]
+    must_fix: list[str]
+    rule_items: frozenset[str]
+
+    def still_open(self, article: str) -> list[str]:
+        """The must-fix lines this section of ``article`` still carries: a
+        rule's line when the rule still reports the same hit, a checker's
+        line unless the passage it quotes from the draft is gone (one that
+        quotes nothing stays)."""
+        text = _section_text(article, self.title, self.draft)
+        hits = _rule_keys(text)
+        return [
+            item
+            for item in self.must_fix
+            if (
+                _rule_key(item) in hits
+                if item in self.rule_items
+                else not finding_fixed(item, self.draft, text)
+            )
+        ]
+
+
 @dataclass
 class Enrichment:
     citation_summaries: list[str] = field(default_factory=list)
@@ -225,6 +304,8 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         # and the coverage it still lacks (nothing to quote).
         self.open_defects: list[str] = []
         self.open_gaps: list[str] = []
+        # The below-bar sections, for the review notes after the edit pass.
+        self.open_sections: list[_OpenSection] = []
         self.linkable_arxiv: set[str] = set()
         # The works the citation summaries link (resolved, not recalled).
         self.cited_urls: set[str] = set()
@@ -608,20 +689,63 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                     f"\n{rejected}" if rejected and rejected != feedback else ""
                 )
         if best_check is not None and not best_check.passes(self.min_quality_score):
-            open_items = [*best_check.missing, *best_check.must_fix]
             self.open_defects += [
                 f"[{section.title}] {item}" for item in best_check.must_fix
             ]
             self.open_gaps += [
                 f"[{section.title}] {item}" for item in best_check.missing
             ]
-            self.notes.append(
-                f"Review section '{section.title}' was kept with "
-                f"{len(open_items)} open must-fix/missing item(s) (score "
-                f"{best_check.score}); the editor was asked to fix them: check it. "
-                "Open: " + "; ".join(item[:120] for item in open_items[:3])
+            # Noted once the edit pass has run (_open_section_notes): what it
+            # fixed is no longer open.
+            rules = set(writing_issues(best_draft)) | set(publish_blockers(best_draft))
+            self.open_sections.append(
+                _OpenSection(
+                    title=section.title,
+                    score=best_check.score,
+                    draft=best_draft,
+                    missing=list(best_check.missing),
+                    must_fix=list(best_check.must_fix),
+                    rule_items=frozenset(rules & set(best_check.must_fix)),
+                )
             )
         return ensure_section_heading(best_draft, section.title) if best_draft else ""
+
+    def _open_section_notes(self, article: str, *, edited: bool) -> list[str]:
+        """One review note per section kept below the bar, listing only the
+        items ``article`` still carries after the edit pass (all of them when
+        none ran); a section with none left gets a short note with its score.
+        Missing coverage cannot be told apart from a reworded addition, so it
+        stays."""
+        if not self.open_sections:
+            return []
+        notes: list[str] = []
+        for section in self.open_sections:
+            # Without an edit pass nothing changed since the check.
+            must_fix = section.still_open(article) if edited else section.must_fix
+            edited_items = len(section.must_fix) - len(must_fix)
+            open_items = [*section.missing, *must_fix]
+            # A below-bar section always keeps a note: an item counts as
+            # settled when its passage was edited, which is not proof of a fix.
+            if not open_items:
+                listed = (
+                    f"its {edited_items} item(s) were edited by the edit pass"
+                    if edited_items
+                    else "no item listed"
+                )
+                notes.append(
+                    f"Review section '{section.title}' was kept below the "
+                    f"quality bar (score {section.score}); {listed}: check it."
+                )
+                continue
+            when = "after the edit pass" if edited else "(no edit pass ran)"
+            done = f", {edited_items} more edited by it" if edited_items else ""
+            notes.append(
+                f"Review section '{section.title}' still has {len(open_items)} "
+                f"open must-fix/missing item(s) {when} (score {section.score}"
+                f"{done}): check it. Open: "
+                + "; ".join(item[:120] for item in open_items[:3])
+            )
+        return notes
 
     @staged("edit")
     async def _edit(self, plan: ReviewPlan, article: str, paper_text: str) -> str:
@@ -843,8 +967,9 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
     ) -> dict[str, str]:
         """``final`` with its TL;DR and closing claims checked against the
         paper: what the check finds is fixed by one more finalization call,
-        whose TL;DR and closing are kept only when well formed and checked
-        with fewer problems (its description too when the kept one no longer
+        whose TL;DR and closing are kept only when well formed and their
+        recheck finds fewer problems, or no more with every disputed
+        sentence gone (:func:`_fix_kept`; its description too when the kept one no longer
         fits the new TL;DR); what is left becomes review notes. A spent
         budget (before or during the check) keeps the written review with a
         note: the check is optional."""
@@ -908,7 +1033,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 "description": self._fitting_description(final, answer),
             }
             after = await self._claim_problems(candidate)
-            if after is not None and len(after) < len(problems):
+            if after is not None and _fix_kept(problems, after, final, candidate):
                 if final["description"] and not candidate["description"]:
                     self.notes.append(
                         "Review description dropped: it no longer fit the "
@@ -982,6 +1107,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         article = "\n\n".join(written)
         if self.max_edit_rounds:
             article = await self._edit(plan, article, paper.text)
+        self.notes += self._open_section_notes(article, edited=self.max_edit_rounds > 0)
         final = await self._finalize(plan, article)
         # The publish step unlinks what the writers linked beyond these and
         # the paper's own sources (publishing.verify_post_links).
@@ -1000,6 +1126,33 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
 
 # A Markdown link's target (the citation summaries' headers link the work).
 _LINK_URL = re.compile(r"\]\((https?://[^)\s]+)\)")
+
+
+def _fix_kept(
+    before: list[str],
+    after: list[str],
+    old: dict[str, str],
+    new: dict[str, str],
+) -> bool:
+    """Whether a corrected TL;DR, closing and description (``new``) replace
+    ``old``: their recheck finds fewer problems, or as many, no more of them
+    wrong (rather than unsupported), and every sentence the first check
+    disputed in ``old`` gone from ``new``. The recheck's count alone is
+    noisy: a second reading finds another problem even in a fixed text. A
+    reworded sentence still flagged also counts as gone; the note then lists
+    the recheck's problems, which quote the new text."""
+    if len(after) < len(before):
+        return True
+
+    def wrong(problems: list[str]) -> int:
+        return sum(bool(_WRONG.search(p)) for p in problems)
+
+    old_text, new_text = "\n".join(old.values()), "\n".join(new.values())
+    return (
+        len(after) == len(before)
+        and wrong(after) <= wrong(before)
+        and all(claim_fixed(problem, old_text, new_text) for problem in before)
+    )
 
 
 def _listed(problems: list[str]) -> str:

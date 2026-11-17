@@ -1171,6 +1171,88 @@ def _fold_glued_runs(markdown: str) -> str:
     return "\n".join(out)
 
 
+# kramdown reads only "1." as an ordered item ("1)" is a paragraph).
+_ORDERED_MARKER = re.compile(r"^[ \t]*(\d+)\.[ \t]+")
+
+
+def _fold_spaced_runs(markdown: str) -> str:
+    """Keep a display set apart from an ordered item by blank lines in the
+    item when the list goes on after it. A display (with any paragraphs
+    around it) indented less than the item's content ends the list, and
+    kramdown restarts the next item ("4.") at 1. When the next item continues
+    the same list and is numbered above 1, the whole run between the two
+    items moves to the item's content column. A run holding a heading,
+    table, quote, fence or rule, or one with no display, is left as written
+    (the validator reports what still splits a list); other lines of the run
+    (HTML, footnote or link definitions) move with it."""
+    lines = markdown.split("\n")
+    roles = fence_roles(lines)
+    code = indented_code_lines(lines)
+    out = list(lines)
+    item: int | None = None
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if roles[i] != "prose" or i in code:
+            item = None
+            i += 1
+            continue
+        if _LIST_MARKER.match(line):
+            item = i if _ORDERED_MARKER.match(line) else None
+            i += 1
+            continue
+        if item is None or not line.strip():
+            i += 1
+            continue
+        column = _columns(_LIST_MARKER.match(lines[item]).group(0))  # type: ignore[union-attr]
+        if indent_width(line) >= column:
+            i += 1
+            continue
+        if lines[i - 1].strip():
+            # Glued to the item (a lazy continuation, or _fold_glued_runs's).
+            item = None
+            i += 1
+            continue
+        run_end = i
+        while run_end < len(lines) and run_end - i < _MAX_SCAN:
+            if not lines[run_end].strip():
+                run_end += 1
+                continue
+            if _LIST_MARKER.match(lines[run_end]):
+                break
+            if (
+                roles[run_end] != "prose"
+                or run_end in code
+                or _not_prose(lines[run_end])
+                or lines[run_end].lstrip().startswith("|")
+            ):
+                run_end = len(lines)  # not a plain run: left alone
+                break
+            run_end += 1
+        if run_end >= len(lines):
+            item = None
+            i += 1
+            continue
+        run, after = range(i, run_end), lines[run_end]
+        number = _ORDERED_MARKER.match(after)
+        if (
+            number is not None
+            and int(number.group(1)) > 1
+            and indent_width(after) == indent_width(lines[item])
+            and _list_goes_on(lines[item], after)
+            and any(_opens_display(lines[k]) for k in run)
+            and all(indent_width(lines[k]) < column for k in run if lines[k].strip())
+        ):
+            pad = " " * column
+            for k in run:
+                if lines[k].strip():
+                    out[k] = pad + lines[k].lstrip(" \t")
+        item = None
+        # The run's lines hold no item, so the scan resumes at the next one.
+        i = run_end
+    return "\n".join(out)
+
+
 _DISPLAY_SPAN = re.compile(r"\$\$(.+?)\$\$", re.S)
 # Inline math nested in \text{} inside a display ("\text{bo$n$}"): the lone
 # "$" ends the display for the blog's renderer.
@@ -1202,6 +1284,11 @@ def normalize_math(markdown: str) -> str:
     text = _rewrite_spans(_fold_glued_runs(markdown))
     text = _isolate_display_blocks(text)
     text = _isolate_nested_displays(text)
+    folded = _fold_spaced_runs(text)
+    if folded != text:
+        # A display it moved to the item's column may be glued to another.
+        folded = _isolate_nested_displays(folded)
+    text = folded
     text = _vert_inline_bars(text)
     text = _unnest_text_math(text)
     return _collapse_blank_runs(text)
