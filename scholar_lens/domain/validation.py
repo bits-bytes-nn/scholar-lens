@@ -956,6 +956,14 @@ def _check_math(front: dict[str, Any], body: str, offset: int, add: Add) -> None
 _ORDERED_ITEM = re.compile(r"(\d+)\.[ \t]")
 
 
+def _sibling_column(columns: dict[int, int], indent: int) -> int | None:
+    """The content column of the item an item at ``indent`` continues: the
+    one whose marker indent is nearest within 3 spaces (kramdown reads such
+    markers as siblings), else None."""
+    near = [k for k in columns if abs(k - indent) <= 3]
+    return columns[min(near, key=lambda k: abs(k - indent))] if near else None
+
+
 def _check_list_restarts(
     lines: Lines, bare_by_index: dict[int, str], offset: int, add: Add
 ) -> None:
@@ -986,8 +994,8 @@ def _check_list_restarts(
             if (
                 int(item.group(1)) > 1
                 and display_indent is not None
-                and indent in columns
-                and display_indent < columns[indent]
+                and (sibling := _sibling_column(columns, indent)) is not None
+                and display_indent < sibling
             ):
                 add(
                     "warning",

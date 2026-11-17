@@ -1301,6 +1301,8 @@ async def test_an_open_defect_the_edit_pass_fixed_gets_no_note() -> None:
     review = await reviewer.run()
     assert passage not in review.body
     assert not any("open must-fix/missing item" in n for n in review.notes)
+    # Edited is not proof of fixed: the section keeps a short note.
+    assert sum("1 item(s) were edited by the edit pass" in n for n in review.notes) == 1
 
 
 async def test_an_open_defect_the_edit_pass_left_is_noted() -> None:
@@ -1405,6 +1407,12 @@ def _open(title: str, draft: str) -> Any:
 )
 def test_a_quoted_passage_still_in_its_section_stays_open(article: str) -> None:
     assert _open("개요", f"## 개요\n\n{PASSAGE}").still_open(article)
+
+
+def test_a_sub_heading_in_a_section_does_not_cut_it_short() -> None:
+    draft = f"## 개요\n\n설명입니다.\n\n## 2단계\n\n{PASSAGE}"
+    article = f"{draft}\n\n## 다음\n\n끝."
+    assert _open("개요", draft).still_open(article)
 
 
 def test_a_quoted_passage_only_in_another_section_is_settled() -> None:

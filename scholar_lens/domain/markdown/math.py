@@ -1183,7 +1183,8 @@ def _fold_spaced_runs(markdown: str) -> str:
     the same list and is numbered above 1, the whole run between the two
     items moves to the item's content column. A run holding a heading,
     table, quote, fence or rule, or one with no display, is left as written
-    (the validator reports what still splits a list)."""
+    (the validator reports what still splits a list); other lines of the run
+    (HTML, footnote or link definitions) move with it."""
     lines = markdown.split("\n")
     roles = fence_roles(lines)
     code = indented_code_lines(lines)

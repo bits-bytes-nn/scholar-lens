@@ -305,6 +305,11 @@ def test_list_restart_reads_the_previous_items_column(body: str, warns: bool) ->
         ("1. 첫째\n   1. 하위\n   2. 하위둘\n\n   $$x$$\n\n2. 둘째", False),
         ("1. 첫째\n   1. 하위\n\n$$x$$\n\n2. 둘째", True),
         ("10. 열째\n\n- 불릿\n\n   $$x$$\n\n2. 둘", False),
+        # the parent's column, not the deeper sub-list's (a single "previous
+        # item" would warn here)
+        ("1. 첫째\n   10. 하위\n\n   $$x$$\n\n2. 둘째", False),
+        ("1. a\n\n$$\nx = 1\n$$\n\n 2. b", True),  # sibling one space off
+        ("  1. a\n\n$$x$$\n\n2. b", True),  # first item two spaces in
     ],
 )
 def test_list_restart_compares_siblings(body: str, warns: bool) -> None:

@@ -40,7 +40,7 @@ from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.ids import arxiv_link_key, paper_url
 from scholar_lens.domain.markdown.lint import writing_issues
-from scholar_lens.domain.markdown.math import fence_roles
+from scholar_lens.domain.markdown.math import fence_roles, indented_code_lines
 from scholar_lens.domain.paper.models import (
     Paper,
     ReviewText,
@@ -183,27 +183,32 @@ def _rule_keys(text: str) -> set[str]:
     return {_rule_key(i) for i in [*writing_issues(text), *publish_blockers(text)]}
 
 
-def _section_text(article: str, title: str) -> str:
-    """The section of ``article`` under its ``## title`` heading, up to the
-    next ``## `` heading outside code (the edit pass keeps the headings).
-    The whole article when the heading is not found or is not unique:
-    reading more text only ever keeps an item open."""
+def _h2_lines(lines: list[str]) -> list[int]:
+    """The ``## `` heading lines outside fences and indented code."""
+    code = indented_code_lines(lines)
+    return [
+        i
+        for i, role in enumerate(fence_roles(lines))
+        if role == "prose" and i not in code and lines[i].startswith("## ")
+    ]
+
+
+def _section_text(article: str, title: str, draft: str) -> str:
+    """The section of ``article`` under its ``## title`` heading, as many
+    ``## `` headings long as ``draft`` (the section as checked; the edit pass
+    keeps every heading, so a stray ``## `` sub-heading in it does not cut
+    the section short). The whole article when the heading is not found or
+    is not unique: reading more text only ever keeps an item open."""
     lines = article.split("\n")
-    prose = [role == "prose" for role in fence_roles(lines)]
+    headings = _h2_lines(lines)
     heading = f"## {title.strip()}"
-    starts = [i for i, line in enumerate(lines) if prose[i] and line.strip() == heading]
+    starts = [i for i in headings if lines[i].strip() == heading]
     if len(starts) != 1:
         return article
-    start = starts[0]
-    end = next(
-        (
-            j
-            for j in range(start + 1, len(lines))
-            if prose[j] and lines[j].startswith("## ")
-        ),
-        len(lines),
-    )
-    return "\n".join(lines[start:end])
+    own = max(1, len(_h2_lines(ensure_section_heading(draft, title).split("\n"))))
+    after = [i for i in headings if i >= starts[0]]
+    end = after[own] if len(after) > own else len(lines)
+    return "\n".join(lines[starts[0] : end])
 
 
 @dataclass(frozen=True)
@@ -224,7 +229,7 @@ class _OpenSection:
         rule's line when the rule still reports the same hit, a checker's
         line unless the passage it quotes from the draft is gone (one that
         quotes nothing stays)."""
-        text = _section_text(article, self.title)
+        text = _section_text(article, self.title, self.draft)
         hits = _rule_keys(text)
         return [
             item
@@ -706,36 +711,34 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         return ensure_section_heading(best_draft, section.title) if best_draft else ""
 
     def _open_section_notes(self, article: str, *, edited: bool) -> list[str]:
-        """Review notes for the sections kept below the bar, with only the
-        items ``article`` (after the edit pass when ``edited``) still
-        carries; a section left with none gets no note. Missing coverage
-        cannot be told apart from a reworded addition, so it stays."""
+        """One review note per section kept below the bar, listing only the
+        items ``article`` still carries after the edit pass (all of them when
+        none ran); a section with none left gets a short note with its score.
+        Missing coverage cannot be told apart from a reworded addition, so it
+        stays."""
         if not self.open_sections:
             return []
         notes: list[str] = []
         for section in self.open_sections:
-            must_fix = section.still_open(article)
-            fixed = len(section.must_fix) - len(must_fix)
+            # Without an edit pass nothing changed since the check.
+            must_fix = section.still_open(article) if edited else section.must_fix
+            edited_items = len(section.must_fix) - len(must_fix)
             open_items = [*section.missing, *must_fix]
-            if not open_items and (section.missing or section.must_fix):
-                logger.info(
-                    "Review section '%s': its %d open item(s) are no longer in "
-                    "the review%s.",
-                    section.title,
-                    fixed,
-                    " after the edit pass" if edited else "",
-                )
-                continue
+            # A below-bar section always keeps a note: an item counts as
+            # settled when its passage was edited, which is not proof of a fix.
             if not open_items:
-                # Below the bar with nothing listed: the score is the finding.
+                listed = (
+                    f"its {edited_items} item(s) were edited by the edit pass"
+                    if edited_items
+                    else "no item listed"
+                )
                 notes.append(
                     f"Review section '{section.title}' was kept below the "
-                    f"quality bar (score {section.score}) with no item listed: "
-                    "check it."
+                    f"quality bar (score {section.score}); {listed}: check it."
                 )
                 continue
             when = "after the edit pass" if edited else "(no edit pass ran)"
-            done = f", {fixed} more fixed by it" if edited and fixed else ""
+            done = f", {edited_items} more edited by it" if edited_items else ""
             notes.append(
                 f"Review section '{section.title}' still has {len(open_items)} "
                 f"open must-fix/missing item(s) {when} (score {section.score}"
