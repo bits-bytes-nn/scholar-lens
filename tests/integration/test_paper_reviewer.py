@@ -1247,3 +1247,65 @@ async def test_a_corrected_tldr_takes_the_repaired_description_and_rechecks_it()
     # The checker's report reaches the finalizer fenced and defanged.
     note = finalizer.calls[1]["repair_note"]
     assert note.count("</claim_problems>") == 1  # the paper cannot close it
+
+
+async def test_a_fix_whose_disputed_sentence_is_gone_is_kept_on_a_tie() -> None:
+    # The recheck finds as many problems, but not the one the fix addressed:
+    # another reading of the fixed text, not the same defect left in it.
+    other = "- LoRA는 GLUE에서 전체 미세 조정과 비슷합니다. || unsupported: 범위"
+    answers = iter(
+        [
+            _final_with(WRONG_CLAIM)({}),
+            _final_with("LoRA는 GLUE에서 전체 미세 조정과 비슷합니다.")({}),
+        ]
+    )
+    verdicts = iter(
+        [
+            {"problems": f"- {WRONG_CLAIM} || wrong: 일부 과제에서만 앞섭니다"},
+            {"problems": other},
+        ]
+    )
+    review = await _reviewer(
+        finalizer=FakeChain(lambda _: next(answers)),
+        final_checker=FakeChain(lambda _: next(verdicts)),
+    ).run()
+    assert WRONG_CLAIM not in review.closing
+    note = next(n for n in review.notes if "claims to check" in n)
+    assert "unsupported: 범위" in note and WRONG_CLAIM not in note
+
+
+def _quoting_checker(passage: str) -> FakeChain:
+    def check(payload: dict[str, Any]) -> dict[str, str]:
+        if passage not in payload["draft"]:
+            return _pass(payload)
+        return {
+            "quality_score": "80",
+            "missing_items": "none",
+            "must_fix": f'- "{passage}" → 원문은 가능성만 말합니다',
+        }
+
+    return FakeChain(check)
+
+
+async def test_an_open_defect_the_edit_pass_fixed_gets_no_note() -> None:
+    passage = "실험 결과 본문입니다."
+
+    def edit(payload: dict[str, Any]) -> str:
+        assert passage in payload["round_note"]
+        return (
+            f"<edit><find>{passage}</find><replace>GLUE 결과 본문입니다.</replace>"
+            "</edit><missing_coverage>none</missing_coverage>"
+        )
+
+    reviewer = _reviewer(checker=_quoting_checker(passage), editor=FakeChain(edit))
+    review = await reviewer.run()
+    assert passage not in review.body
+    assert not any("open must-fix/missing item" in n for n in review.notes)
+
+
+async def test_an_open_defect_the_edit_pass_left_is_noted() -> None:
+    passage = "실험 결과 본문입니다."
+    no_edits = FakeChain("<missing_coverage>none</missing_coverage>")
+    review = await _reviewer(checker=_quoting_checker(passage), editor=no_edits).run()
+    note = next(n for n in review.notes if "open must-fix/missing item" in n)
+    assert "after the edit pass" in note and passage in note

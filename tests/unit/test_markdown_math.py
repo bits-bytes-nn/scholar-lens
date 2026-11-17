@@ -734,3 +734,41 @@ def test_conditional_bars_and_operator_macros(src: str, expected: str) -> None:
 
     assert normalize_math(src) == expected
     assert normalize_math(expected) == expected
+
+
+@pytest.mark.parametrize(
+    "src,expected",
+    [
+        (  # a display set apart by blank lines, then the next step: into the step
+            "3. 검증: 점수를 냅니다.\n\n$$\n\\sigma = 1\n$$\n\n4. 갱신합니다.\n",
+            "3. 검증: 점수를 냅니다.\n\n   $$\n   \\sigma = 1\n   $$\n\n4. 갱신합니다.\n",
+        ),
+        (  # with its explanation after it
+            "1. 첫째\n\n$$a = b$$\n\n여기서 a는 입력입니다.\n\n2. 둘째\n",
+            "1. 첫째\n\n   $$a = b$$\n\n   여기서 a는 입력입니다.\n\n2. 둘째\n",
+        ),
+        (  # a two-digit marker's content column
+            "10. 열째\n\n$$a$$\n\n11. 열한째\n",
+            "10. 열째\n\n    $$a$$\n\n11. 열한째\n",
+        ),
+    ],
+)
+def test_spaced_display_between_steps_stays_in_the_list(
+    src: str, expected: str
+) -> None:
+    out = norm(src)
+    assert out == expected and norm(out) == out
+
+
+@pytest.mark.parametrize(
+    "src",
+    [
+        "1. 첫째\n2. 둘째\n\n$$a$$\n\n다음 문단\n",  # the list ends there
+        "1. 첫째\n\n$$a$$\n\n1. 새 목록\n",  # a new list, numbered from 1
+        "1. 첫째\n\n## 제목\n\n$$a$$\n\n2. 둘째\n",  # a heading in between
+        "1. 첫째\n\n다음 문단\n\n2. 둘째\n",  # no display in between
+        "- 첫째\n\n$$a$$\n\n- 둘째\n",  # bullets: nothing renumbers
+    ],
+)
+def test_spaced_run_that_does_not_continue_the_list_is_left_alone(src: str) -> None:
+    assert norm(src) == src

@@ -2,6 +2,10 @@
 
 Notable changes, newest first. Undated entries predate November 2026. Design decisions are recorded in [docs/adr/](./docs/adr/) and measurement results in [eval/RESULTS.md](./eval/RESULTS.md).
 
+- 2026-11-17: sections-engine review notes and fixes that reflect the edit pass.
+  - A section kept below the bar is noted after the edit pass, with only what the edited review still carries: a checker's must-fix line whose quoted draft passage is gone was acted on, a rule's line is rechecked, and a line that quotes nothing of the draft (or missing coverage) stays. Before, every kept section was noted with its pre-edit items, which the edit pass had mostly fixed (none of 17 quoted passages sampled from three reviews remained), so PR checklists listed fixed defects.
+  - A corrected TL;DR, closing and description is kept when its recheck finds fewer problems, or no more with every disputed sentence gone. Before, a single fixed problem was undone whenever the recheck found any other one.
+  - A display set apart from an ordered step by blank lines and indented less than the step's content moves into the step when the list goes on (the next step numbered above 1), so kramdown no longer restarts the list at 1. None of the blog's 43 local posts changes.
 - 2026-11-14: prompt caching without any change to what the models read.
   - The evidence engine's claim check caches its earlier-section evidence and its own section's evidence as two parts. The earlier evidence is split where the previous check's ended, so each section's check reads the previous one's cache entry and writes only the new evidence (checked on Bedrock). Before, every section rewrote the whole earlier evidence. A structured answer's retry cycle now reads its context back too.
   - The sections engine (the default for reviews and summaries) caches the section writer's and checker's system prompts and the writer's run-wide prefix (outline, glossary, translation guideline). Before, it cached nothing. A section's own prefix is not cached: most sections take one call.

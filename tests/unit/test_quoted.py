@@ -1,0 +1,74 @@
+"""Tests for settling a checker's quoted finding after an edit."""
+
+from __future__ import annotations
+
+import pytest
+
+from scholar_lens.domain.quoted import claim_fixed, finding_fixed, quoted_passages
+
+DRAFT = (
+    "하지만 보상 계산이 느리면 강화학습은 표본 효율이 떨어집니다. "
+    '| 4 | 94.44 | 출력이 "Reasoning"과 "LLM Request"로 구조화됩니다 |'
+)
+
+
+@pytest.mark.parametrize(
+    "finding,edited,fixed",
+    [
+        (  # the quoted sentence was rewritten
+            '"하지만 보상 계산이 느리면 강화학습은 표본 효율이 떨어집니다." → '
+            '원문은 "RL can be sample-inefficient"로 가능성만 말합니다.',
+            "보상 계산이 느리면 강화학습은 표본 효율이 떨어질 수 있습니다.",
+            True,
+        ),
+        (  # still there, wrapped differently
+            '"하지만 보상 계산이 느리면 강화학습은 표본 효율이 떨어집니다." → 완화',
+            "하지만 보상 계산이 느리면\n강화학습은 표본 효율이 떨어집니다.",
+            False,
+        ),
+        (  # an escaped quote inside the span, and an ellipsis
+            '"| 4 | 94.44 | 출력이 \\"Reasoning\\"과 ..." — 노드 2 지시문에 이미 있습니다',
+            "| 4 | 94.44 | 구조가 바뀝니다 |",
+            True,
+        ),
+        (  # quotes only the paper: nothing of the draft to look for
+            '원문은 "RL can be sample-inefficient"로 가능성만 말합니다.',
+            "",
+            False,
+        ),
+        ("근거를 보강합니다.", "", False),  # quotes nothing
+    ],
+)
+def test_finding_fixed(finding: str, edited: str, fixed: bool) -> None:
+    assert finding_fixed(finding, DRAFT, edited) is fixed
+
+
+def test_a_quote_of_the_paper_is_not_a_passage_of_the_draft() -> None:
+    finding = '"하지만 보상 계산이" → 원문은 "RL can be sample-inefficient"입니다.'
+    assert quoted_passages(finding, DRAFT) == [["하지만 보상 계산이"]]
+
+
+def test_a_finding_quoting_two_passages_stays_open_while_one_remains() -> None:
+    finding = '"보상 계산이 느리면" 및 "LLM Request" 둘 다 고칩니다'
+    assert not finding_fixed(finding, DRAFT, "LLM Request 칸은 그대로")
+    assert finding_fixed(finding, DRAFT, "둘 다 고쳤습니다")
+
+
+@pytest.mark.parametrize(
+    "problem,edited,fixed",
+    [
+        (
+            "- LoRA는 모든 기준선을 이깁니다. || wrong: 일부만",
+            "LoRA는 일부에서 앞섭니다.",
+            True,
+        ),
+        (
+            "- LoRA는 모든 기준선을 이깁니다. || wrong: 일부만",
+            "LoRA는 모든 기준선을 이깁니다.",
+            False,
+        ),
+        ("- 원문에 없는 문장입니다. || wrong: x", "", False),  # not from the old text
+    ],
+)
+def test_claim_fixed(problem: str, edited: str, fixed: bool) -> None:
+    assert claim_fixed(problem, "LoRA는 모든 기준선을 이깁니다.", edited) is fixed
