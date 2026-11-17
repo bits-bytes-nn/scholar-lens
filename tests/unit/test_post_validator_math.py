@@ -310,6 +310,10 @@ def test_list_restart_reads_the_previous_items_column(body: str, warns: bool) ->
         ("1. 첫째\n   10. 하위\n\n   $$x$$\n\n2. 둘째", False),
         ("1. a\n\n$$\nx = 1\n$$\n\n 2. b", True),  # sibling one space off
         ("  1. a\n\n$$x$$\n\n2. b", True),  # first item two spaces in
+        ("1. a\n2) b\n\n$$x$$\n\n3. c", True),  # "2) b" is text in item 1
+        ("1. a\n- b\n\n$$x$$\n\n2. c", True),  # a glued bullet nests in item 1
+        ("1.  a\n\n   $$x$$\n\n2.  b", True),  # two spaces: content column 4
+        ("   1. a\n\n## 제목\n   $$x$$\n\n2. b", False),  # the heading ended it
     ],
 )
 def test_list_restart_compares_siblings(body: str, warns: bool) -> None:

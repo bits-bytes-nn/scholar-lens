@@ -1287,7 +1287,7 @@ def _quoting_checker(passage: str) -> FakeChain:
     return FakeChain(check)
 
 
-async def test_an_open_defect_the_edit_pass_fixed_gets_no_note() -> None:
+async def test_an_open_defect_the_edit_pass_edited_gets_a_short_note() -> None:
     passage = "실험 결과 본문입니다."
 
     def edit(payload: dict[str, Any]) -> str:
