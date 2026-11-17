@@ -38,6 +38,7 @@ from scholar_lens.domain.markdown.lint import (
 from scholar_lens.domain.markdown.math import (
     BLOG_CODE_SPAN,
     BLOG_FENCE_ROLES,
+    BLOG_SINGLE_DOLLAR_MATH,
     ESCAPED_UNDERSCORE,
     HANGUL,
     TEXT_COMMAND,
@@ -407,6 +408,9 @@ def body_errors(markdown: str) -> list[str]:
     return found
 
 
+_FRONT_TAG = re.compile(r"<[a-zA-Z/!]")
+
+
 def _check_front_matter(
     front: dict[str, Any],
     body: str,
@@ -421,6 +425,15 @@ def _check_front_matter(
     title = str(front.get("title") or "").strip()
     if not title:
         add("error", "title", 1, "title is empty")
+    # lint-posts.rb: the page writes these into HTML unescaped.
+    for key in ("title", "subtitle", "paper_author"):
+        if _FRONT_TAG.search(str(front.get(key) or "")):
+            add(
+                "error",
+                "front-matter",
+                1,
+                f"{key} has a tag; the page reads it as HTML",
+            )
 
     categories = front.get("categories")
     if not (isinstance(categories, list) and len(categories) == 2):
@@ -920,6 +933,13 @@ def _check_math(front: dict[str, Any], body: str, offset: int, add: Add) -> None
                 "math",
                 offset + i,
                 "TeX next to a single `$`; write the formula as $$ … $$",
+            )
+        elif BLOG_SINGLE_DOLLAR_MATH.search(outside):
+            add(
+                "error",
+                "math",
+                offset + i,
+                "math between single `$`s; write the formula as $$ … $$",
             )
         if _INLINE_SPAN.fullmatch(stripped) and not stripped.startswith("|"):
             # kramdown attribute lists ("{: …}") may follow a display directly.

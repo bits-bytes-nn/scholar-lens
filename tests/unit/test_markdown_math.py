@@ -777,3 +777,19 @@ def test_spaced_display_between_steps_stays_in_the_list(
 )
 def test_spaced_run_that_does_not_continue_the_list_is_left_alone(src: str) -> None:
     assert norm(src) == src
+
+
+@pytest.mark.parametrize(
+    "src,expected",
+    [
+        ("$A$는 가우시안, $B$는 0으로", "$$A$$는 가우시안, $$B$$는 0으로"),
+        ("가격은 $5와 $10입니다.", "가격은 $5와 $10입니다."),  # prices
+        ("식 `$x_i$`는 코드", "식 `$x_i$`는 코드"),
+        ("```\n$x_i$\n```", "```\n$x_i$\n```"),
+    ],
+)
+def test_single_dollar_math_the_blog_rejects_is_doubled(
+    src: str, expected: str
+) -> None:
+    out = norm(src)
+    assert out == expected and norm(out) == out

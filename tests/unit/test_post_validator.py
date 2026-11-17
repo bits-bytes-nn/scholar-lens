@@ -647,3 +647,10 @@ def test_math_and_lists_in_brackets_are_no_leftover_marker() -> None:
         "x = [[e0, e1], [e2, e3]]",
     ):
         assert not _EVIDENCE_LEFTOVER.search(text)
+
+
+@pytest.mark.parametrize("key", ["title", "subtitle", "paper_author"])
+def test_a_tag_in_a_page_header_field_is_an_error(key: str) -> None:
+    post = make_post(front={key: '"<think> 토큰 분석"'})
+    found = [v for v in validate_post(post, SPEC, "review") if v.rule == "front-matter"]
+    assert found and key in found[0].message
