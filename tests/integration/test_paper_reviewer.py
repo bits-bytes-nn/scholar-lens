@@ -140,6 +140,7 @@ def _reviewer(
     editor: FakeChain | None = None,
     finalizer: FakeChain | None = None,
     final_checker: FakeChain | None = None,
+    body_checker: FakeChain | None = None,
     citations: list[Citation] | None = None,
     code_retriever: Any = None,
     max_edit_rounds: int = 2,
@@ -182,6 +183,7 @@ def _reviewer(
     r.editor = editor or FakeChain(_no_edits)  # type: ignore[assignment]
     r.finalizer = finalizer or FakeChain(_final)  # type: ignore[assignment]
     r.final_checker = final_checker or FakeChain({"problems": "- none"})  # type: ignore[assignment]
+    r.body_checker = body_checker or FakeChain({"problems": "- none"})  # type: ignore[assignment]
     r._source = lambda: SourceText.from_sentences(SENTENCES)  # type: ignore[method-assign]
     return r
 
@@ -1443,3 +1445,59 @@ async def test_items_a_sections_source_lacks_go_to_the_editor() -> None:
     await reviewer.run()
     first = reviewer.editor.calls[0]["round_note"]  # type: ignore[attr-defined]
     assert "부록의 랭크 실험 (not in this section's source excerpt)" in first
+
+
+WRONG_BODY = "실험 결과 본문입니다."
+
+
+async def test_a_body_claim_the_paper_contradicts_is_fixed_in_one_edit() -> None:
+    verdicts = iter(
+        [
+            {"problems": f"- {WRONG_BODY} || wrong: 순서가 반대입니다"},
+            {"problems": "- none"},
+        ]
+    )
+    fixes: list[str] = []
+
+    def edit(payload: dict[str, Any]) -> str:
+        if "fact checker" in payload["round_note"]:
+            fixes.append(payload["round_note"])
+            return (
+                f"<edit><find>{WRONG_BODY}</find><replace>GLUE 결과 본문입니다."
+                "</replace></edit><missing_coverage>none</missing_coverage>"
+            )
+        return "<missing_coverage>none</missing_coverage>"
+
+    checker = FakeChain(lambda _: next(verdicts))
+    review = await _reviewer(editor=FakeChain(edit), body_checker=checker).run()
+    assert fixes and "순서가 반대입니다" in fixes[0]
+    assert WRONG_BODY not in review.body
+    assert not any("Review body claims" in n for n in review.notes)
+    # The checker reads each number with the paper passages that state it.
+    assert "number_sources" in checker.calls[0]  # type: ignore[attr-defined]
+
+
+async def test_a_body_fix_that_does_not_help_is_undone_and_noted() -> None:
+    problem = {"problems": f"- {WRONG_BODY} || wrong: 순서가 반대입니다"}
+
+    def edit(payload: dict[str, Any]) -> str:
+        if "fact checker" in payload["round_note"]:
+            return (
+                "<edit><find>문제와 동기</find><replace>문제와 동기</replace></edit>"
+                "<missing_coverage>none</missing_coverage>"
+            )
+        return "<missing_coverage>none</missing_coverage>"
+
+    review = await _reviewer(
+        editor=FakeChain(edit), body_checker=FakeChain(problem)
+    ).run()
+    assert WRONG_BODY in review.body
+    assert any("Review body claims to check" in n for n in review.notes)
+
+
+async def test_a_failed_body_check_is_noted() -> None:
+    def fail(_: dict[str, Any]) -> Any:
+        raise RuntimeError("down")
+
+    review = await _reviewer(body_checker=FakeChain(fail)).run()
+    assert any("body was not checked" in n for n in review.notes)
