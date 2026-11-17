@@ -574,6 +574,10 @@ class PaperFinalizationPrompt(BasePrompt):
     """Writes the TL;DR that opens the review, the closing assessment, the
     translated title used as the post subtitle and the search description."""
 
+    # A repair or claim fix resends all of it with only the note after the
+    # abstract changed.
+    cache_after = ("</abstract>",)
+
     input_variables: list[str] = [
         "explanation",
         "title",
@@ -697,6 +701,9 @@ class PaperFinalCheckPrompt(BasePrompt):
     """Checks the TL;DR and closing assessment against the paper: the parts
     written last, from the review alone, where comparison and ranking claims
     go wrong most often."""
+
+    # The recheck after a fix reads the same paper first.
+    cache_after = ("</paper_text>",)
 
     input_variables: list[str] = [
         "paper_text",

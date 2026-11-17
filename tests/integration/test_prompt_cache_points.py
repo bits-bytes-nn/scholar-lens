@@ -10,7 +10,9 @@ from langchain_core.runnables import RunnableLambda
 
 from scholar_lens.adapters.bedrock.chat_models import CheckedChatBedrockConverse
 from scholar_lens.adapters.bedrock.prompts.base import with_cache_points
+from scholar_lens.adapters.bedrock.prompts.extraction import CitationExtractionPrompt
 from scholar_lens.sections_engine.prompts.review import (
+    PaperFinalCheckPrompt,
     PaperFinalizationPrompt,
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
@@ -72,7 +74,9 @@ def _points(request: dict[str, Any]) -> int:
     [
         (PaperSectionPrompt, 2),
         (PaperSectionCheckPrompt, 1),
-        (PaperFinalizationPrompt, 0),
+        (PaperFinalizationPrompt, 1),
+        (PaperFinalCheckPrompt, 1),
+        (CitationExtractionPrompt, 1),
     ],
 )
 def test_cache_points_split_the_request_without_changing_its_text(

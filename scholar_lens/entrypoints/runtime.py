@@ -57,9 +57,14 @@ def load_secrets_from_ssm(
 ) -> None:
     """Load the given SSM SecureString params into ``os.environ`` (AWS only).
 
-    Every secret is optional: one that was never written is skipped quietly; any
-    other failure (e.g. AccessDenied) is logged as a warning and the run goes on
-    without it.
+    Every secret is optional: one that was never written is skipped quietly.
+    Any other failure (access denied, KMS, throttling past the SDK's retries)
+    stops the run before it spends anything: going on would quietly drop the
+    search provider or an API key and degrade the post.
+
+    Raises:
+        RuntimeError: a secret could not be read for a reason other than
+            not being set.
     """
     if not is_running_in_aws():
         return
@@ -71,11 +76,14 @@ def load_secrets_from_ssm(
                 context.default_boto_session, f"{base}/{ssm_param.value}"
             )
             logger.info("Set env var '%s' from SSM.", env_var.value)
-        except Exception as e:  # noqa: BLE001 - optional secret; never abort the run
-            if is_parameter_not_found(e):
-                logger.info("SSM secret for '%s' is not set.", env_var.value)
-            else:
-                logger.warning("Could not read '%s' from SSM: %s", env_var.value, e)
+        except Exception as e:
+            if not is_parameter_not_found(e):
+                cause = e.__cause__ or e
+                raise RuntimeError(
+                    f"Could not read '{env_var.value}' from SSM: "
+                    f"{type(cause).__name__}: {cause}"
+                ) from e
+            logger.info("SSM secret for '%s' is not set.", env_var.value)
 
 
 PROJECT = "scholar-lens"

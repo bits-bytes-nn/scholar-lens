@@ -1418,3 +1418,28 @@ def test_a_sub_heading_in_a_section_does_not_cut_it_short() -> None:
 def test_a_quoted_passage_only_in_another_section_is_settled() -> None:
     article = f"## 개요\n\n고친 설명입니다.\n\n## 다음\n\n{PASSAGE}"
     assert _open("개요", f"## 개요\n\n{PASSAGE}").still_open(article) == []
+
+
+async def test_gaps_the_last_edit_round_reports_are_noted() -> None:
+    def edit(_: dict[str, Any]) -> str:
+        return "<missing_coverage>- rank 4 결과</missing_coverage>"
+
+    review = await _reviewer(editor=FakeChain(edit), max_edit_rounds=2).run()
+    note = next(n for n in review.notes if "still missing from the review" in n)
+    assert "rank 4 결과" in note
+
+
+async def test_items_a_sections_source_lacks_go_to_the_editor() -> None:
+    def write(payload: dict[str, Any]) -> str:
+        text = _writer(payload)
+        if TARGET in payload["section_brief"]:
+            return text.replace(
+                "</explanation>",
+                "</explanation><missing_source>- 부록의 랭크 실험</missing_source>",
+            )
+        return text
+
+    reviewer = _reviewer(writer=FakeChain(write))
+    await reviewer.run()
+    first = reviewer.editor.calls[0]["round_note"]  # type: ignore[attr-defined]
+    assert "부록의 랭크 실험 (not in this section's source excerpt)" in first

@@ -9,9 +9,12 @@ them by these names; both use this function.
 from __future__ import annotations
 
 import re
+from typing import get_args
+
+from scholar_lens.domain.jobs import ArtifactKind
 
 # The JobRequest kinds; each gets its own profiles.
-ARTIFACT_KINDS = ("review", "summarize", "guide", "survey_plan", "survey_write")
+ARTIFACT_KINDS: tuple[str, ...] = get_args(ArtifactKind)
 
 _NAME_UNSAFE = re.compile(r"[^0-9A-Za-z_-]+")
 

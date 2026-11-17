@@ -519,7 +519,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 
 ### 8.2 재시도와 제한 시간
 
-재시도는 한 계층만 소유합니다. botocore는 standard 모드에서 1회만 시도하고(연결 30초, 읽기 3600초: 비스트리밍 호출이 출력 128k 토큰을 끝까지 생성하는 시간), `adapters/retry.py::RetryableBase._retry`가 tenacity로 요청 제한, 5xx, 연결·읽기 시간 초과만 지수 백오프와 지터로 재시도합니다. 읽기 시간 초과는 긴 생성 전체를 다시 과금하므로 한 번만 재시도합니다. AccessDenied, ValidationException, ResourceNotFound, 예산 초과, 입력 검증 오류는 바로 실패합니다. `sections_engine/batch.py::BatchProcessor`(코드 분석 일괄 처리)는 실패한 항목만 다시 처리합니다.
+재시도는 호출 경로마다 한 계층이 소유합니다. LangChain 경로(아래)와 Strands 경로(4.3절 끝: botocore 재시도 1회 + 응답 스트림 안의 스로틀을 다루는 Strands 재시도)는 서로 겹치지 않습니다. LangChain 경로에서 botocore는 standard 모드에서 1회만 시도하고(연결 30초, 읽기 3600초: 비스트리밍 호출이 출력 128k 토큰을 끝까지 생성하는 시간), `adapters/retry.py::RetryableBase._retry`가 tenacity로 요청 제한, 5xx, 연결·읽기 시간 초과만 지수 백오프와 지터로 재시도합니다. 읽기 시간 초과는 긴 생성 전체를 다시 과금하므로 한 번만 재시도합니다. AccessDenied, ValidationException, ResourceNotFound, 예산 초과, 입력 검증 오류는 바로 실패합니다. `sections_engine/batch.py::BatchProcessor`(코드 분석 일괄 처리)는 실패한 항목만 다시 처리합니다.
 
 ### 8.3 예산과 비용
 
@@ -554,7 +554,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
   - SNS 게시와 토픽 KMS 키 사용
   - `cloudwatch:PutMetricData`(`ScholarLens` 네임스페이스 조건)
   - SSM 비밀값 8개 읽기(`RUN_SECRETS`)
-- **SSM**: 스택은 `batch-job-queue`, `batch-job-definition`(String)을 씁니다. 비밀값(SecureString)은 CloudFormation이 만들 수 없으므로 `scripts/put_secrets.py`로 따로 기록합니다(이름을 주면 그 비밀값만). `cdk synth`/`diff`는 비밀값을 건드리지 않습니다. 실행 시 기록되지 않은 비밀값(`ParameterNotFound`)은 조용히 건너뛰고, 권한 오류 등은 warning으로 남깁니다.
+- **SSM**: 스택은 `batch-job-queue`, `batch-job-definition`(String)을 씁니다. 비밀값(SecureString)은 CloudFormation이 만들 수 없으므로 `scripts/put_secrets.py`로 따로 기록합니다(이름을 주면 그 비밀값만). `cdk synth`/`diff`는 비밀값을 건드리지 않습니다. 실행 시 기록되지 않은 비밀값(`ParameterNotFound`)은 조용히 건너뜁니다. 권한·KMS 오류나 SDK 재시도 뒤에도 남은 스로틀처럼 다른 이유로 읽지 못하면, 비용이 들기 전에 실행을 실패시킵니다. 그대로 진행하면 검색 공급자나 API 키가 빠진 채 글이 조용히 나빠지기 때문입니다.
 - **비용 할당**: 모든 리소스에 `ProjectName`, `Stage`, `CostCenter`, `ManagedBy` 태그를 붙이고 Batch 인스턴스·볼륨에도 실행 템플릿으로 전파합니다. `BedrockProfilesStack`은 산출물 종류(`domain/cost_allocation.py::ARTIFACT_KINDS`)와 설정이 쓰는 모델(global 교차 리전 프로필)의 조합마다 응용 추론 프로필(`<project>-<stage>-<kind>-<model>`, `application_profile_name`)을 만들고 `Kind` 태그를 더합니다. `runtime.run_job`이 실행의 종류를 `cost_allocation`으로 정하고, 모델 팩토리가 그 이름의 프로필 ARN으로 호출합니다(`adapters/bedrock/chat_models.py::_allocated_profile`, 목록 조회는 프로세스마다 한 번). 프로필이 없거나 조회가 실패하면 시스템 프로필로 호출하므로 실행은 막히지 않고 태그만 빠집니다. 사용량 기록과 가격은 ARN이 아니라 원래 모델로 남깁니다(`domain/model_registry.py::profile_source`). 작업 역할은 계정의 `application-inference-profile/*` 호출도 허용합니다.
 - **설정 파일**: 이미지에는 배포하는 체크아웃의 `scholar_lens/configs/config.yaml`이 들어갑니다. 설정을 고치면 `cdk deploy --all`를 다시 해야 Batch에 반영됩니다. `scripts/deploy_infra.py::check_deployable`은 이 파일이나 `s3_bucket_name`이 없으면 배포를 멈춥니다. `cdk` 명령에는 `resources.profile_name`과 같은 `--profile`을 넘깁니다.
 - **알림**: KMS 암호화 SNS 토픽(SSL 강제)에 이메일을 구독합니다. 토픽 정책은 이 계정의 CloudWatch 경보(`aws:SourceAccount`·`aws:SourceArn` 조건)와 실패 규칙 하나의 EventBridge 게시만 허용합니다. EventBridge 대상이 자동으로 만드는 허용은 조건이 없으므로, 그 규칙이 아닌 게시를 막는 Deny 문을 따로 둡니다. 토픽 KMS 키의 EventBridge 허용은 CDK가 만든 그대로입니다.

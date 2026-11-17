@@ -782,3 +782,17 @@ def test_rate_limit_retries_are_bounded(monkeypatch: pytest.MonkeyPatch) -> None
             rate_limit_retries=2,
         )
     assert len(citation_metadata._SEMANTIC_SCHOLAR_LIMITER.penalties) == 2  # type: ignore[attr-defined]
+
+
+def test_a_failed_lookup_logs_no_query_string(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def fake_get(url: str, **kwargs: Any) -> httpx.Response:
+        request = httpx.Request("GET", url, params=kwargs.get("params"))
+        return httpx.Response(404, request=request)
+
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
+    with caplog.at_level("WARNING"):
+        assert CrossrefProvider(mailto="secret@example.org").lookup("T") is None
+    assert "lookup failed" in caplog.text
+    assert "secret@example.org" not in caplog.text and "mailto" not in caplog.text

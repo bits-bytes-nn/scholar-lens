@@ -217,7 +217,7 @@ class CrossrefProvider(MetadataProvider):
             )
             items = data.get("message", {}).get("items", [])
         except (httpx.HTTPError, ValueError) as e:
-            logger.warning("Crossref lookup failed for '%s': %s", title, e)
+            logger.warning("Crossref lookup failed for '%s': %s", title, _described(e))
             return None
         # The top fuzzy hit is often another paper (a survey of ResNet ranks
         # above ResNet itself); take the matching record whose title is
@@ -304,7 +304,7 @@ class OpenAlexProvider(MetadataProvider):
                 ),
             ).get("results", [])
         except (httpx.HTTPError, ValueError) as e:
-            logger.warning("OpenAlex lookup failed for '%s': %s", title, e)
+            logger.warning("OpenAlex lookup failed for '%s': %s", title, _described(e))
             return None
         # The top hit is often a sibling paper ("QA-LoRA" for "LoRA") or a
         # record pairing the right title with another work's abstract and DOI;
@@ -360,7 +360,9 @@ class SemanticScholarProvider(MetadataProvider):
                 headers={"x-api-key": self.api_key} if self.api_key else None,
             ).get("data", [])
         except (httpx.HTTPError, ValueError) as e:
-            logger.warning("Semantic Scholar lookup failed for '%s': %s", title, e)
+            logger.warning(
+                "Semantic Scholar lookup failed for '%s': %s", title, _described(e)
+            )
             return None
         if not data:
             return None
@@ -458,3 +460,19 @@ def _strip_jats(abstract: str | None) -> str | None:
     text = BeautifulSoup(abstract, "html.parser").get_text(separator=" ")
     text = " ".join(text.split())
     return text or None
+
+
+def _described(error: Exception) -> str:
+    """``error`` for a log line without its URL's query: the query carries the
+    polite-pool address and API keys (httpx puts the full URL in its
+    messages)."""
+    if isinstance(error, httpx.HTTPStatusError):
+        where = str(error.request.url.copy_with(query=None))
+        return f"HTTP {error.response.status_code} from {where}"
+    if isinstance(error, httpx.RequestError):
+        try:
+            where = str(error.request.url.copy_with(query=None))
+        except RuntimeError:  # no request attached
+            where = "?"
+        return f"{type(error).__name__} for {where}"
+    return f"{type(error).__name__}: {error}"

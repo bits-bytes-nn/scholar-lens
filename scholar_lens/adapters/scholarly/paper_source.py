@@ -47,6 +47,7 @@ from scholar_lens.adapters.scholarly.arxiv import ArxivHandler, ArxivMetadata
 from scholar_lens.adapters.scholarly.pdf import (
     CHUNK_BYTES,
     NotPdfContentError,
+    PdfDownloadTooSlowError,
     PdfTooLargeError,
     save_pdf,
 )
@@ -353,6 +354,8 @@ class PdfUrlSource(PaperSource):
             raise NotAPdfError(str(e)) from e
         except PdfTooLargeError as e:
             raise PaperSourceError(str(e)) from e
+        except PdfDownloadTooSlowError as e:
+            raise PaperFetchError(str(e)) from e
         except requests.RequestException as e:
             raise PaperFetchError(
                 f"Failed to download PDF from '{self._raw_url}': {e}"

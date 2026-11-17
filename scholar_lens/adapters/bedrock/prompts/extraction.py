@@ -98,6 +98,8 @@ class AttributesExtractionPrompt(BasePrompt):
 class CitationExtractionPrompt(BasePrompt):
     input_variables: list[str] = ["text", "existing_citations"]
     output_variables: list[str] = ["citations", "has_more"]
+    # Every page of a paginated extraction sends the same paper first.
+    cache_after = ("</paper_content>",)
 
     system_prompt_template: str = """
     You are a world-class academic citation extraction specialist with expertise in bibliographic analysis and pattern

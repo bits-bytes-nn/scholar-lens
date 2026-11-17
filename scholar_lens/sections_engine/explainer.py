@@ -620,6 +620,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             "language": self.language,
         }
         best_draft, best_check = "", None
+        best_lacking: list[str] = []  # must-cover items the kept draft's source lacked
         draft_to_revise, feedback = "", ""
         previous_check: SectionCheck | None = None
         for attempt in range(1, self.max_synthesis_attempts + 1):
@@ -663,13 +664,13 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             # A passing draft always wins, even over a higher-scoring one that
             # still has blocking defects.
             if check.passes(self.min_quality_score):
-                best_draft, best_check = draft, check
+                best_draft, best_check, best_lacking = draft, check, missing_source
                 break
             worse = best_check is not None and not check.better_than(
                 best_check, self.min_quality_score
             )
             if not worse:
-                best_draft, best_check = draft, check
+                best_draft, best_check, best_lacking = draft, check, missing_source
             if _stalled(check, previous_check, self.min_quality_score):
                 # Over the bar with full coverage, and another revision did not
                 # reduce the blocking items: more attempts only trade one
@@ -688,6 +689,14 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 feedback += f"\n\n{note}" + (
                     f"\n{rejected}" if rejected and rejected != feedback else ""
                 )
+        if best_draft and best_lacking:
+            # The checker does not count these missing (the section's source
+            # excerpt lacks them), but the plan chose them from the whole
+            # paper: the editor, who reads all of it, adds what it supports.
+            self.open_gaps += [
+                f"[{section.title}] {item} (not in this section's source excerpt)"
+                for item in best_lacking
+            ]
         if best_check is not None and not best_check.passes(self.min_quality_score):
             self.open_defects += [
                 f"[{section.title}] {item}" for item in best_check.must_fix
@@ -818,6 +827,19 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                     "redo the ones still needed with a find copied exactly once "
                     "from the current article:\n"
                     + "\n".join(f"- {r}" for r in skipped[:20])
+                )
+        else:
+            # The last round's report has no round after it: say what is left.
+            if missing:
+                self.notes.append(
+                    f"The edit pass reported {len(missing)} plan item(s) still "
+                    "missing from the review: "
+                    + "; ".join(m[:120] for m in missing[:5])
+                )
+            if skipped:
+                self.notes.append(
+                    f"The edit pass could not apply {len(skipped)} edit(s) in its "
+                    "last round: " + "; ".join(r[:120] for r in skipped[:5])
                 )
         return article
 
