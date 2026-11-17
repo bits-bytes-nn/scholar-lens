@@ -231,13 +231,13 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 
 ### 3.6 호출 수와 한계
 
-8개 절 논문에서 계획 1회, 절마다 집필·검수 약 2–3회, 편집 1–2회, 마무리 1회, 주장 대조 1–2회(문제가 나오면 마무리 1회 추가)입니다. 계획과 편집은 논문 전체를 입력으로 받고, 컨텍스트를 넘으면 `fit_text`가 뒷부분을 잘라냅니다. 이때도 미배정 구간 보정이 남은 문장을 절에 붙입니다. 모든 단계는 `max_total_tokens` 예산 가드를 거칩니다.
+8개 절 논문에서 계획 1회, 절마다 집필·검수 약 2–3회, 편집 1–2회, 본문 대조 1–2회(문제가 나오면 편집 1회 추가), 마무리 1회, 주장 대조 1–2회(문제가 나오면 마무리 1회 추가)입니다. 계획과 편집은 논문 전체를 입력으로 받고, 컨텍스트를 넘으면 `fit_text`가 뒷부분을 잘라냅니다. 이때도 미배정 구간 보정이 남은 문장을 절에 붙입니다. 모든 단계는 `max_total_tokens` 예산 가드를 거칩니다.
 
 ## 4. 요약, 기술 가이드, 논문 서베이 파이프라인
 
 ### 4.1 요약
 
-요약의 기본 엔진(`summary.engine: sections`)입니다(`evidence` 엔진은 4.4절). `sections_engine/summarizer.py::PaperSummarizer.summarize`는 파싱한 논문 전체(컨텍스트에 맞게 자름)와 코드베이스 요약으로 한 번 호출하고, 한국어 요약이 너무 길면 줄이는 호출을 한 번 더 합니다(`_shorten_if_long`, 구조가 깨지면 원문 유지). 그 뒤에도 게시를 막는 문제(`domain/quality_gate.py::publish_blockers`)가 남으면 그 문제만 고치는 표적 수정 호출을 한 번 합니다(`_fix_blockers`, `PaperSummaryFixPrompt`, 지시는 `sections_engine/section_loop.py::TARGETED_FIX`). 고친 글은 문제가 줄고 새 종류가 생기지 않으며 구조를 잃지 않을 때만(`sections_engine/section_loop.py::lost_structure`) 쓰고, 아니면 원문을 두어 발행 검증이 문제를 알립니다. 출력 태그는 `subtitle`, `description`, `summary`, `urls`입니다. 다시 요청하는 단계가 없으므로 TL;DR(앞 인용문)의 수치가 논문에 없거나 설명이 규칙(3.5)을 어기면 PR 메모로 남기고, 마크업이 있거나 페이지 `<title>`보다 길지 않은 설명은 버립니다. 요약은 `> **요약:**` 인용문과 `##` 절 다섯 개(연구 배경, 제안 방법, 구현 방식, 실험 결과, 의의와 한계)로 이루어지고, 실증 논문이면 결과 절에 무게를 둡니다. `domain/post_format.py::summary_with_tldr`가 앞의 인용문을 `## TL;DR` 절로 바꿔 블로그 규칙에 맞춥니다.
+요약의 기본 엔진(`summary.engine: sections`)입니다(`evidence` 엔진은 4.4절). `sections_engine/summarizer.py::PaperSummarizer.summarize`는 파싱한 논문 전체(컨텍스트에 맞게 자름)와 코드베이스 요약으로 한 번 호출하고, 한국어 요약이 너무 길면 줄이는 호출을 한 번 더 합니다(`_shorten_if_long`, 구조가 깨지면 원문 유지). 그 뒤에도 게시를 막는 문제(`domain/quality_gate.py::publish_blockers`)가 남으면 그 문제만 고치는 표적 수정 호출을 한 번 합니다(`_fix_blockers`, `PaperSummaryFixPrompt`, 지시는 `sections_engine/section_loop.py::TARGETED_FIX`). 고친 글은 문제가 줄고 새 종류가 생기지 않으며 구조를 잃지 않을 때만(`sections_engine/section_loop.py::lost_structure`) 쓰고, 아니면 원문을 두어 발행 검증이 문제를 알립니다. 마지막으로 요약 전체를 논문과 대조하고(`_checked_claims`, `summary.check_claims`, 요약 모델), 문제가 나오면 표적 수정을 한 번 더 한 뒤 다시 대조해 문제가 줄었을 때만 씁니다(3.5절 본문 대조와 같은 규칙). 출력 태그는 `subtitle`, `description`, `summary`, `urls`입니다. 다시 요청하는 단계가 없으므로 TL;DR(앞 인용문)의 수치가 논문에 없거나 설명이 규칙(3.5)을 어기면 PR 메모로 남기고, 마크업이 있거나 페이지 `<title>`보다 길지 않은 설명은 버립니다. 요약은 `> **요약:**` 인용문과 `##` 절 다섯 개(연구 배경, 제안 방법, 구현 방식, 실험 결과, 의의와 한계)로 이루어지고, 실증 논문이면 결과 절에 무게를 둡니다. `domain/post_format.py::summary_with_tldr`가 앞의 인용문을 `## TL;DR` 절로 바꿔 블로그 규칙에 맞춥니다.
 
 ### 4.2 기술 가이드
 

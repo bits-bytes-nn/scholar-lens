@@ -41,6 +41,7 @@ from scholar_lens.domain.markdown.math import (
     BLOG_SINGLE_DOLLAR_MATH,
     ESCAPED_UNDERSCORE,
     HANGUL,
+    LONE_DOLLAR_TEX,
     TEXT_COMMAND,
     blog_bare,
     blog_fence_roles,
@@ -764,7 +765,6 @@ def _check_tldr(lines: Lines, offset: int, kind: ArtifactKind, add: Add) -> None
 _ESCAPED_DELIMS = re.compile(r"\\\\[(\[]")
 # TeX next to a single `$`: math that never opened (a price is neither
 # preceded by `}` nor followed by a command).
-_LONE_DOLLAR_TEX = re.compile(r"\}\$(?!\$)|(?<!\$)\$\\[a-zA-Z]")
 _INLINE_SPAN = re.compile(r"\$\$(?:(?!\$\$).)+\$\$")
 _WRAPPED_SPAN = re.compile(r"\$\$((?:(?!\$\$).)+)\$\$", re.DOTALL)
 # Lines that start a new block: a heading, or a list item (which ends a span
@@ -927,7 +927,7 @@ def _check_math(front: dict[str, Any], body: str, offset: int, add: Add) -> None
             i in rendered and _BRACKET_TEX.search(outside)
         ):
             add("error", "math", offset + i, r"math written \( or \[; use $$ … $$")
-        if _LONE_DOLLAR_TEX.search(outside):
+        if LONE_DOLLAR_TEX.search(outside):
             add(
                 "error",
                 "math",
@@ -1376,8 +1376,8 @@ def number_sources(
     header row. What a fact checker needs to tell which model, benchmark or
     setting a number belongs to; "" when ``text`` states no number the
     source has. Matching is :func:`unsourced_numbers`'s. A bare integer
-    under 10 is left out (it is in every paragraph), and the list stops at
-    ``max_chars``."""
+    under 10 is left out (it is in every paragraph); numbers past
+    ``max_chars`` are counted in a closing line, not listed."""
     lines = source.split("\n")
     context: list[str] = []
     heading, table_header = "", ""
@@ -1395,7 +1395,7 @@ def number_sources(
     stated = [_numbers(line) for line in lines]
     blocks: list[str] = []
     seen: set[str] = set()
-    size = 0
+    size = left = 0
     for number in _numbers(text):
         if number.text in seen or (
             not number.scaled
@@ -1433,9 +1433,15 @@ def number_sources(
         if hits:
             block = f"- {number.text}:\n" + "\n".join(hits)
             if size + len(block) > max_chars:
-                break
+                left += 1
+                continue
             blocks.append(block)
             size += len(block)
+    if left:
+        blocks.append(
+            f"({left} more number(s) not listed: not being listed is no evidence "
+            "either way)"
+        )
     return "\n".join(blocks)
 
 

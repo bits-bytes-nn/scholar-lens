@@ -313,6 +313,8 @@ BLOG_SINGLE_DOLLAR_MATH = re.compile(
     r"(?<!\s)\$(?![$\w])",
     re.ASCII,
 )
+# TeX next to a single `$` (lint-posts.rb): math that never opened.
+LONE_DOLLAR_TEX = re.compile(r"\}\$(?!\$)|(?<!\$)\$\\[a-zA-Z]")
 # What a single-dollar formula is looked for in: text outside inline code and
 # $$ spans.
 _KEPT_SPANS = re.compile(r"(`+)[^`\n]*?\1|\$\$.+?\$\$")
@@ -1293,7 +1295,9 @@ def _unnest_text_math(markdown: str) -> str:
 
 def _double_single_dollars(markdown: str) -> str:
     """A formula between single `$`s, as the blog's lint finds one, written
-    between `$$`s (outside code and existing $$ spans); a price is left."""
+    between `$$`s (outside code and existing $$ spans); a price is left. A
+    line with TeX glued to a single `$` ("Adapter$^{H}$") is left for the
+    validator: pairing its dollars would swallow the prose between them."""
     lines = markdown.split("\n")
     roles = fence_roles(lines)
     code = indented_code_lines(lines)
@@ -1301,19 +1305,26 @@ def _double_single_dollars(markdown: str) -> str:
     for k, line in enumerate(lines):
         if roles[k] != "prose" or k in code:
             continue
-        opens = line.count("$$") % 2 == 1
+        prefix = ""
         if in_display:
-            in_display = not opens
-            continue
-        # Text after an unpaired $$ opens a block: math, left alone.
+            if line.count("$$") % 2 == 0:
+                continue
+            # The block closes on this line: the text after it is prose.
+            closed, line = line.split("$$", 1)
+            prefix = closed + "$$"
+        opens = line.count("$$") % 2 == 1
         head, tail = line.rsplit("$$", 1) if opens else (line, None)
+        if LONE_DOLLAR_TEX.search(_KEPT_SPANS.sub("", head)):
+            in_display = opens
+            continue
         out, pos = [], 0
         for kept in _KEPT_SPANS.finditer(head):
             out.append(_doubled(head[pos : kept.start()]))
             out.append(kept.group(0))
             pos = kept.end()
         out.append(_doubled(head[pos:]))
-        lines[k] = "".join(out) + ("" if tail is None else "$$" + tail)
+        lines[k] = prefix + "".join(out) + ("" if tail is None else "$$" + tail)
+        # Text after an unpaired $$ opens a block: math, left alone.
         in_display = opens
     return "\n".join(lines)
 

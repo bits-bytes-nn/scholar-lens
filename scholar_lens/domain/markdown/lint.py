@@ -190,6 +190,9 @@ _ANGLE_TOKEN = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9._-]*)[^<>\n]*?/?>")
 # GFM autolinks — ``<https://…>`` / ``<mailto:…>`` / ``<user@host>`` — are valid
 # Markdown that kramdown renders as links; escaping them produces dead literal
 # text. Recognise and leave them alone (distinct from ``<placeholder>`` tokens).
+# A URL autolink only: kramdown's email autolink takes far fewer characters
+# than _AUTOLINK's email branch ("<svg/onload=x@y>" is a tag to it).
+_URL_AUTOLINK = re.compile(r"<[A-Za-z][A-Za-z0-9+.-]*://[^<>\s]+>")
 _AUTOLINK = re.compile(r"<(?:[A-Za-z][A-Za-z0-9+.-]*://[^<>\s]+|[^<>\s@]+@[^<>\s@]+)>")
 # Constructs that render poorly on the blog's MathJax: the standalone amsmath
 # display environments (use \begin{aligned} inside $$...$$ instead) and \bm (use
@@ -516,7 +519,7 @@ def escape_active_html(markdown: str) -> str:
         if end == -1 or inside(start, end):
             continue
         text = markdown[start:end]
-        if _AUTOLINK.fullmatch(text) and safe_url(text[1:-1]):
+        if _URL_AUTOLINK.fullmatch(text) and safe_url(text[1:-1]):
             # A link kramdown renders (<https://x/online_serving>), not a tag
             # with an "on…" attribute.
             continue

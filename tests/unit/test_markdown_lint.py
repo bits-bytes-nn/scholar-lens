@@ -779,6 +779,7 @@ def test_an_autolink_with_an_on_segment_stays_a_link() -> None:
     link = "* <https://docs.vllm.ai/en/latest/serving/online_serving>"
     assert escape_active_html(link) == link
     assert "&lt;" in escape_active_html("<javascript://x/onload>")
+    assert "&lt;" in escape_active_html("<svg/onload=alert(1)//@x>")
 
 
 def test_a_bold_first_term_stays_in_the_summary_lead() -> None:

@@ -307,6 +307,8 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         # and the coverage it still lacks (nothing to quote).
         self.open_defects: list[str] = []
         self.open_gaps: list[str] = []
+        # Must-cover items a section's source excerpt lacked, for the editor.
+        self.source_gaps: list[str] = []
         # The below-bar sections, for the review notes after the edit pass.
         self.open_sections: list[_OpenSection] = []
         self.linkable_arxiv: set[str] = set()
@@ -701,14 +703,6 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 feedback += f"\n\n{note}" + (
                     f"\n{rejected}" if rejected and rejected != feedback else ""
                 )
-        if best_draft and best_lacking:
-            # The checker does not count these missing (the section's source
-            # excerpt lacks them), but the plan chose them from the whole
-            # paper: the editor, who reads all of it, adds what it supports.
-            self.open_gaps += [
-                f"[{section.title}] {item} (not in this section's source excerpt)"
-                for item in best_lacking
-            ]
         if best_check is not None and not best_check.passes(self.min_quality_score):
             self.open_defects += [
                 f"[{section.title}] {item}" for item in best_check.must_fix
@@ -729,6 +723,15 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                     rule_items=frozenset(rules & set(best_check.must_fix)),
                 )
             )
+        if best_draft and best_lacking:
+            # The checker does not count these missing (the section's source
+            # excerpt lacks them), but the plan chose them from the whole
+            # paper: the editor, who reads all of it, adds what it supports.
+            # Listed after every checker's own gaps (the editor's cap).
+            self.source_gaps += [
+                f"[{section.title}] {item} (not in this section's source excerpt)"
+                for item in best_lacking
+            ]
         return ensure_section_heading(best_draft, section.title) if best_draft else ""
 
     def _open_section_notes(self, article: str, *, edited: bool) -> list[str]:
@@ -779,11 +782,11 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 "fix each with an edit (the quoted text is from the article):\n"
                 + "\n".join(f"- {d[:400]}" for d in self.open_defects[:20])
             )
-        if self.open_gaps:
+        if gaps := [*self.open_gaps, *self.source_gaps]:
             notes.append(
                 "A section checker found these points missing from the article; "
                 "add each only where the paper supports it, otherwise leave it out:\n"
-                + "\n".join(f"- {d[:400]}" for d in self.open_gaps[:20])
+                + "\n".join(f"- {d[:400]}" for d in gaps[:20])
             )
         for round_number in range(1, self.max_edit_rounds + 1):
             round_note = "\n\n".join(notes)
@@ -869,7 +872,8 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                         reserve_tokens=len(article) // 2 + 30_000,
                         label="review body claim check",
                     ),
-                    "number_sources": number_sources(article, paper) or "- none",
+                    "number_sources": number_sources(article, paper, max_chars=16_000)
+                    or "- none",
                     "text": article,
                     "text_name": "review body",
                     "language": self.language,
@@ -897,6 +901,12 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         whose edits are kept only when a recheck finds fewer problems, or as
         many with the disputed sentences gone (:func:`~scholar_lens.domain.quoted.fix_kept`); what is
         left becomes review notes."""
+        if self._over_soft_token_budget():
+            self.notes.append(
+                "The review body was not checked against the paper (the run's "
+                "token budget was spent); check its numbers by hand."
+            )
+            return article
         problems = await self._body_problems(article)
         if problems is None:
             self.notes.append(

@@ -1482,8 +1482,10 @@ async def test_a_body_fix_that_does_not_help_is_undone_and_noted() -> None:
 
     def edit(payload: dict[str, Any]) -> str:
         if "fact checker" in payload["round_note"]:
+            # An edit elsewhere: the disputed sentence stays, so does the problem.
             return (
-                "<edit><find>문제와 동기</find><replace>문제와 동기</replace></edit>"
+                "<edit><find>LoRA의 핵심 아이디어 본문입니다.</find><replace>LoRA의 "
+                "핵심 아이디어를 설명합니다.</replace></edit>"
                 "<missing_coverage>none</missing_coverage>"
             )
         return "<missing_coverage>none</missing_coverage>"
@@ -1492,6 +1494,7 @@ async def test_a_body_fix_that_does_not_help_is_undone_and_noted() -> None:
         editor=FakeChain(edit), body_checker=FakeChain(problem)
     ).run()
     assert WRONG_BODY in review.body
+    assert "LoRA의 핵심 아이디어 본문입니다." in review.body  # the edit was undone
     assert any("Review body claims to check" in n for n in review.notes)
 
 

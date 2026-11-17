@@ -759,7 +759,8 @@ class PaperFinalCheckPrompt(BasePrompt):
       for a table cell, the table's header row. A number attached to a model,
       benchmark, setting or method that none of its passages names is wrong
       (the paper states it for something else); a comparison whose two
-      numbers sit in the other order in the paper is wrong.
+      numbers sit in the other order in the paper is wrong. The list can be
+      partial: a number it does not list is no evidence either way.
     The closing's own assessment (what the result means for practitioners,
     clearly the reviewer's view) is not a factual claim; judge only the facts
     inside it.
@@ -815,7 +816,8 @@ class PaperTextCheckPrompt(BasePrompt):
       passages names what the sentence attaches it to is wrong; a comparison
       whose numbers sit in the other order in the paper is wrong; a derived
       number (ratio, difference) that does not follow from its inputs is
-      wrong;
+      wrong. The list can be partial: a number it does not list is no
+      evidence either way; check it against paper_text;
     - comparisons and rankings checked against every row of the paper's
       table, scope stated wider than the paper's experiments, and a hedge the
       paper uses ("can", "may", "suggests") dropped;
