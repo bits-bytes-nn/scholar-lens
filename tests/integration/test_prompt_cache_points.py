@@ -16,6 +16,7 @@ from scholar_lens.sections_engine.prompts.review import (
     PaperFinalizationPrompt,
     PaperSectionCheckPrompt,
     PaperSectionPrompt,
+    PaperTextCheckPrompt,
 )
 
 POINT = {"cachePoint": {"type": "default"}}
@@ -76,6 +77,7 @@ def _points(request: dict[str, Any]) -> int:
         (PaperSectionCheckPrompt, 1),
         (PaperFinalizationPrompt, 1),
         (PaperFinalCheckPrompt, 1),
+        (PaperTextCheckPrompt, 1),
         (CitationExtractionPrompt, 1),
     ],
 )

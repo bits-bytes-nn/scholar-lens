@@ -212,6 +212,8 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         # Resolved before the run: an except clause that imports could raise.
         rejected_errors = _rejected_input_errors()
         context = build_context(with_overrides(Config.load(), request))
+        # Before any spend: an unreadable secret stops the run here.
+        load_secrets_from_ssm(context, RUN_SECRETS)
     except Exception as e:  # noqa: BLE001 - reported, the job cannot start
         result.error = f"{type(e).__name__}: {e}"
         logger.error("Run could not start: %s", e)
@@ -219,7 +221,6 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         return result
     # Resumes from the stages a run with the same inputs saved, unless fresh.
     context.fresh = request.fresh
-    load_secrets_from_ssm(context, RUN_SECRETS)
     tracker = TokenUsageTracker()
     if job_id is not None and context.s3_handler is not None:
         # status shows a running job's stage and cost so far.
@@ -470,8 +471,8 @@ def run_publish(target: str, *, create_pr: bool, resolved: bool = False) -> JobR
         result.error = f"{type(e).__name__}: {e}"
         logger.error("Publish could not start: %s", e)
         return result
-    load_secrets_from_ssm(context, RUN_SECRETS)
     try:
+        load_secrets_from_ssm(context, RUN_SECRETS)
         request = load_saved_post(context, target)
         result.kind = RESULT_KINDS.get(request.kind)
         check_pr_token(context, create_pr)
