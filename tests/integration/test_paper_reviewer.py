@@ -1367,3 +1367,46 @@ async def test_a_tie_with_more_wrong_claims_keeps_the_original() -> None:
         final_checker=FakeChain(lambda _: next(verdicts)),
     ).run()
     assert WRONG_CLAIM in review.closing
+
+
+async def test_a_section_below_the_bar_with_no_item_listed_is_noted() -> None:
+    def check(_: dict[str, Any]) -> dict[str, str]:
+        return {"quality_score": "50", "missing_items": "none", "must_fix": "none"}
+
+    review = await _reviewer(checker=FakeChain(check), max_synthesis_attempts=1).run()
+    sections = len(json.loads(_plan()[6:-7])["sections"])
+    notes = [n for n in review.notes if "below the quality bar (score 50)" in n]
+    assert len(notes) == sections
+
+
+PASSAGE = "하지만 보상 계산이 느리면 강화학습은 표본 효율이 떨어집니다."
+
+
+def _open(title: str, draft: str) -> Any:
+    from scholar_lens.sections_engine.explainer import _OpenSection
+
+    return _OpenSection(
+        title=title,
+        score=70,
+        draft=draft,
+        missing=[],
+        must_fix=[f'- "{PASSAGE}" → 가능성만 말합니다'],
+        rule_items=frozenset(),
+    )
+
+
+@pytest.mark.parametrize(
+    "article",
+    [  # the passage is in the section, past a fenced "## " line
+        f"## 개요\n\n설명입니다.\n\n```bash\n## install\n```\n\n{PASSAGE}\n\n## 다음\n\n끝.",
+        # two sections share the title: the passage is in the second
+        f"## 개요\n\n첫 설명입니다.\n\n## 개요\n\n{PASSAGE}",
+    ],
+)
+def test_a_quoted_passage_still_in_its_section_stays_open(article: str) -> None:
+    assert _open("개요", f"## 개요\n\n{PASSAGE}").still_open(article)
+
+
+def test_a_quoted_passage_only_in_another_section_is_settled() -> None:
+    article = f"## 개요\n\n고친 설명입니다.\n\n## 다음\n\n{PASSAGE}"
+    assert _open("개요", f"## 개요\n\n{PASSAGE}").still_open(article) == []

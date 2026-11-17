@@ -78,3 +78,9 @@ def test_markup_added_around_a_passage_does_not_fix_it() -> None:
     finding = '"하지만 보상 계산이 느리면 강화학습은 표본 효율이 떨어집니다." → 완화'
     edited = "하지만 **보상 계산**이 느리면 [강화학습](https://x.org)은 표본 효율이 떨어집니다."
     assert not finding_fixed(finding, DRAFT, edited)
+
+
+def test_italics_or_math_marks_added_around_a_passage_do_not_fix_it() -> None:
+    finding = '"하지만 보상 계산이 느리면 강화학습은 표본 효율이 떨어집니다." → 완화'
+    edited = "하지만 *보상 계산*이 느리면 강화학습은 표본 효율이 떨어집니다."
+    assert not finding_fixed(finding, DRAFT, edited)

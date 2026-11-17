@@ -5,7 +5,9 @@ A section checker quotes the passage each defect refers to, and the TL;DR
 claim check copies the sentence it disputes. Once an edit pass has run, a
 finding whose quoted text is gone from the result was acted on; a finding
 that quotes nothing from the checked text (it quotes the paper, or nothing)
-cannot be settled this way and stays open.
+cannot be settled this way and stays open. The rule reads "acted on", not
+"fixed": an edit that rewords the passage for another reason (a gloss added
+inside it) also settles the finding.
 """
 
 from __future__ import annotations
@@ -19,15 +21,16 @@ _ELLIPSIS = re.compile(r"\s*(?:\.\.\.|…)\s*")
 _MIN_FRAGMENT = 6
 
 
-# Markup an edit may add or drop without touching the words: emphasis,
-# inline code marks and a link's target.
+# Markup an edit may add or drop without touching the words: emphasis, code
+# and math marks, and a link's target. Dropping a mark on both sides only
+# makes more text match, so it never settles a finding wrongly.
 _LINK = re.compile(r"\[([^\]\n]*)\]\([^)\n]*\)")
-_MARKS = re.compile(r"\*\*|__|`")
+_MARKS = re.compile(r"[*_`$]")
 
 
 def _squash(text: str) -> str:
-    """``text``'s words: whitespace folded, emphasis, code marks and link
-    targets dropped (on both sides of a comparison)."""
+    """``text``'s words: whitespace folded; emphasis, code and math marks
+    and link targets dropped (on both sides of a comparison)."""
     return " ".join(_MARKS.sub("", _LINK.sub(r"\1", text)).split())
 
 

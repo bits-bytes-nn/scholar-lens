@@ -297,3 +297,22 @@ def test_list_restart_reads_the_previous_items_column(body: str, warns: bool) ->
         if v.rule == "list"
     ]
     assert bool(found) is warns
+
+
+@pytest.mark.parametrize(
+    "body,warns",
+    [  # a nested list's display inside its parent item; a bullet ends a list
+        ("1. 첫째\n   1. 하위\n   2. 하위둘\n\n   $$x$$\n\n2. 둘째", False),
+        ("1. 첫째\n   1. 하위\n\n$$x$$\n\n2. 둘째", True),
+        ("10. 열째\n\n- 불릿\n\n   $$x$$\n\n2. 둘", False),
+    ],
+)
+def test_list_restart_compares_siblings(body: str, warns: bool) -> None:
+    from tests.unit.test_post_validator import warnings
+
+    found = [
+        v
+        for v in warnings(validate_post(make_post(body), SPEC, "review"))
+        if v.rule == "list"
+    ]
+    assert bool(found) is warns

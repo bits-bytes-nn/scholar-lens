@@ -40,6 +40,7 @@ from scholar_lens.adapters.retry import RetryableBase, is_access_error
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.ids import arxiv_link_key, paper_url
 from scholar_lens.domain.markdown.lint import writing_issues
+from scholar_lens.domain.markdown.math import fence_roles
 from scholar_lens.domain.paper.models import (
     Paper,
     ReviewText,
@@ -164,6 +165,7 @@ class SectionCheck:
         )
 
 
+_WRONG = re.compile(r"\|\|\s*wrong\b", re.IGNORECASE)
 _LINE_SUFFIX = re.compile(r" \(line \d+\)$")
 
 
@@ -183,15 +185,22 @@ def _rule_keys(text: str) -> set[str]:
 
 def _section_text(article: str, title: str) -> str:
     """The section of ``article`` under its ``## title`` heading, up to the
-    next ``## `` heading (the edit pass keeps the headings); the whole
-    article when the heading is not found."""
+    next ``## `` heading outside code (the edit pass keeps the headings).
+    The whole article when the heading is not found or is not unique:
+    reading more text only ever keeps an item open."""
     lines = article.split("\n")
+    prose = [role == "prose" for role in fence_roles(lines)]
     heading = f"## {title.strip()}"
-    start = next((i for i, line in enumerate(lines) if line.strip() == heading), None)
-    if start is None:
+    starts = [i for i, line in enumerate(lines) if prose[i] and line.strip() == heading]
+    if len(starts) != 1:
         return article
+    start = starts[0]
     end = next(
-        (j for j in range(start + 1, len(lines)) if lines[j].startswith("## ")),
+        (
+            j
+            for j in range(start + 1, len(lines))
+            if prose[j] and lines[j].startswith("## ")
+        ),
         len(lines),
     )
     return "\n".join(lines[start:end])
@@ -708,13 +717,21 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             must_fix = section.still_open(article)
             fixed = len(section.must_fix) - len(must_fix)
             open_items = [*section.missing, *must_fix]
-            if not open_items:
+            if not open_items and (section.missing or section.must_fix):
                 logger.info(
                     "Review section '%s': its %d open item(s) are no longer in "
                     "the review%s.",
                     section.title,
                     fixed,
                     " after the edit pass" if edited else "",
+                )
+                continue
+            if not open_items:
+                # Below the bar with nothing listed: the score is the finding.
+                notes.append(
+                    f"Review section '{section.title}' was kept below the "
+                    f"quality bar (score {section.score}) with no item listed: "
+                    "check it."
                 )
                 continue
             when = "after the edit pass" if edited else "(no edit pass ran)"
@@ -1125,7 +1142,7 @@ def _fix_kept(
         return True
 
     def wrong(problems: list[str]) -> int:
-        return sum("|| wrong" in p for p in problems)
+        return sum(bool(_WRONG.search(p)) for p in problems)
 
     old_text, new_text = "\n".join(old.values()), "\n".join(new.values())
     return (

@@ -968,9 +968,10 @@ def _check_list_restarts(
         return len(text.expandtabs(4)) - len(text.expandtabs(4).lstrip())
 
     display_indent: int | None = None  # least indent of a display since an item
-    # The content column of the previous ordered item: a display left of it
-    # ended that item, whatever the next item's marker width.
-    previous_column: int | None = None
+    # Per marker indent, the content column of the last ordered item there:
+    # a display left of the previous sibling's content ended it, whatever
+    # the next item's marker width. A shallower item ends the deeper lists.
+    columns: dict[int, int] = {}
     for i, raw in lines:
         line = bare_by_index[i]
         stripped = line.strip()
@@ -985,8 +986,8 @@ def _check_list_restarts(
             if (
                 int(item.group(1)) > 1
                 and display_indent is not None
-                and previous_column is not None
-                and display_indent < previous_column
+                and indent in columns
+                and display_indent < columns[indent]
             ):
                 add(
                     "warning",
@@ -996,9 +997,13 @@ def _check_list_restarts(
                     "it renders as 1.; indent the display (and any paragraph after "
                     "it) into the item above",
                 )
-            display_indent, previous_column = None, column
+            columns = {k: v for k, v in columns.items() if k < indent}
+            columns[indent] = column
+            display_indent = None
             continue
         if _STARTS_ITEM.match(stripped):
+            # A bullet at an ordered list's indent ends that list.
+            columns = {k: v for k, v in columns.items() if k < indent}
             display_indent = None
         elif stripped.startswith("$$") and (
             stripped.endswith("$$") or stripped.count("$$") % 2
