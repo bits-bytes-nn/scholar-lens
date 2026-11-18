@@ -825,3 +825,10 @@ def test_a_tag_in_a_subtitle_keeps_its_name_not_its_brackets() -> None:
         _subtitle("<think> 토큰으로 생각하기", None, "Thinking")
         == "think 토큰으로 생각하기"
     )
+
+
+def test_a_figure_readings_label_never_becomes_alt_text() -> None:
+    from scholar_lens.domain.markdown.lint import figure_markers_to_images
+
+    marker = '[Image: alt="image", src="7.png", caption="(Figure analysis, approximate: A bar chart of loss. More.)"]'
+    assert figure_markers_to_images(marker).strip() == "![A bar chart of loss.](7.png)"

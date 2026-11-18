@@ -11,6 +11,9 @@ from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
+import requests
+from urllib3 import exceptions as urllib3_exceptions
+
 # Cap PDF downloads so a hostile or oversized URL cannot exhaust disk or memory.
 MAX_PDF_BYTES = 100 * 1024 * 1024
 PDF_MAGIC = b"%PDF-"
@@ -41,8 +44,19 @@ def arriving_chunks(response: Any) -> Iterator[bytes]:
     filling a chunk (``iter_content`` does, and with no chunk size it reads
     a sized body whole), so :func:`save_pdf` checks its deadline and cap
     between reads even against a server that trickles."""
-    while chunk := response.raw.read1(CHUNK_BYTES, decode_content=True):
-        yield chunk
+    # urllib3's errors become requests' ones, as iter_content does: callers
+    # tell a dropped download (requests.RequestException) from a bad one.
+    try:
+        while chunk := response.raw.read1(CHUNK_BYTES, decode_content=True):
+            yield chunk
+    except urllib3_exceptions.ProtocolError as e:
+        raise requests.exceptions.ChunkedEncodingError(e) from e
+    except urllib3_exceptions.DecodeError as e:
+        raise requests.exceptions.ContentDecodingError(e) from e
+    except urllib3_exceptions.ReadTimeoutError as e:
+        raise requests.exceptions.ConnectionError(e) from e
+    except urllib3_exceptions.SSLError as e:
+        raise requests.exceptions.SSLError(e) from e
 
 
 def save_pdf(

@@ -1393,7 +1393,8 @@ def unsourced_numbers(text: str, source: str) -> list[str]:
 
 _FIGURE_READING = "(Figure analysis, approximate:"
 # A Latin name ("MMLU", "GPT-4.1", "Qwen3") apart from a Korean particle glued
-# to it ("MMLU에서"), or a Hangul word.
+# to it ("MMLU에서" gives "mmlu"), or a Hangul word of three syllables or more
+# (shorter words are dropped with the other short tokens).
 _WORD = re.compile(r"[A-Za-z][A-Za-z0-9.+-]*[A-Za-z0-9]|[\uac00-\ud7a3]{2,}")
 _STOPWORDS = frozenset(
     "the and for with from that this these those are was were our its their "

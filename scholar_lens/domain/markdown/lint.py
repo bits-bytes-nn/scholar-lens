@@ -895,6 +895,10 @@ def figure_markers_to_images(markdown: str) -> str:
         alt = m.group("alt").strip()
         if alt.lower() in _PLACEHOLDER_ALTS:
             caption = (m.group("caption") or "").strip()
+            # The vision model's reading label is no part of what the image shows.
+            caption = re.sub(
+                r"\(Figure analysis, approximate:\s*(.*?)\)?$", r"\1", caption
+            ).strip()
             alt = re.split(r"(?<=[.!?])\s", caption, maxsplit=1)[0]
         alt = " ".join(alt.split())[:160].replace("[", "(").replace("]", ")")
         alt = alt.replace("|", "/")  # a bare | would split a table cell
