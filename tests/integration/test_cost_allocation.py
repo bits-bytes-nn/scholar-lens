@@ -38,7 +38,7 @@ def _session(profiles: list[dict[str, str]]) -> MagicMock:
 
 
 def test_allocated_runs_call_their_kind_profile_and_price_as_the_model() -> None:
-    factories._application_profiles.cache_clear()
+    factories._PROFILES.clear()
     name = application_profile_name("scholar-lens", "dev", "guide", OPUS)
     session = _session([{"inferenceProfileName": name, "inferenceProfileArn": ARN}])
     with cost_allocation("scholar-lens", "dev", "guide"):
@@ -49,9 +49,26 @@ def test_allocated_runs_call_their_kind_profile_and_price_as_the_model() -> None
 
 
 def test_a_missing_profile_falls_back_to_the_system_profile() -> None:
-    factories._application_profiles.cache_clear()
+    factories._PROFILES.clear()
     with cost_allocation("scholar-lens", "dev", "review"):
         assert factories._allocated_profile(_session([]), "us-west-2", OPUS) == OPUS
+
+
+def test_a_failed_profile_listing_is_not_kept_for_the_run() -> None:
+    from botocore.exceptions import ClientError
+
+    factories._PROFILES.clear()
+    name = application_profile_name("scholar-lens", "dev", "guide", OPUS)
+    session = _session([{"inferenceProfileName": name, "inferenceProfileArn": ARN}])
+    listing = session.client.return_value.list_inference_profiles
+    ok = listing.return_value
+    listing.side_effect = [
+        ClientError({"Error": {"Code": "ThrottlingException"}}, "List"),
+        ok,
+    ]
+    with cost_allocation("scholar-lens", "dev", "guide"):
+        assert factories._allocated_profile(session, "us-west-2", OPUS) == OPUS
+        assert factories._allocated_profile(session, "us-west-2", OPUS) == ARN
 
 
 def test_profiles_stack_tags_one_profile_per_kind_and_model() -> None:

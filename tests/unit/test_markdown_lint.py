@@ -771,3 +771,24 @@ def test_split_and_non_image_targets_are_inert(markdown: str, gone: str) -> None
         assert not re.search(r"(?<!\\)\{:[^}]*=", out)
     else:
         assert gone not in out
+
+
+def test_an_autolink_with_an_on_segment_stays_a_link() -> None:
+    from scholar_lens.domain.markdown.lint import escape_active_html
+
+    link = "* <https://docs.vllm.ai/en/latest/serving/online_serving>"
+    assert escape_active_html(link) == link
+    assert "&lt;" in escape_active_html("<javascript://x/onload>")
+    assert "&lt;" in escape_active_html("<svg/onload=alert(1)//@x>")
+
+
+def test_a_bold_first_term_stays_in_the_summary_lead() -> None:
+    from scholar_lens.domain.post_format import summary_lead
+
+    lead = summary_lead(
+        "> **LoRA**는 사전학습 가중치를 고정합니다.\n\n## 문제\n\n본문."
+    )
+    assert "LoRA" in lead
+    assert "요약" not in summary_lead(
+        "> **요약:** LoRA는 가중치를 고정합니다.\n\n## 문제"
+    )

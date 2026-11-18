@@ -34,3 +34,14 @@ def test_size_cap(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert not (tmp_path / "a.pdf").exists()
     with pytest.raises(PdfTooLargeError):
         save_pdf([b"%PDF-"], tmp_path / "a.pdf", source="x", declared_length="99")
+
+
+def test_a_download_past_its_deadline_leaves_no_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ticks = iter([0.0, 1.0, 400.0])
+    monkeypatch.setattr(pdf_download, "_clock", lambda: next(ticks))
+    path = tmp_path / "p.pdf"
+    with pytest.raises(pdf_download.PdfDownloadTooSlowError):
+        pdf_download.save_pdf([b"%PDF-1.7 a", b"b"], path, source="https://x.org/p")
+    assert not path.exists()

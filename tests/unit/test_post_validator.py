@@ -647,3 +647,32 @@ def test_math_and_lists_in_brackets_are_no_leftover_marker() -> None:
         "x = [[e0, e1], [e2, e3]]",
     ):
         assert not _EVIDENCE_LEFTOVER.search(text)
+
+
+@pytest.mark.parametrize("key", ["title", "subtitle", "paper_author"])
+def test_a_tag_in_a_page_header_field_is_an_error(key: str) -> None:
+    post = make_post(front={key: '"<think> 토큰 분석"'})
+    found = [v for v in validate_post(post, SPEC, "review") if v.rule == "front-matter"]
+    assert found and key in found[0].message
+
+
+def test_number_sources_name_the_table_and_heading_a_number_comes_from() -> None:
+    from scholar_lens.domain.validation import number_sources
+
+    paper = (
+        "## 5 Results\n\nOn GPT-4.1 Mini the prompt is 7.5x shorter.\n\n"
+        "### Qwen3 8B\n\n| Method | Length |\n| --- | --- |\n| GEPA | 9.2x |\n"
+    )
+    found = number_sources("GPT-4.1 Mini에서 프롬프트가 최대 9.2배 짧았습니다.", paper)
+    assert "- 9.2:" in found and "[Qwen3 8B / | Method | Length |]" in found
+    assert "- 7.5:" not in found  # only the numbers the checked text states
+    assert number_sources("숫자가 없습니다.", paper) == ""
+
+
+def test_number_sources_past_the_cap_are_counted_not_listed() -> None:
+    from scholar_lens.domain.validation import number_sources
+
+    paper = "\n".join(f"Row {n} scores {n}.5 on the task." for n in range(10, 40))
+    text = " ".join(f"{n}.5" for n in range(10, 40))
+    found = number_sources(text, paper, max_chars=200)
+    assert "more number(s) not listed" in found and found.count("\n- ") < 29

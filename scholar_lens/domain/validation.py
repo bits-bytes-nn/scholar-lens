@@ -38,8 +38,10 @@ from scholar_lens.domain.markdown.lint import (
 from scholar_lens.domain.markdown.math import (
     BLOG_CODE_SPAN,
     BLOG_FENCE_ROLES,
+    BLOG_SINGLE_DOLLAR_MATH,
     ESCAPED_UNDERSCORE,
     HANGUL,
+    LONE_DOLLAR_TEX,
     TEXT_COMMAND,
     blog_bare,
     blog_fence_roles,
@@ -407,6 +409,9 @@ def body_errors(markdown: str) -> list[str]:
     return found
 
 
+_FRONT_TAG = re.compile(r"<[a-zA-Z/!]")
+
+
 def _check_front_matter(
     front: dict[str, Any],
     body: str,
@@ -421,6 +426,15 @@ def _check_front_matter(
     title = str(front.get("title") or "").strip()
     if not title:
         add("error", "title", 1, "title is empty")
+    # lint-posts.rb: the page writes these into HTML unescaped.
+    for key in ("title", "subtitle", "paper_author"):
+        if _FRONT_TAG.search(str(front.get(key) or "")):
+            add(
+                "error",
+                "front-matter",
+                1,
+                f"{key} has a tag; the page reads it as HTML",
+            )
 
     categories = front.get("categories")
     if not (isinstance(categories, list) and len(categories) == 2):
@@ -751,7 +765,6 @@ def _check_tldr(lines: Lines, offset: int, kind: ArtifactKind, add: Add) -> None
 _ESCAPED_DELIMS = re.compile(r"\\\\[(\[]")
 # TeX next to a single `$`: math that never opened (a price is neither
 # preceded by `}` nor followed by a command).
-_LONE_DOLLAR_TEX = re.compile(r"\}\$(?!\$)|(?<!\$)\$\\[a-zA-Z]")
 _INLINE_SPAN = re.compile(r"\$\$(?:(?!\$\$).)+\$\$")
 _WRAPPED_SPAN = re.compile(r"\$\$((?:(?!\$\$).)+)\$\$", re.DOTALL)
 # Lines that start a new block: a heading, or a list item (which ends a span
@@ -914,12 +927,19 @@ def _check_math(front: dict[str, Any], body: str, offset: int, add: Add) -> None
             i in rendered and _BRACKET_TEX.search(outside)
         ):
             add("error", "math", offset + i, r"math written \( or \[; use $$ … $$")
-        if _LONE_DOLLAR_TEX.search(outside):
+        if LONE_DOLLAR_TEX.search(outside):
             add(
                 "error",
                 "math",
                 offset + i,
                 "TeX next to a single `$`; write the formula as $$ … $$",
+            )
+        elif BLOG_SINGLE_DOLLAR_MATH.search(outside):
+            add(
+                "error",
+                "math",
+                offset + i,
+                "math between single `$`s; write the formula as $$ … $$",
             )
         if _INLINE_SPAN.fullmatch(stripped) and not stripped.startswith("|"):
             # kramdown attribute lists ("{: …}") may follow a display directly.
@@ -1279,6 +1299,7 @@ class _Number:
     # A lone 만 after the number is the unit 10^4 or the particle "only"
     # ("5만 사용"): the number is sourced as either.
     either: bool = False
+    start: int = 0  # where it starts in the text read
 
 
 # The next part of a combined Korean number ("12만 8천", "1억 2000만").
@@ -1311,6 +1332,7 @@ def _numbers(text: str) -> list[_Number]:
                 absolute.normalize(),
                 bool(unit),
                 either=unit == "만" and end == m.end(),
+                start=m.start(),
             )
         )
         pos = max(end, m.start() + 1)
@@ -1339,6 +1361,88 @@ def unsourced_numbers(text: str, source: str) -> list[str]:
         if not found and number.text not in missing:
             missing.append(number.text)
     return missing
+
+
+def number_sources(
+    text: str,
+    source: str,
+    *,
+    per_number: int = 3,
+    window: int = 120,
+    max_chars: int = 8_000,
+) -> str:
+    """For each number of ``text``, the ``source`` (paper) passages stating
+    it, each with where it sits: the nearest heading, and a table row's
+    header row. What a fact checker needs to tell which model, benchmark or
+    setting a number belongs to; "" when ``text`` states no number the
+    source has. Matching is :func:`unsourced_numbers`'s. A bare integer
+    under 10 is left out (it is in every paragraph); numbers past
+    ``max_chars`` are counted in a closing line, not listed."""
+    lines = source.split("\n")
+    context: list[str] = []
+    heading, table_header = "", ""
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            heading, table_header = stripped.lstrip("#").strip(), ""
+        elif not stripped.startswith("|"):
+            table_header = ""
+        elif not table_header:
+            table_header = stripped
+        in_table = stripped.startswith("|") and stripped != table_header
+        parts = [heading, table_header if in_table else ""]
+        context.append(" / ".join(part for part in parts if part))
+    stated = [_numbers(line) for line in lines]
+    blocks: list[str] = []
+    seen: set[str] = set()
+    size = left = 0
+    for number in _numbers(text):
+        if number.text in seen or (
+            not number.scaled
+            and number.value == number.value.to_integral()
+            and abs(number.value) < 10
+        ):
+            continue
+        seen.add(number.text)
+        hits = []
+        for k, found in enumerate(stated):
+            match = next(
+                (
+                    n
+                    for n in found
+                    if (
+                        n.absolute == number.absolute
+                        if number.scaled
+                        else n.value == number.value
+                    )
+                    or (number.either and n.value == number.value)
+                ),
+                None,
+            )
+            if match is None:
+                continue
+            line = lines[k]
+            a, b = max(0, match.start - window), match.start + window
+            excerpt = " ".join(line[a:b].split())
+            where = f"[{context[k]}] " if context[k] else ""
+            hits.append(
+                f"  - {where}{'…' if a else ''}{excerpt}{'…' if b < len(line) else ''}"
+            )
+            if len(hits) == per_number:
+                break
+        if hits:
+            block = f"- {number.text}:\n" + "\n".join(hits)
+            if size + len(block) > max_chars:
+                left += 1
+                continue
+            blocks.append(block)
+            size += len(block)
+    if left:
+        blocks.append(
+            f"({left} more number(s) not listed: not being listed is no evidence "
+            "either way)"
+        )
+    return "\n".join(blocks)
 
 
 _IMAGE_ALT = re.compile(r"!\[([^\]]*)\]\(")

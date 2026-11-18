@@ -777,3 +777,48 @@ def test_spaced_display_between_steps_stays_in_the_list(
 )
 def test_spaced_run_that_does_not_continue_the_list_is_left_alone(src: str) -> None:
     assert norm(src) == src
+
+
+@pytest.mark.parametrize(
+    "src,expected",
+    [
+        ("$A$는 가우시안, $B$는 0으로", "$$A$$는 가우시안, $$B$$는 0으로"),
+        ("가격은 $5와 $10입니다.", "가격은 $5와 $10입니다."),  # prices
+        ("식 `$x_i$`는 코드", "식 `$x_i$`는 코드"),
+        ("```\n$x_i$\n```", "```\n$x_i$\n```"),
+    ],
+)
+def test_single_dollar_math_the_blog_rejects_is_doubled(
+    src: str, expected: str
+) -> None:
+    out = norm(src)
+    assert out == expected and norm(out) == out
+
+
+@pytest.mark.parametrize(
+    "src,expected",
+    [
+        (
+            "The loss $\\mathcal{L}$ is minimized.",
+            "The loss $$\\mathcal{L}$$ is minimized.",
+        ),
+        ("값 $x_{i}$와 $\\alpha = 0.5$", "값 $$x_{i}$$와 $$\\alpha = 0.5$$"),
+        # TeX glued to a word's `$`: pairing would swallow the prose between.
+        (
+            "이를 **Adapter$^{\\text{H}}$**라 하고 **Adapter$^{\\text{L}}$**라",
+            "이를 **Adapter$^{\\text{H}}$**라 하고 **Adapter$^{\\text{L}}$**라",
+        ),
+        ("식 $$a +\nb$$ 에서 $x_1$ 은 입력", "식 $$a + b$$ 에서 $$x_1$$ 은 입력"),
+    ],
+)
+def test_single_dollar_tex_is_doubled_unless_the_pairing_fails(
+    src: str, expected: str
+) -> None:
+    out = norm(src)
+    assert out == expected and norm(out) == out
+
+
+def test_a_dollar_in_a_link_destination_stays() -> None:
+    assert (
+        norm("[t](https://a.b/$c_d$) 와 $x_1$") == "[t](https://a.b/$c_d$) 와 $$x_1$$"
+    )

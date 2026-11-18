@@ -57,9 +57,14 @@ def load_secrets_from_ssm(
 ) -> None:
     """Load the given SSM SecureString params into ``os.environ`` (AWS only).
 
-    Every secret is optional: one that was never written is skipped quietly; any
-    other failure (e.g. AccessDenied) is logged as a warning and the run goes on
-    without it.
+    Every secret is optional: one that was never written is skipped quietly.
+    Any other failure (access denied, KMS, throttling past the SDK's retries)
+    stops the run before it spends anything: going on would quietly drop the
+    search provider or an API key and degrade the post.
+
+    Raises:
+        RuntimeError: a secret could not be read for a reason other than
+            not being set.
     """
     if not is_running_in_aws():
         return
@@ -71,11 +76,14 @@ def load_secrets_from_ssm(
                 context.default_boto_session, f"{base}/{ssm_param.value}"
             )
             logger.info("Set env var '%s' from SSM.", env_var.value)
-        except Exception as e:  # noqa: BLE001 - optional secret; never abort the run
-            if is_parameter_not_found(e):
-                logger.info("SSM secret for '%s' is not set.", env_var.value)
-            else:
-                logger.warning("Could not read '%s' from SSM: %s", env_var.value, e)
+        except Exception as e:
+            if not is_parameter_not_found(e):
+                cause = e.__cause__ or e
+                raise RuntimeError(
+                    f"Could not read '{env_var.value}' from SSM: "
+                    f"{type(cause).__name__}: {cause}"
+                ) from e
+            logger.info("SSM secret for '%s' is not set.", env_var.value)
 
 
 PROJECT = "scholar-lens"
@@ -204,6 +212,8 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         # Resolved before the run: an except clause that imports could raise.
         rejected_errors = _rejected_input_errors()
         context = build_context(with_overrides(Config.load(), request))
+        # Before any spend: an unreadable secret stops the run here.
+        load_secrets_from_ssm(context, RUN_SECRETS)
     except Exception as e:  # noqa: BLE001 - reported, the job cannot start
         result.error = f"{type(e).__name__}: {e}"
         logger.error("Run could not start: %s", e)
@@ -211,7 +221,6 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         return result
     # Resumes from the stages a run with the same inputs saved, unless fresh.
     context.fresh = request.fresh
-    load_secrets_from_ssm(context, RUN_SECRETS)
     tracker = TokenUsageTracker()
     if job_id is not None and context.s3_handler is not None:
         # status shows a running job's stage and cost so far.
@@ -462,8 +471,8 @@ def run_publish(target: str, *, create_pr: bool, resolved: bool = False) -> JobR
         result.error = f"{type(e).__name__}: {e}"
         logger.error("Publish could not start: %s", e)
         return result
-    load_secrets_from_ssm(context, RUN_SECRETS)
     try:
+        load_secrets_from_ssm(context, RUN_SECRETS)
         request = load_saved_post(context, target)
         result.kind = RESULT_KINDS.get(request.kind)
         check_pr_token(context, create_pr)

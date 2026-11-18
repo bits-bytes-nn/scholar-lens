@@ -83,6 +83,8 @@ DEFAULT_MAX_IMAGES_PER_PAGE: int = 12
 # Pages larger than this are skipped (a docs page is far smaller); the cap is
 # enforced while streaming so an oversized body is never fully downloaded.
 MAX_PAGE_BYTES: int = 5 * 1024 * 1024
+# A whole page's download deadline (the read timeout is per chunk).
+PAGE_DEADLINE_SECONDS = 60.0
 # A <meta refresh> is followed only on a stub page this small (a real docs page
 # with an incidental refresh tag keeps its own content), and at most this often.
 _META_REFRESH_MAX_BYTES = 16 * 1024
@@ -1071,11 +1073,19 @@ class WebResearcher:
                 logger.debug("Skipping non-HTML resource '%s' (%s)", url, content_type)
                 return None
             body = bytearray()
+            deadline = _clock() + PAGE_DEADLINE_SECONDS
             for chunk in response.iter_bytes():
                 body.extend(chunk)
                 if len(body) > MAX_PAGE_BYTES:
                     logger.warning(
                         "Skipping '%s': larger than %d bytes.", url, MAX_PAGE_BYTES
+                    )
+                    return None
+                if _clock() > deadline:
+                    # The read timeout is per chunk: a trickling server would
+                    # otherwise hold the run.
+                    logger.warning(
+                        "Skipping '%s': took over %g s.", url, PAGE_DEADLINE_SECONDS
                     )
                     return None
             final_url = str(response.url)
@@ -1328,3 +1338,6 @@ def _is_topic_directory(path: str) -> bool:
         return True
     index = [s.lower() for s in segments].index(version)
     return index < len(segments) - 1
+
+
+_clock = time.monotonic  # replaced in tests

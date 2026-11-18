@@ -46,6 +46,10 @@ class LanguageModelInfo(BaseModel):
         default=None,
         description="(input, output) USD per million tokens for long prompts.",
     )
+    cache_read_price_multiple: float = Field(
+        default=0.1,
+        description="Prompt-cache reads as a multiple of the input price.",
+    )
     supports_thinking: bool = Field(default=False)
     uses_adaptive_thinking: bool = Field(
         default=False,
@@ -130,14 +134,15 @@ _OPUS = (5.0, 25.0)
 # the registry: the Opus 4.x list price, so an unknown model is not
 # under-counted.
 FALLBACK_PRICE_PER_MTOK = _OPUS
-# Prompt-cache tokens are billed as a multiple of the input price (Anthropic
-# models on Bedrock: reads at 0.1x, 5-minute writes at 1.25x).
+# Prompt-cache tokens are billed as a multiple of the input price: 5-minute
+# writes at 1.25x; reads at the model's multiple (0.1x for most, 0.05x for
+# Opus 5.5, 0.025x for Fable 5.1), this one for a model the registry lacks.
 CACHE_READ_PRICE_MULTIPLE = 0.1
 CACHE_WRITE_PRICE_MULTIPLE = 1.25
 # Names the price table above; recorded with every run's usage so a cost
 # estimate can be traced to (and re-priced from) the prices it used. Change
 # it whenever a price changes.
-PRICE_VERSION = "2026-11-03"
+PRICE_VERSION = "2026-11-17"
 
 _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
     LanguageModelId.CLAUDE_V3_HAIKU: _legacy(200_000, 4096, _HAIKU_3),
@@ -213,8 +218,12 @@ _LANGUAGE_MODEL_INFO: dict[LanguageModelId, LanguageModelInfo] = {
     ),
     LanguageModelId.CLAUDE_V4_7_OPUS: _adaptive(_OPUS),
     LanguageModelId.CLAUDE_V4_8_OPUS: _adaptive(_OPUS),
-    LanguageModelId.CLAUDE_V5_5_OPUS: _adaptive((4.0, 20.0)),
-    LanguageModelId.CLAUDE_V5_1_FABLE: _adaptive((10.0, 50.0)),
+    LanguageModelId.CLAUDE_V5_5_OPUS: _adaptive((4.0, 20.0)).model_copy(
+        update={"cache_read_price_multiple": 0.05}
+    ),
+    LanguageModelId.CLAUDE_V5_1_FABLE: _adaptive((10.0, 50.0)).model_copy(
+        update={"cache_read_price_multiple": 0.025}
+    ),
     # NOTE: add new models here
 }
 
@@ -253,9 +262,13 @@ def event_cost_usd(event: UsageEvent) -> float:
     input price (the long-prompt tier is decided on all tokens read)."""
     read = event.input_tokens + event.cache_read_tokens + event.cache_write_tokens
     price_in, price_out = _prices(event.model_id, read)
+    info = model_info_for_invoked_id(event.model_id)
+    read_multiple = (
+        info.cache_read_price_multiple if info else CACHE_READ_PRICE_MULTIPLE
+    )
     return (
         event.input_tokens * price_in
-        + event.cache_read_tokens * price_in * CACHE_READ_PRICE_MULTIPLE
+        + event.cache_read_tokens * price_in * read_multiple
         + event.cache_write_tokens * price_in * CACHE_WRITE_PRICE_MULTIPLE
         + event.output_tokens * price_out
     ) / 1e6
