@@ -225,7 +225,14 @@ class ArxivHandler:
                             response.status_code,
                         )
                         continue
-                    self._limiter.penalize(arxiv_retry_after_seconds(e))
+                    # The last 429 or 5xx holds later requests too (a 5xx
+                    # without a Retry-After gets the server-error hold); a
+                    # 404 holds nothing.
+                    self._limiter.penalize(
+                        arxiv_retry_hold(e, attempt)
+                        if is_retryable_status(response.status_code)
+                        else arxiv_retry_after_seconds(e)
+                    )
                     raise
                 save_pdf(
                     response.iter_content(chunk_size=CHUNK_BYTES),

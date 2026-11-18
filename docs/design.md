@@ -360,7 +360,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 ### 5.2 파싱
 
-- arXiv 소스는 arXiv HTML(`arxiv.org/html`)을 먼저 씁니다(`adapters/documents/parser.py::HTMLRichParser`). HTML 페이지와 PDF 내려받기(`ArxivHandler._download`)도 arXiv API와 같은 프로세스 전역 제한기(3초에 1회)를 거치고, 오류 응답의 `Retry-After`(최대 60초)만큼 이후 arXiv 요청을 미룹니다. 실패하거나 내용이 비면 PDF로 넘어가고, 그림은 PDF에서 잘라 로컬 파일로 씁니다. ar5iv는 쓰지 않습니다. 잃어버린 그림을 HTTP 200의 "NO IMAGE AVAILABLE" PNG로 돌려주기 때문입니다. 이렇게 얻은 논문 그림(arXiv HTML 그림, arXiv 원본에서 되살린 그림, PDF에서 잘라낸 그림)만 게시 단계에서 블로그로 복사합니다(7장).
+- arXiv 소스는 arXiv HTML(`arxiv.org/html`)을 먼저 씁니다(`adapters/documents/parser.py::HTMLRichParser`). HTML 페이지와 PDF 내려받기(`ArxivHandler._download`)도 arXiv API와 같은 프로세스 전역 제한기(3초에 1회)를 거치고, 오류 응답의 `Retry-After`(최대 60초)만큼 이후 arXiv 요청을 미룹니다. PDF 내려받기는 429·5xx면 제한기를 거쳐 두 번 더 시도합니다. 실패하거나 내용이 비면 PDF로 넘어가고, 그림은 PDF에서 잘라 로컬 파일로 씁니다. ar5iv는 쓰지 않습니다. 잃어버린 그림을 HTTP 200의 "NO IMAGE AVAILABLE" PNG로 돌려주기 때문입니다. 이렇게 얻은 논문 그림(arXiv HTML 그림, arXiv 원본에서 되살린 그림, PDF에서 잘라낸 그림)만 게시 단계에서 블로그로 복사합니다(7장).
 - PDF는 Upstage Document Parse(`adapters/documents/parser.py::PDFParser`)로 파싱하고, 실패하면 PyMuPDF로 텍스트만 추출하고(`Content.text_only`), 그림과 표가 없다는 메모를 PR 체크리스트에 올립니다. Upstage 호출은 429·5xx·끊긴 연결만 두 번 더 시도하고(Retry-After가 있으면 최대 60초까지 따름), 읽기 시간 초과는 다시 과금되므로 재시도하지 않습니다. 키를 거부하면(401·403) 텍스트만 추출하지 않고 실행을 멈춥니다(`DocumentParseAuthError`). 빈 응답은 캐시하지 않습니다.
 - 그림은 비전 모델(`figure_analysis_model_id`)로 분석하고, `adapters/documents/parser.py::attach_figure_context`가 본문의 이미지 마커에 경로와 분석을 붙입니다. 짝짓기는 순서가 아니라 요소 ID와 파일명으로 합니다.
 

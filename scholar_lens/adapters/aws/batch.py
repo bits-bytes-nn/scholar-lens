@@ -10,6 +10,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 import boto3
 from botocore.config import Config
@@ -69,6 +70,11 @@ def read_result_manifest(
 
 
 _SUBMIT_ATTEMPTS = 2
+# Lookups after a failed submit, each after a pause: Batch lists a job it just
+# accepted within seconds.
+_LOOKUPS = 2
+_LOOKUP_WAIT_SECONDS = 3.0
+_sleep = time.sleep  # replaced in tests
 
 
 def _submitted(client: Any, job_queue: str, job_name: str) -> str | None:
@@ -109,12 +115,17 @@ def submit_job(
         session, f"{base}/{SSMParams.BATCH_JOB_DEFINITION.value}"
     )
     timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
-    job_name = f"{project_name}-{stage}-{request.kind}-{timestamp}"
-    # SubmitJob has no idempotency token: the SDK must not resend it (a 5xx
-    # after Batch accepted the job would start a second, billed run). A
-    # failure that may have been accepted is looked up by the job's name
-    # before submitting once more.
-    client = session.client("batch", config=Config(retries={"max_attempts": 1}))
+    # A random tail: two submits in one second never share a name, so the
+    # lookup below cannot return another request's job.
+    job_name = f"{project_name}-{stage}-{request.kind}-{timestamp}-{uuid4().hex[:6]}"
+    # SubmitJob has no idempotency token: the SDK must not resend it (a
+    # timeout after Batch accepted the job would start a second, billed run).
+    # A failure that may have been accepted is looked up by the job's name,
+    # after a pause for Batch to list it, before submitting once more.
+    client = session.client(
+        "batch",
+        config=Config(retries={"total_max_attempts": 1, "mode": "standard"}),
+    )
     job_id = ""
     for attempt in range(_SUBMIT_ATTEMPTS):
         try:
@@ -129,14 +140,23 @@ def submit_job(
             )["jobId"]
             break
         except (ClientError, HTTPClientError, BotoConnectionError) as e:
-            last = attempt == _SUBMIT_ATTEMPTS - 1
-            if last or not is_transient_error(e):
+            if not is_transient_error(e):
                 raise BatchJobError(
                     f"Failed to submit Batch job '{job_name}': {e}"
                 ) from e
-            if found := _submitted(client, job_queue, job_name):
+            found = None
+            for _ in range(_LOOKUPS):
+                _sleep(_LOOKUP_WAIT_SECONDS)
+                if found := _submitted(client, job_queue, job_name):
+                    break
+            if found:
                 job_id = found
                 break
+            if attempt == _SUBMIT_ATTEMPTS - 1:
+                raise BatchJobError(
+                    f"Failed to submit Batch job '{job_name}' ({e}); it may have "
+                    "been submitted: check the queue before submitting again."
+                ) from e
             logger.warning("Submitting '%s' failed (%s); trying again.", job_name, e)
     logger.info("Submitted Batch job '%s' (%s)", job_name, job_id)
     return SubmittedJob(
