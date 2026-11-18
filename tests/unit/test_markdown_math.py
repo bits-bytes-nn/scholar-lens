@@ -865,3 +865,16 @@ def test_digit_led_tex_between_single_dollars_is_doubled(
 ) -> None:
     out = norm(src)
     assert out == expected and norm(out) == out
+
+
+@pytest.mark.parametrize(
+    "src,expected",
+    [
+        ("$8e{-5}$", "$$8e{-5}$$"),
+        ("$3\\%$ 향상", "$$3\\%$$ 향상"),
+        ("| $5 | a_b$ |", "| $5 | a_b$ |"),  # never across a table cell
+        ("비용은 $5 (GPU_hours 기준)이며 $x$", "비용은 $5 (GPU_hours 기준)이며 $$x$$"),
+    ],
+)
+def test_digit_led_tex_rule_edges(src: str, expected: str) -> None:
+    assert norm(src) == expected

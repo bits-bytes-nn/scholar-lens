@@ -206,3 +206,27 @@ def test_an_asset_429_holds_the_api_limiter_too(
     clock.now = start - 30.0  # rewind: the asset limiter waits the same 30 s
     assets.acquire()
     assert clock.now >= start
+
+
+async def test_the_last_html_5xx_holds_later_arxiv_requests() -> None:
+    import httpx
+
+    from scholar_lens.adapters.documents.parser import ContentParseError, HTMLParser
+
+    holds: list[float] = []
+
+    class Limiter:
+        def acquire(self) -> None: ...
+
+        def penalize(self, seconds: float) -> None:
+            holds.append(seconds)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(503, request=request)
+
+    parser = HTMLParser.__new__(HTMLParser)
+    parser._async_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    parser._limiter = Limiter()  # type: ignore[assignment]
+    with pytest.raises(ContentParseError):
+        await parser._fetch_html_from_url("https://arxiv.org/html/1")
+    assert holds[-1] > 0 and len(holds) == 3
