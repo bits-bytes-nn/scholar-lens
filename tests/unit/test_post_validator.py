@@ -714,3 +714,12 @@ def test_a_figure_reading_is_marked_and_ranked_after_the_papers_text() -> None:
     lines = found.splitlines()
     assert "Table 2 reports" in lines[1]
     assert "figure reading, not the paper's text" in lines[2]
+
+
+def test_a_tag_in_the_papers_title_is_found_before_writing() -> None:
+    from scholar_lens.domain.validation import paper_metadata_errors
+
+    front = make_post(front={"title": '"Thinking with <think> Tokens"'}).split(
+        "## TL;DR"
+    )[0]
+    assert any("has a tag" in e for e in paper_metadata_errors(front, SPEC, "review"))

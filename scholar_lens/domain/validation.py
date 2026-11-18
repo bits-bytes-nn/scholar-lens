@@ -641,8 +641,11 @@ def _check_file_date(file_name: str, date: Any, add: Add) -> None:
 
 
 # The front-matter rules decided by the paper's attributes alone (organisation,
-# topic and its cover), known once the paper is read.
-_PAPER_METADATA_RULES = frozenset({"paper-author", "categories", "cover"})
+# topic and its cover, a tag in its title or organisation), known once the
+# paper is read (the stub's subtitle and body have none).
+_PAPER_METADATA_RULES = frozenset(
+    {"paper-author", "categories", "cover", "front-matter"}
+)
 
 
 class PaperMetadataError(ValueError):

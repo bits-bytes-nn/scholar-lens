@@ -110,7 +110,6 @@ _MD_LINK = re.compile(r"(?<!\!)\[([^\]]*)\]\(([^)]*)\)")
 _MACRO = re.compile(r"\\([a-zA-Z]+)")
 # A heading line that needs a blank line before it.
 _HEADING = re.compile(r"^#{1,6}[ \t]")
-_HEADING_LINE = re.compile(r"^(#{1,6})[ \t]")
 # Wrapper tags of the generation prompts; never valid in a post.
 ENVELOPE_TAGS: tuple[str, ...] = (
     # The evidence engine's prompt blocks (a writer may echo one).
@@ -1358,7 +1357,8 @@ def _wrap_liquid(markdown: str) -> str:
             while end < len(lines) and roles[end] == "code":
                 end += 1
             block = lines[i : end + 1]
-            before = out[-1].strip() if out else ""
+            # Inside a quote the raw tag carries the quote's "> " too.
+            before = blog_unquote(out[-1]).strip() if out else ""
             needs = any(_LIQUID.search(line) for line in block[1:-1] or block)
             if needs and not re.fullmatch(r"\{%-?\s*raw\s*-?%\}", before):
                 indent = re.match(r"[ \t>]*", lines[i]).group(0)  # type: ignore[union-attr]
@@ -1456,6 +1456,7 @@ def close_quoted_fences(markdown: str) -> str:
     return "\n".join(lines)
 
 
+# A heading line with text (both users: an empty "## " is no heading here).
 _HEADING_LINE = re.compile(r"^(#{1,6})[ \t]+\S")
 _FENCE_LINE = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})")
 

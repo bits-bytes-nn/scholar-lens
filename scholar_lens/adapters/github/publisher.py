@@ -62,6 +62,7 @@ from scholar_lens.domain.markdown.lint import (
     writing_notes,
 )
 from scholar_lens.domain.markdown.math import IMAGE, segments
+from scholar_lens.domain.post_format import with_use_math
 from scholar_lens.domain.post_names import post_slug, same_post
 from scholar_lens.domain.prompt_safety import strip_defanging
 from scholar_lens.domain.publishing import (
@@ -489,6 +490,8 @@ class Publisher:
             markdown = await asyncio.to_thread(localizer.localize, markdown)
             # An image the localizer dropped can leave its heading empty.
             markdown = drop_empty_headings(markdown)
+            # The body is final now: whether it has math is decided on it.
+            markdown = with_use_math(markdown)
         except PostAssetError as e:
             # The finished text must not be lost with its figures.
             rejected = self._save_rejected(markdown, request, [f"- image: {e}"])
