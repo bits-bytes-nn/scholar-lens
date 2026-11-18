@@ -280,8 +280,9 @@ class TestSubmitAndDescribe:
                     project_name="p",
                     stage="dev",
                 )
-        # Two submits (the second after the lookups found nothing), never more.
-        assert sent.count("submitjob") == 2 and sent.count("listjobs") == 4
+        # One submit: a timeout may come after Batch accepted it, so the job
+        # is looked up (twice) and never sent again.
+        assert sent.count("submitjob") == 1 and sent.count("listjobs") == 2
 
     def test_a_job_accepted_before_a_lost_answer_is_not_submitted_twice(
         self, aws: boto3.Session
@@ -292,13 +293,32 @@ class TestSubmitAndDescribe:
         assert self._submit_with(aws, batch).job_id == "job-9"
         assert batch.submit_job.call_count == 1
 
-    def test_a_job_not_found_after_a_server_error_is_submitted_once_more(
+    def test_a_job_not_found_after_a_server_error_is_not_submitted_again(
         self, aws: boto3.Session
     ) -> None:
+        from scholar_lens.adapters.aws.batch import BatchJobError
+
         batch = mock.MagicMock()
         batch.submit_job.side_effect = [self._server_error(), {"jobId": "job-2"}]
         batch.list_jobs.return_value = {"jobSummaryList": []}
-        assert self._submit_with(aws, batch).job_id == "job-2"
+        with pytest.raises(BatchJobError, match="may have been submitted"):
+            self._submit_with(aws, batch)
+        assert batch.submit_job.call_count == 1 and batch.list_jobs.call_count == 2
+        filters = batch.list_jobs.call_args.kwargs["filters"]
+        assert filters[0]["name"] == "JOB_NAME"
+
+    def test_a_throttled_submit_is_sent_again_without_a_lookup(
+        self, aws: boto3.Session
+    ) -> None:
+        from botocore.exceptions import ClientError
+
+        throttled = ClientError(
+            {"Error": {"Code": "TooManyRequestsException"}}, "SubmitJob"
+        )
+        batch = mock.MagicMock()
+        batch.submit_job.side_effect = [throttled, {"jobId": "job-3"}]
+        assert self._submit_with(aws, batch).job_id == "job-3"
+        batch.list_jobs.assert_not_called()
 
     def test_a_failed_lookup_does_not_risk_a_second_submit(
         self, aws: boto3.Session
