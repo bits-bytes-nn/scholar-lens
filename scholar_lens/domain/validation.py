@@ -673,8 +673,7 @@ def _check_paper_author(value: Any, add: Add) -> None:
             "paper-author",
             1,
             f"paper_author (publishing organisation) must be one string, got "
-            f"{value!r}; when the paper names none, give it with --paper-author "
-            "(or set it in a saved post and publish that)",
+            f"{value!r}; when the paper names none, give it with --paper-author",
         )
         return
     if re.search(r"et al", value, re.IGNORECASE):

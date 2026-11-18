@@ -94,6 +94,7 @@ async def run_paper(
             parse_pdf,
             tracker,
             inputs=tools.inputs(request.kind),
+            paper_author=request.paper_author,
         )
         # Before any writing: a figure that cannot be downloaded would be
         # written about and then dropped (or fail the publish step).

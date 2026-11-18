@@ -694,8 +694,8 @@ class Publisher:
             retry=GithubRetry(
                 total=_GITHUB_MAX_RETRIES,
                 max_rate_limit_wait=_GITHUB_MAX_RATE_LIMIT_WAIT_SECONDS,
-                # urllib3's backoff: 2, 4, 8 s with jitter, not three
-                # immediate retries of a 5xx or a timeout.
+                # urllib3's backoff: the first retry at once, then 2 and 4 s
+                # with jitter, not three immediate retries of a 5xx.
                 backoff_factor=1.0,
                 backoff_jitter=1.0,
             ),

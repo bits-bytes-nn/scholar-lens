@@ -111,6 +111,7 @@ async def prepare_paper_data(
     index_factory: CodeIndexFactory | None = None,
     citations_factory: CitationsFactory | None = None,
     affiliation_lookup: Callable[[str, str], str | None] | None = None,
+    paper_author: str | None = None,
 ) -> tuple[Paper, Any, Any]:
     """Parse the paper and extract what the selected generator needs
     (``inputs``): citations and the code index are slow and costly, so they
@@ -160,9 +161,13 @@ async def prepare_paper_data(
         if inputs.citations and citations_factory is not None
         else None
     )
-    attributes = await with_affiliation(
-        attributes, metadata.doi, metadata.title, affiliation_lookup, content.notes
-    )
+    if paper_author:
+        # The request's organisation wins: no lookup, no note about one.
+        attributes = attributes.model_copy(update={"affiliation": paper_author})
+    else:
+        attributes = await with_affiliation(
+            attributes, metadata.doi, metadata.title, affiliation_lookup, content.notes
+        )
     meta_fields = backfill_metadata(
         metadata.model_dump(),
         attributes,

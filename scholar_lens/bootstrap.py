@@ -422,6 +422,7 @@ class PaperToolkit:
         tracker: UsageTracker,
         *,
         inputs: PaperInputs,
+        paper_author: str | None = None,
     ) -> tuple[Paper, Any, Any]:
         session = self.context.bedrock_boto_session
         return await paper_reader.prepare_paper_data(
@@ -439,6 +440,7 @@ class PaperToolkit:
                 sections_writers.citation_summarizer, self.config.citations, session
             ),
             affiliation_lookup=OpenAlexIndex().affiliation,
+            paper_author=paper_author,
         )
 
     def writing(self, post: Literal["review", "summary"]) -> PaperWriting:

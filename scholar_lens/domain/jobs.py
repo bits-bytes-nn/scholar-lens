@@ -10,10 +10,18 @@ so ``status`` can report it after the container is gone.
 
 from __future__ import annotations
 
+import re
 from typing import Literal
 from urllib.parse import urlparse
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from scholar_lens.domain.constants import S3Paths
 from scholar_lens.domain.survey.plan import parse_paper_id
@@ -48,7 +56,7 @@ class JobRequest(BaseModel):
     parse_pdf: bool = False
     # review / summarize: the paper's organisation when the paper names none
     # (it then wins over what the attributes model or OpenAlex give).
-    paper_author: str | None = Field(default=None, min_length=1, max_length=200)
+    paper_author: str | None = Field(default=None, max_length=200)
     # guide: documentation URLs (the authority for commands, flags and
     # defaults), reference material to build on (papers, design docs, deep-dive
     # posts; never official) and optional extra web-search queries.
@@ -81,6 +89,17 @@ class JobRequest(BaseModel):
     # engine; every kind that writes a post its cost ceiling (USD).
     engine: Literal["sections", "evidence"] | None = None
     max_cost_usd: float | None = Field(default=None, gt=0, allow_inf_nan=False)
+
+    @field_validator("paper_author")
+    @classmethod
+    def _clean_paper_author(cls, value: str | None) -> str | None:
+        """Trimmed; blank is none. A tag is refused: the page prints the
+        value as HTML (the blog's lint rejects it)."""
+        if value is None or not value.strip():
+            return None
+        if re.search(r"<[a-zA-Z/!]|&[a-zA-Z#]", value):
+            raise ValueError("paper_author must be plain text (no HTML tag or entity).")
+        return " ".join(value.split())
 
     @model_validator(mode="after")
     def _check_inputs(self) -> JobRequest:

@@ -186,9 +186,9 @@ def _application_profiles(
     boto_session: boto3.Session, region_name: str
 ) -> dict[str, str]:
     """Name -> ARN of the account's application inference profiles; empty
-    when they cannot be listed (calls then go through system profiles). Only
-    a successful listing is kept, so one throttled call does not leave the
-    rest of the run untagged."""
+    when they cannot be listed (calls then go through system profiles). A
+    successful listing or a lasting refusal is kept; a throttled one is not,
+    so it does not leave the rest of the run untagged."""
     key = (boto_session, region_name)
     if key in _PROFILES:
         return _PROFILES[key]

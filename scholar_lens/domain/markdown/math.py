@@ -1307,8 +1307,7 @@ def _double_single_dollars(markdown: str) -> str:
         if roles[k] != "prose" or k in code:
             continue
         if not line.strip():
-            in_display = False  # kramdown closes no $$ block across paragraphs
-            continue
+            continue  # a $$ block stays open across a blank line (the lint's too)
         # `$$` inside inline code opens nothing.
         line_dollars = _CODE_SPAN.sub("", line).count("$$")
         prefix = ""

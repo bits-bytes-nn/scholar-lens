@@ -146,6 +146,8 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 
 1. `Config.load()`와 `build_context`로 boto 세션(기본 리전, Bedrock 리전)과 S3 핸들러를 만듭니다.
 2. AWS 안에서는 SSM SecureString에서 비밀값을 환경 변수로 읽습니다(`load_secrets_from_ssm`). 로컬은 `.env`를 씁니다.
+
+논문 리뷰·요약은 논문을 읽은 직후, 작성을 시작하기 전에 논문 자신이 정하는 front matter(발행 조직, 주제와 표지)를 발행 때와 같은 규칙으로 미리 검사합니다(`application/use_cases/paper.py::_checked_metadata`, `domain/validation.py::paper_metadata_errors`). 어긋나면 비용이 들기 전에 `PaperMetadataError`(rejected)로 멈추고, 논문이 조직을 적지 않았으면 `--paper-author`로 주라고 알립니다.
 3. 파이프라인을 실행합니다. 입력 오류는 `rejected`, `PostValidationError`는 `failed`와 `violations`, `PostAssetError`(논문 그림을 저장하지 못함)는 `failed`, 그 밖의 예외는 `failed`로 기록합니다. 글을 저장한 뒤 블로그 PR 생성이 실패하면(`PublishError`, `application/run.py::publish_artifact`) 경로(`markdown_path`·`s3_uri`)는 그대로 두고 `failed`와 `pr_error`를 기록합니다. worker는 이때 실패 알림을 보내고 10으로 끝납니다. 앞의 두 발행 오류는 `markdown_path`·`s3_uri`에 거부된 초안(`<slug>.rejected.md`)의 위치를 담습니다. `SystemExit`·`KeyboardInterrupt`는 정리 후 다시 던집니다. 로컬 실행의 Ctrl-C는 `cli.py::main`이 받아 `INTERRUPTED_ERROR`인 `failed` 결과를 JSON으로 출력하고 1로 끝냅니다.
 4. `finally`에서 지표를 보내고, AWS 안에서 `TOPIC_ARN`이 있으면 성공·실패 모두 SNS로 알리며(`format_result_notification`), Batch 실행이면 결과 매니페스트를 저장합니다.
 
