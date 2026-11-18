@@ -130,32 +130,31 @@ def test_arxiv_pdf_download_is_paced_and_penalty_capped(tmp_path: Any) -> None:
     import requests
     import responses
 
+    from scholar_lens.adapters.http.rate_limit import ARXIV_RETRIES
     from scholar_lens.adapters.scholarly.arxiv import ArxivHandler
 
     clock = _FakeClock()
     limiter = _limiter_with_clock(clock, rate=1.0, per=3.0, name="arxiv")
     handler = ArxivHandler(client=MagicMock(), rate_limiter=limiter)
     with responses.RequestsMock() as mock:
-        mock.add(
-            responses.GET,
-            "https://arxiv.org/pdf/1",
-            status=429,
-            headers={"Retry-After": "86400"},
-        )
-        mock.add(
-            responses.GET,
-            "https://arxiv.org/pdf/2",
-            status=429,
-            headers={"Retry-After": "86400"},
-        )
+        for name in ("1", "2"):
+            for _ in range(ARXIV_RETRIES + 1):  # each try answers 429
+                mock.add(
+                    responses.GET,
+                    f"https://arxiv.org/pdf/{name}",
+                    status=429,
+                    headers={"Retry-After": "86400"},
+                )
         start = clock.now
         for name in ("1", "2"):
             with pytest.raises(requests.HTTPError):
                 handler._download(
                     f"https://arxiv.org/pdf/{name}", tmp_path / f"{name}.pdf"
                 )
-    # The second download waited out the capped penalty, then set a new one.
-    assert clock.now - start == pytest.approx(60.0)
+    # Every request after the first waited out one capped penalty (60 s,
+    # not the day the server asked for), and the last set a new one.
+    requests_made = 2 * (ARXIV_RETRIES + 1)
+    assert clock.now - start == pytest.approx(60.0 * (requests_made - 1))
     assert limiter._blocked_until - clock.now == pytest.approx(60.0)
 
 

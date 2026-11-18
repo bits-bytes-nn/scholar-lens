@@ -91,7 +91,10 @@ class Github(_Section):
 
 
 class Resources(_Section):
-    project_name: str = Field(min_length=1)
+    # Part of every Batch job name (letters, digits, - and _) and of the
+    # stack's resource names, the tightest of which is an IAM role name
+    # ("<project>-prod-paper-review-instance", 64 characters).
+    project_name: str = Field(min_length=1, max_length=37, pattern=r"^[A-Za-z0-9_-]+$")
     stage: Literal["dev", "prod"] = Field(default="dev")
     profile_name: str | None = Field(default=None)
     default_region_name: str = Field(default="ap-northeast-2")

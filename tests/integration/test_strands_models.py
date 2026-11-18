@@ -132,6 +132,8 @@ def test_a_filtered_call_ends_on_the_fallback_model(monkeypatch) -> None:
     )
     assert seen == ["opus-arn"] * 4 + ["sonnet-arn"]
     assert events[-1].model_id == "global.anthropic.claude-sonnet-5-5"
+    # Every invocation's wall time is on its last usage record.
+    assert all(e.latency_ms is not None and e.latency_ms >= 0 for e in events)
 
 
 def test_shared_context_goes_before_a_cache_point() -> None:

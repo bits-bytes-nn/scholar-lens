@@ -114,7 +114,7 @@ domain (순수 코드: 모델, 규칙, 검증, Markdown, 프롬프트 본문)
 
 stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다. 인자 누락 같은 사용법 오류도 사용법은 stderr로, `{"status": "rejected"}`는 stdout으로 내고 2로 끝납니다. 종료 코드의 정본은 `cli.py` 모듈 docstring이고, `JobResult.status`의 `succeeded`·`failed`·`rejected`가 각각 0·1·2입니다(`_EXIT_BY_STATUS`). 다만 PR을 요청했고 GitHub 연동이 켜져 있는데 PR 생성이 실패하면 산출물은 저장된 `failed` 결과에 `pr_error`가 붙고 5(`EXIT_PR_FAILED`, `cli.py::result_exit_code`)로 끝납니다. `status`도 그 결과 매니페스트에 같은 코드를 돌려줍니다. `publish`도 실행과 같은 코드를 씁니다(글이 아직 규칙을 어기면 1, 글이나 그 옆의 게시 요청이 없거나 읽을 수 없으면 2, PR 실패는 5). 로컬 실행이 설정·자격 증명 문제로 시작하지 못해도 `failed`(1)입니다.
 
-`--remote`는 `SubmittedJob`을 출력하고 0으로 끝납니다. `status`는 결과 매니페스트가 있으면 그 상태의 종료 코드를 돌려줍니다. 없으면 Batch가 `FAILED`일 때 1, 아직 끝나지 않았거나 `--wait`가 시간 초과되면 3, `SUCCEEDED`인데 매니페스트가 없으면 0입니다. `--wait` 중 Batch 조회나 결과 매니페스트 읽기의 요청 제한·5xx·네트워크 오류는 건너뛰고 계속 조회합니다.
+`--remote`는 `SubmittedJob`을 출력하고 0으로 끝납니다. 로컬 자격 증명에는 `batch:SubmitJob`과 `batch:ListJobs` 권한이 필요합니다. SubmitJob에는 멱등성 토큰이 없으므로 SDK가 다시 보내지 않게 하고(`adapters/aws/batch.py::submit_job`), 작업 이름 끝에 임의 6자리를 붙입니다. 요청 제한이나 연결 실패처럼 접수되지 않은 것이 확실한 실패만 잠시 뒤 한 번 더 제출합니다. 시간 초과·5xx처럼 접수됐을 수 있는 실패 뒤에는 이름으로 두 번(3초 간격) 찾아 그 작업을 쓰고, 찾지 못하면 다시 제출하지 않고 "may have been submitted" 오류로 멈춥니다(중복 실행보다 확인 요청이 낫습니다). `status`는 결과 매니페스트가 있으면 그 상태의 종료 코드를 돌려줍니다. 없으면 Batch가 `FAILED`일 때 1, 아직 끝나지 않았거나 `--wait`가 시간 초과되면 3, `SUCCEEDED`인데 매니페스트가 없으면 0입니다. `--wait` 중 Batch 조회나 결과 매니페스트 읽기의 요청 제한·5xx·네트워크 오류는 건너뛰고 계속 조회합니다.
 
 `--remote`, `status`, `costs`가 실패하면(자격 증명, 설정, Batch·S3·Cost Explorer API 오류) `{"status": "error"}`와 종료 코드 4를 냅니다. 다만 `survey write --remote`가 올릴 계획을 읽을 수 없으면(파일 없음, JSON 아님, 버킷 없음, 설정한 버킷이 아닌 `s3://` 계획(`cli.py::_check_plan_bucket`)) 입력 문제이므로 `{"status": "rejected"}`와 종료 코드 2입니다. 작업 실패(1)와 구분하기 위해서이며, 이때 원격 작업의 상태는 알 수 없습니다.
 
@@ -360,8 +360,8 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 ### 5.2 파싱
 
-- arXiv 소스는 arXiv HTML(`arxiv.org/html`)을 먼저 씁니다(`adapters/documents/parser.py::HTMLRichParser`). HTML 페이지와 PDF 내려받기(`ArxivHandler._download`)도 arXiv API와 같은 프로세스 전역 제한기(3초에 1회)를 거치고, 오류 응답의 `Retry-After`(최대 60초)만큼 이후 arXiv 요청을 미룹니다. 실패하거나 내용이 비면 PDF로 넘어가고, 그림은 PDF에서 잘라 로컬 파일로 씁니다. ar5iv는 쓰지 않습니다. 잃어버린 그림을 HTTP 200의 "NO IMAGE AVAILABLE" PNG로 돌려주기 때문입니다. 이렇게 얻은 논문 그림(arXiv HTML 그림, arXiv 원본에서 되살린 그림, PDF에서 잘라낸 그림)만 게시 단계에서 블로그로 복사합니다(7장).
-- PDF는 Upstage Document Parse(`adapters/documents/parser.py::PDFParser`)로 파싱하고, 실패하면 PyMuPDF로 텍스트만 추출하고(`Content.text_only`), 그림과 표가 없다는 메모를 PR 체크리스트에 올립니다. Upstage 호출은 재시도하지 않습니다. 빈 응답은 캐시하지 않습니다.
+- arXiv 소스는 arXiv HTML(`arxiv.org/html`)을 먼저 씁니다(`adapters/documents/parser.py::HTMLRichParser`). HTML 페이지와 PDF 내려받기(`ArxivHandler._download`)도 arXiv API와 같은 프로세스 전역 제한기(3초에 1회)를 거치고, 오류 응답의 `Retry-After`(최대 60초)만큼 이후 arXiv 요청을 미룹니다. PDF 내려받기는 429·5xx면 제한기를 거쳐 두 번 더 시도합니다. 실패하거나 내용이 비면 PDF로 넘어가고, 그림은 PDF에서 잘라 로컬 파일로 씁니다. ar5iv는 쓰지 않습니다. 잃어버린 그림을 HTTP 200의 "NO IMAGE AVAILABLE" PNG로 돌려주기 때문입니다. 이렇게 얻은 논문 그림(arXiv HTML 그림, arXiv 원본에서 되살린 그림, PDF에서 잘라낸 그림)만 게시 단계에서 블로그로 복사합니다(7장).
+- PDF는 Upstage Document Parse(`adapters/documents/parser.py::PDFParser`)로 파싱하고, 실패하면 PyMuPDF로 텍스트만 추출하고(`Content.text_only`), 그림과 표가 없다는 메모를 PR 체크리스트에 올립니다. Upstage 호출은 429·5xx·끊긴 연결만 두 번 더 시도하고(Retry-After가 있으면 최대 60초까지 따름), 읽기 시간 초과는 다시 과금되므로 재시도하지 않습니다. 키를 거부하면(401·403) 텍스트만 추출하지 않고 실행을 멈춥니다(`DocumentParseAuthError`). 빈 응답은 캐시하지 않습니다.
 - 그림은 비전 모델(`figure_analysis_model_id`)로 분석하고, `adapters/documents/parser.py::attach_figure_context`가 본문의 이미지 마커에 경로와 분석을 붙입니다. 짝짓기는 순서가 아니라 요소 ID와 파일명으로 합니다.
 
 ### 5.3 HTML을 텍스트로
