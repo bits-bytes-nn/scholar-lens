@@ -640,6 +640,30 @@ def _check_file_date(file_name: str, date: Any, add: Add) -> None:
             )
 
 
+# The front-matter rules decided by the paper's attributes alone (organisation,
+# topic and its cover), known once the paper is read.
+_PAPER_METADATA_RULES = frozenset({"paper-author", "categories", "cover"})
+
+
+class PaperMetadataError(ValueError):
+    """The paper's own metadata breaks a blog rule the writing cannot change
+    (no organisation, an unknown topic): found before any writing is paid."""
+
+
+def paper_metadata_errors(
+    front_matter: str, spec: PostConventions, kind: ArtifactKind
+) -> list[str]:
+    """The errors :func:`validate_post` would report for ``front_matter`` (a
+    paper post's) that come from the paper's attributes alone, checked on a
+    stub body so that nothing written later can change them."""
+    stub = f"{front_matter}\n## TL;DR\n\n- -\n"
+    return [
+        str(v)
+        for v in validate_post(stub, spec, kind)
+        if v.level == "error" and v.rule in _PAPER_METADATA_RULES
+    ]
+
+
 def _check_paper_author(value: Any, add: Add) -> None:
     """The blog lint's rule (lint-posts.rb line 128): one non-blank string
     without "et al" (any case, anywhere)."""
@@ -649,8 +673,8 @@ def _check_paper_author(value: Any, add: Add) -> None:
             "paper-author",
             1,
             f"paper_author (publishing organisation) must be one string, got "
-            f"{value!r}; when no organisation was found (see the run's notes), "
-            "set it in the saved post and publish it with `scholar-lens publish`",
+            f"{value!r}; when the paper names none, give it with --paper-author "
+            "(or set it in a saved post and publish that)",
         )
         return
     if re.search(r"et al", value, re.IGNORECASE):
@@ -1406,7 +1430,8 @@ def number_sources(
         ):
             continue
         seen.add(number.text)
-        hits = []
+        hits: list[str] = []
+        more = 0
         for k, found in enumerate(stated):
             match = next(
                 (
@@ -1423,6 +1448,9 @@ def number_sources(
             )
             if match is None:
                 continue
+            if len(hits) == per_number:
+                more += 1
+                continue
             line = lines[k]
             a, b = max(0, match.start - window), match.start + window
             excerpt = " ".join(line[a:b].split())
@@ -1430,9 +1458,10 @@ def number_sources(
             hits.append(
                 f"  - {where}{'…' if a else ''}{excerpt}{'…' if b < len(line) else ''}"
             )
-            if len(hits) == per_number:
-                break
         if hits:
+            if more:
+                # The rest are not shown: a number may belong to one of them.
+                hits.append(f"  - (+{more} more passage(s) not listed)")
             block = f"- {number.text}:\n" + "\n".join(hits)
             if size + len(block) > max_chars:
                 left += 1

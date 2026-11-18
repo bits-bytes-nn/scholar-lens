@@ -822,3 +822,8 @@ def test_a_dollar_in_a_link_destination_stays() -> None:
     assert (
         norm("[t](https://a.b/$c_d$) 와 $x_1$") == "[t](https://a.b/$c_d$) 와 $$x_1$$"
     )
+
+
+def test_dollars_in_inline_code_open_no_display_block() -> None:
+    src = "블로그는 `$$`로 씁니다.\n\n그리고 $L_i$입니다."
+    assert norm(src) == "블로그는 `$$`로 씁니다.\n\n그리고 $$L_i$$입니다."

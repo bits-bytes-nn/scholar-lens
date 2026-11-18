@@ -46,6 +46,9 @@ class JobRequest(BaseModel):
     source: str | None = None
     repo_urls: list[str] = Field(default_factory=list)
     parse_pdf: bool = False
+    # review / summarize: the paper's organisation when the paper names none
+    # (it then wins over what the attributes model or OpenAlex give).
+    paper_author: str | None = Field(default=None, min_length=1, max_length=200)
     # guide: documentation URLs (the authority for commands, flags and
     # defaults), reference material to build on (papers, design docs, deep-dive
     # posts; never official) and optional extra web-search queries.
@@ -101,6 +104,8 @@ class JobRequest(BaseModel):
             )
         if self.engine and self.kind not in ("review", "summarize"):
             raise ValueError("Only a review or summary request takes 'engine'.")
+        if self.paper_author and self.kind not in ("review", "summarize"):
+            raise ValueError("Only a review or summary request takes 'paper_author'.")
         if self.kind == "survey_write":
             if not (self.plan and self.plan.strip()):
                 raise ValueError("A survey_write request needs a 'plan'.")

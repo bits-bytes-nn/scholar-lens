@@ -315,6 +315,7 @@ BLOG_SINGLE_DOLLAR_MATH = re.compile(
 )
 # TeX next to a single `$` (lint-posts.rb): math that never opened.
 LONE_DOLLAR_TEX = re.compile(r"\}\$(?!\$)|(?<!\$)\$\\[a-zA-Z]")
+_CODE_SPAN = re.compile(r"(`+)[^`\n]*?\1")
 # What a single-dollar formula is looked for in: text outside inline code, $$
 # spans and link destinations.
 _KEPT_SPANS = re.compile(r"(`+)[^`\n]*?\1|\$\$.+?\$\$|\]\([^)\s]*\)")
@@ -1305,14 +1306,23 @@ def _double_single_dollars(markdown: str) -> str:
     for k, line in enumerate(lines):
         if roles[k] != "prose" or k in code:
             continue
+        if not line.strip():
+            in_display = False  # kramdown closes no $$ block across paragraphs
+            continue
+        # `$$` inside inline code opens nothing.
+        line_dollars = _CODE_SPAN.sub("", line).count("$$")
         prefix = ""
         if in_display:
-            if line.count("$$") % 2 == 0:
+            if line_dollars % 2 == 0:
                 continue
             # The block closes on this line: the text after it is prose.
             closed, line = line.split("$$", 1)
             prefix = closed + "$$"
-        opens = line.count("$$") % 2 == 1
+        opens = (
+            _CODE_SPAN.sub("", line).count("$$") % 2 == 1
+            if prefix
+            else line_dollars % 2 == 1
+        )
         head, tail = line.rsplit("$$", 1) if opens else (line, None)
         out, pos = [], 0
         for kept in _KEPT_SPANS.finditer(head):

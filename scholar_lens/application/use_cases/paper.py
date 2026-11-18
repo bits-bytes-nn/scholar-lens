@@ -41,12 +41,17 @@ from scholar_lens.domain.paper.models import Paper, ReviewText
 from scholar_lens.domain.post_format import (
     format_review,
     format_summary,
+    paper_front_matter,
     paper_post_meta,
 )
 from scholar_lens.domain.post_names import title_slug
 from scholar_lens.domain.publishing import PublishRequest, build_pr_body
 from scholar_lens.domain.tags import controlled_tag_notes, unsupported_tags
-from scholar_lens.domain.validation import unsourced_table_numbers
+from scholar_lens.domain.validation import (
+    PaperMetadataError,
+    paper_metadata_errors,
+    unsourced_table_numbers,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -105,6 +110,7 @@ async def run_paper(
                 else github.review_category
             ),
         )
+        paper = _checked_metadata(context, paper, request, published)
         if request.kind == "summarize":
             document, degraded, blocking, verified = await _generate_summary(
                 context, tools, paper, translation_guideline, tracker, published
@@ -413,6 +419,50 @@ def _figure_captions(paper: Paper) -> dict[str, str]:
         captions[str(fig.path)] = caption
         captions[Path(str(fig.path)).name] = caption
     return captions
+
+
+def _checked_metadata(
+    context: RunContext,
+    paper: Paper,
+    request: JobRequest,
+    published: BlogPost | None,
+) -> Paper:
+    """``paper`` with the request's organisation (``--paper-author``), its
+    front matter checked before any writing is paid for.
+
+    Raises:
+        PaperMetadataError: the paper's attributes break a blog rule no
+            writing can change (no organisation, an unknown topic).
+    """
+    if request.paper_author:
+        attributes = paper.attributes.model_copy(
+            update={"affiliation": request.paper_author.strip()}
+        )
+        paper = paper.model_copy(update={"attributes": attributes})
+    github = context.config.resources.github
+    category = (
+        github.summary_category
+        if request.kind == "summarize"
+        else github.review_category
+    )
+    spec = context.require_conventions()
+    meta = paper_post_meta(
+        paper,
+        category,
+        spec,
+        known_tags=context.require_blog_tags(),
+        published=published,
+    )
+    front = paper_front_matter(paper, category, meta, subtitle="-")
+    kind: Literal["review", "summarize"] = (
+        "summarize" if request.kind == "summarize" else "review"
+    )
+    if errors := paper_metadata_errors(front, spec, kind):
+        raise PaperMetadataError(
+            "The paper's metadata breaks the blog's rules before any writing: "
+            + "; ".join(errors)
+        )
+    return paper
 
 
 def _text_only_notes(paper: Paper) -> list[str]:

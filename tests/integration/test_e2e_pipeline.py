@@ -32,7 +32,7 @@ from scholar_lens.configs import Config
 from scholar_lens.domain.guide.models import TechGuide
 from scholar_lens.domain.jobs import JobRequest
 from scholar_lens.domain.paper.models import Attributes, Content, Figure, Paper
-from scholar_lens.domain.validation import PostValidationError, validate_post
+from scholar_lens.domain.validation import validate_post
 from scholar_lens.sections_engine import writers as sections_writers
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
@@ -215,11 +215,13 @@ class TestSummaryEndToEnd:
         )
         assert any("No controlled tag" in n for n in request["review_notes"])
 
-    async def test_post_with_an_unknown_topic_is_blocked(
+    async def test_post_with_an_unknown_topic_is_blocked_before_writing(
         self,
         pipeline_env,
         monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
     ) -> None:
+        from scholar_lens.domain.validation import PaperMetadataError
+
         context, _ = pipeline_env
         paper = _paper(
             controlled_tags=[],
@@ -227,22 +229,51 @@ class TestSummaryEndToEnd:
             category="Training & Inference",
         )
         monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(paper))
-        monkeypatch.setattr(
-            sections_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
-        )
+        written: list[str] = []
 
-        with pytest.raises(PostValidationError) as info:
+        class Summarizer:
+            def __init__(self, *args, **kwargs) -> None:  # type: ignore[no-untyped-def]
+                written.append("called")
+
+        monkeypatch.setattr(sections_writers, "PaperSummarizer", Summarizer)
+        with pytest.raises(PaperMetadataError, match="categories"):
             await bootstrap.run_use_case(
                 context,
                 JobRequest(kind="summarize", source="2106.09685"),
                 TokenUsageTracker(),
             )
-        rules = {v.rule for v in info.value.violations}
-        # The topic is a closed list; a controlled tag is optional.
-        assert "categories" in rules and "tags" not in rules
-        work_dir = context.papers_dir / "2106_09685"
-        assert not list(work_dir.glob("20*.md"))  # no post written
-        assert list(work_dir.glob("*.rejected.md"))
+        assert written == []  # the topic is known before any writing is paid
+
+    async def test_a_paper_without_an_organisation_stops_before_writing_unless_given(
+        self,
+        pipeline_env,
+        monkeypatch: pytest.MonkeyPatch,  # type: ignore[no-untyped-def]
+    ) -> None:
+        from scholar_lens.domain.validation import PaperMetadataError
+
+        context, _ = pipeline_env
+        paper = _paper(affiliation="N/A")
+        monkeypatch.setattr(paper_reader, "prepare_paper_data", _fake_paper_data(paper))
+        monkeypatch.setattr(
+            sections_writers, "PaperSummarizer", _fake_summarizer(SUMMARY_FROM_MODEL)
+        )
+        with pytest.raises(PaperMetadataError, match="--paper-author"):
+            await bootstrap.run_use_case(
+                context,
+                JobRequest(kind="summarize", source="2106.09685"),
+                TokenUsageTracker(),
+            )
+        outcome = await bootstrap.run_use_case(
+            context,
+            JobRequest(
+                kind="summarize", source="2106.09685", paper_author="Brown University"
+            ),
+            TokenUsageTracker(),
+        )
+        assert (
+            'paper_author: "Brown University"'
+            in Path(outcome.markdown_path).read_text()
+        )
 
 
 class TestGuideEndToEnd:
