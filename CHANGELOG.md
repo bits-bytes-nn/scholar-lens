@@ -2,6 +2,7 @@
 
 Notable changes, newest first. Undated entries predate November 2026. Design decisions are recorded in [docs/adr/](./docs/adr/) and measurement results in [eval/RESULTS.md](./eval/RESULTS.md).
 
+- 2026-11-18: a paper whose text names no organisation the attributes model can read (some list only e-mail addresses) gets the institution most of its authors have in OpenAlex; when OpenAlex records none either, the rejected post's error says to set `paper_author` and run `publish` (the post is kept as before).
 - 2026-11-18: integration fixes left from the review pass.
   - The PDF parse API's Retry-After is honoured (capped at 60 s) on a 429 or 5xx; a rejected key (401/403) stops the run with the key's name instead of falling back to text only.
   - An arXiv PDF download asks again after a 429 or 5xx through the shared arXiv limiter, as the other arXiv fetches do.

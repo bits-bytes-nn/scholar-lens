@@ -30,7 +30,14 @@ from scholar_lens.adapters.scholarly.paper_source import PaperSource
 from scholar_lens.application.ports import PaperInputs
 from scholar_lens.domain.constants import LanguageModelId, LocalPaths
 from scholar_lens.domain.conventions import PostConventions
-from scholar_lens.domain.paper.models import Content, Figure, Paper, backfill_metadata
+from scholar_lens.domain.paper.models import (
+    Attributes,
+    Content,
+    Figure,
+    Paper,
+    backfill_metadata,
+)
+from scholar_lens.domain.text import is_placeholder
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +70,23 @@ class ReaderContext(Protocol):
     def blog_tag_hints(self, limit: int) -> list[str]: ...
 
 
+async def with_affiliation(
+    attributes: Attributes,
+    doi: str | None,
+    lookup: Callable[[str], str | None] | None,
+) -> Attributes:
+    """``attributes`` with an organisation from ``lookup`` (an index's record
+    of the authors' institutions) when the paper names none the model could
+    read: some list only e-mail addresses. Unchanged otherwise."""
+    if not is_placeholder(attributes.affiliation) or lookup is None or not doi:
+        return attributes
+    found = await asyncio.to_thread(lookup, doi)
+    if not found:
+        return attributes
+    logger.info("Affiliation from the paper's index record: %s", found)
+    return attributes.model_copy(update={"affiliation": found})
+
+
 async def prepare_paper_data(
     context: ReaderContext,
     paper_dir: Path,
@@ -74,6 +98,7 @@ async def prepare_paper_data(
     inputs: PaperInputs,
     index_factory: CodeIndexFactory | None = None,
     citations_factory: CitationsFactory | None = None,
+    affiliation_lookup: Callable[[str], str | None] | None = None,
 ) -> tuple[Paper, Any, Any]:
     """Parse the paper and extract what the selected generator needs
     (``inputs``): citations and the code index are slow and costly, so they
@@ -123,8 +148,11 @@ async def prepare_paper_data(
         if inputs.citations and citations_factory is not None
         else None
     )
+    attributes = await with_affiliation(attributes, metadata.doi, affiliation_lookup)
     meta_fields = backfill_metadata(
-        metadata.model_dump(), attributes, title_is_fallback=source.title_is_fallback
+        metadata.model_dump(),
+        attributes,
+        title_is_fallback=source.title_is_fallback,
     )
     paper = Paper(
         **meta_fields,

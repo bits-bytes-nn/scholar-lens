@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+from collections import Counter
 from datetime import date
 from typing import Any
 
@@ -257,6 +258,27 @@ class OpenAlexIndex:
 
     def by_doi(self, doi: str) -> list[dict[str, Any]]:
         return self._works({"filter": f"doi:{doi}"})
+
+    def affiliation(self, doi: str) -> str | None:
+        """The organisation most of the paper's authors belong to in OpenAlex
+        (the first listed on a tie), or None when it records none. A failed
+        lookup is None too (logged): the caller has nothing else to try."""
+        try:
+            works = self.by_doi(doi)
+        except Exception as e:  # noqa: BLE001 - an optional fallback
+            logger.warning("OpenAlex affiliation lookup of %s failed: %s", doi, e)
+            return None
+        names = [
+            name
+            for work in works[:1]
+            for authorship in work.get("authorships") or []
+            for institution in (authorship.get("institutions") or [])[:1]
+            if (name := " ".join(str(institution.get("display_name") or "").split()))
+        ]
+        if not names:
+            return None
+        counts = Counter(names)
+        return max(names, key=lambda n: (counts[n], -names.index(n)))
 
     def by_dois(self, dois: list[str]) -> list[dict[str, Any]]:
         """The works of several DOIs, ``OPENALEX_MAX_DOIS`` per request. A

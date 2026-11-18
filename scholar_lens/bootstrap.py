@@ -438,6 +438,7 @@ class PaperToolkit:
             citations_factory=functools.partial(
                 sections_writers.citation_summarizer, self.config.citations, session
             ),
+            affiliation_lookup=OpenAlexIndex().affiliation,
         )
 
     def writing(self, post: Literal["review", "summary"]) -> PaperWriting:
