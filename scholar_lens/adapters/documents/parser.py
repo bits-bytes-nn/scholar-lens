@@ -442,7 +442,13 @@ class HTMLParser(BaseParser):
                     self._limiter.penalize(arxiv_retry_hold(e, attempt))
                     logger.info("'%s' answered %d; asking arXiv again.", url, status)
                     continue
-                self._limiter.penalize(arxiv_retry_after_seconds(e))
+                # The last 429 or 5xx holds later arXiv requests too (as the
+                # PDF download does); a 404 holds nothing.
+                self._limiter.penalize(
+                    arxiv_retry_hold(e, attempt)
+                    if is_retryable_status(status)
+                    else arxiv_retry_after_seconds(e)
+                )
                 raise ContentParseError(
                     f"Failed to fetch HTML from '{url}': HTTP {status}"
                 ) from e

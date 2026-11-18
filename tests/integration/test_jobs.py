@@ -824,3 +824,10 @@ def test_paper_author_with_html_is_refused(value: str) -> None:
 
     with pytest.raises(ValidationError, match="plain text"):
         JobRequest(kind="review", source="2305.18323", paper_author=value)
+
+
+def test_paper_author_keeps_an_ampersand() -> None:
+    assert (
+        JobRequest(kind="review", source="1", paper_author="AT&T Labs").paper_author
+        == "AT&T Labs"
+    )

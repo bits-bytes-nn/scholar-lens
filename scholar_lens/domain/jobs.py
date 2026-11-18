@@ -97,7 +97,7 @@ class JobRequest(BaseModel):
         value as HTML (the blog's lint rejects it)."""
         if value is None or not value.strip():
             return None
-        if re.search(r"<[a-zA-Z/!]|&[a-zA-Z#]", value):
+        if re.search(r"<[a-zA-Z/!]|&#?\w+;", value):
             raise ValueError("paper_author must be plain text (no HTML tag or entity).")
         return " ".join(value.split())
 

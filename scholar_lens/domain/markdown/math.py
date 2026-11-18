@@ -313,6 +313,17 @@ BLOG_SINGLE_DOLLAR_MATH = re.compile(
     r"(?<!\s)\$(?![$\w])",
     re.ASCII,
 )
+# A formula between single `$`s that starts with a digit ("$256 \times d$",
+# "$1.6\times$"): the blog's rule leaves it to look like a price, and it shows
+# as raw TeX. A TeX command, ^ or _ inside tells it from a price.
+DIGIT_DOLLAR_TEX = re.compile(
+    # No Hangul, `|` (a table cell) or `$` inside; a TeX command, an escaped
+    # symbol (`\%`, `\,`), a brace, ^ or _ marks it as TeX.
+    r"(?<![$\\\w])\$(?=\d)[^$\n|\uac00-\ud7a3]{0,80}?"
+    r"(?:\\[a-zA-Z]+|\\[^a-zA-Z\s]|[\^_{])[^$\n|\uac00-\ud7a3]{0,80}?"
+    r"(?<!\s)\$(?![$\w])",
+    re.ASCII,  # \w as in the blog's Ruby lint: Hangul next to `$` is no word
+)
 # TeX next to a single `$` (lint-posts.rb): math that never opened.
 LONE_DOLLAR_TEX = re.compile(r"\}\$(?!\$)|(?<!\$)\$\\[a-zA-Z]")
 _CODE_SPAN = re.compile(r"(`+)[^`\n]*?\1")
@@ -1342,7 +1353,8 @@ def _double_single_dollars(markdown: str) -> str:
 
 
 def _doubled(text: str) -> str:
-    return BLOG_SINGLE_DOLLAR_MATH.sub(lambda m: f"${m.group(0)}$", text)
+    text = BLOG_SINGLE_DOLLAR_MATH.sub(lambda m: f"${m.group(0)}$", text)
+    return DIGIT_DOLLAR_TEX.sub(lambda m: f"${m.group(0)}$", text)
 
 
 def normalize_math(markdown: str) -> str:

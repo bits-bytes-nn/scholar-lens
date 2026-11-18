@@ -2,6 +2,7 @@
 
 Notable changes, newest first. Undated entries predate November 2026. Design decisions are recorded in [docs/adr/](./docs/adr/) and measurement results in [eval/RESULTS.md](./eval/RESULTS.md).
 
+- 2026-11-18: a formula between single `$`s that starts with a digit and holds a TeX command, `^` or `_` (`$256 \times d$`, `$10^{-5}$`) is written as `$$` too (a price holds none). The arXiv HTML fetch holds later arXiv requests after its last 429 or 5xx, as the PDF download does. The review's body fix and claim checks are recorded as their own usage stages (`body_fix`, `claim_check`).
 - 2026-11-18: a review or summary checks the paper's own front matter (organisation, topic and cover) right after reading the paper, before any writing is paid for, and stops as rejected with what to do (`--paper-author ORG`, a new option for a paper that names none). Number sources say how many passages they leave out; a claim fix that adds a "wrong" claim is never kept; the summary's claim fix must add no writing slip; the single-dollar rewrite resets at paragraphs and ignores `$$` in inline code.
 - 2026-11-18: a paper whose text names no organisation the attributes model can read (some list only e-mail addresses) gets the institution most of its authors have in OpenAlex; OpenAlex's record is used only when its title matches, and the PR notes say the organisation came from OpenAlex; when none is found, the run stops before writing (entry below).
 - 2026-11-18: integration fixes left from the review pass.
