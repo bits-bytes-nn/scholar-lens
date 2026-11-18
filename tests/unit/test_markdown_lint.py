@@ -832,3 +832,23 @@ def test_a_figure_readings_label_never_becomes_alt_text() -> None:
 
     marker = '[Image: alt="image", src="7.png", caption="(Figure analysis, approximate: A bar chart of loss. More.)"]'
     assert figure_markers_to_images(marker).strip() == "![A bar chart of loss.](7.png)"
+
+
+def test_a_tag_in_a_papers_title_keeps_its_name_in_the_front_matter() -> None:
+    from datetime import datetime
+
+    from scholar_lens.domain.paper.models import Attributes, Content, Paper
+    from scholar_lens.domain.post_format import PostMeta, paper_front_matter
+
+    paper = Paper(
+        arxiv_id="1",
+        title="Thinking with <think> Tokens",
+        published=datetime(2025, 1, 1),
+        pdf_url="https://arxiv.org/pdf/1",
+        content=Content(text="x"),
+        attributes=Attributes(affiliation="Lab", category="Language-Models"),
+    )
+    front = paper_front_matter(
+        paper, "Paper Reviews", PostMeta(topic=None, tags=[], cover="/c.jpg")
+    )
+    assert "<think>" not in front and "Thinking with think Tokens" in front

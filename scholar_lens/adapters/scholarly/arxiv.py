@@ -209,7 +209,14 @@ class ArxivHandler:
         for attempt in range(ARXIV_RETRIES + 1):
             self._limiter.acquire()
             try:
-                response = requests.get(url, stream=True, timeout=_ARXIV_TIMEOUT)
+                response = requests.get(
+                    url,
+                    stream=True,
+                    timeout=_ARXIV_TIMEOUT,
+                    # Uncompressed: a gzip stream could hold a read past the
+                    # deadline while it decodes nothing (a PDF is compressed).
+                    headers={"Accept-Encoding": "identity"},
+                )
             except (requests.ConnectionError, requests.Timeout) as e:
                 # A dropped connection or a timeout before the answer: asked
                 # again through the limiter, as a 5xx is.

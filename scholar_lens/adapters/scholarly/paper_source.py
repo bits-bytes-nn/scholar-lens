@@ -273,7 +273,15 @@ class PdfUrlSource(PaperSource):
                 self._limiter.acquire()
             try:
                 response = self._session.request(
-                    method, current, allow_redirects=False, stream=True, **kwargs
+                    method,
+                    current,
+                    allow_redirects=False,
+                    stream=True,
+                    # Uncompressed: a gzip stream could hold a read past the
+                    # download's deadline while it decodes nothing (a PDF is
+                    # compressed already).
+                    headers={"Accept-Encoding": "identity"},
+                    **kwargs,
                 )
             except UnsafeUrlError as e:
                 # The pinned adapter resolves again at connect time.

@@ -285,7 +285,9 @@ def paper_front_matter(
     ``use_math``."""
     categories = [category_type] + ([meta.topic] if meta.topic else [])
     return render_front_matter(
-        title=paper.title,
+        # The page prints it as HTML: a tag in a paper's title ("<think>")
+        # keeps its name, not its brackets.
+        title=_TAG_BRACKETS.sub(r"\1", paper.title),
         seo_title=meta.seo_title,
         subtitle=subtitle,
         date=meta.date or paper.published,
