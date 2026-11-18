@@ -8,6 +8,7 @@ Every CLI option, the survey plan file, resuming and republishing, outputs and e
 | --- | --- | --- |
 | `--repo-url URL` | review, summarize | Ground the text in the paper's code (repeatable) |
 | `--parse-pdf` | review, summarize | Parse the PDF even when arXiv HTML exists |
+| `--paper-author ORG` | review, summarize | The paper's organisation for `paper_author` when the paper names none (a run stops before writing when neither the paper nor OpenAlex gives one) |
 | `--reference URL` | guide | Reference material to build on (repeatable, next to zero or more positional docs URLs, before or after them; a URL given as both counts as docs, listed once): a paper, design doc, deep-dive post or talk page as an HTML page or an arXiv link (other PDFs are not read); always used and listed, never treated as official docs |
 | `--search-query Q` | guide | Web-search query (repeatable); replaces the queries the guide would plan itself |
 | `--no-subpages` | guide | Do not follow in-scope sub-pages |

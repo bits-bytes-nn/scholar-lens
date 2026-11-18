@@ -15,8 +15,11 @@ from __future__ import annotations
 import logging
 import os
 import re
+from collections import Counter
 from datetime import date
 from typing import Any
+
+import httpx
 
 from scholar_lens.adapters.http.rate_limit import RateLimiter
 from scholar_lens.adapters.scholarly import metadata as citation_metadata
@@ -28,6 +31,7 @@ from scholar_lens.domain.survey.plan import (
     normalize_doi,
     unversioned_arxiv_id,
 )
+from scholar_lens.domain.titles import titles_match
 from scholar_lens.domain.venues import venue_name
 
 logger = logging.getLogger(__name__)
@@ -40,6 +44,8 @@ _DATACITE_LIMITER = RateLimiter(rate=5.0, per=1.0, name="datacite")
 # arXiv DOIs looked up per DataCite query (one OR query, one page).
 DATACITE_MAX_IDS = 50
 _TIMEOUT = 30.0
+# The country OpenAlex appends to a company's name: "Meta (United States)".
+_COUNTRY_SUFFIX = re.compile(r"\s*\([^()]+\)$")
 _OPENALEX_FIELDS = (
     "id,doi,title,authorships,publication_date,primary_location,locations,"
     "cited_by_count,abstract_inverted_index,referenced_works,best_oa_location"
@@ -257,6 +263,44 @@ class OpenAlexIndex:
 
     def by_doi(self, doi: str) -> list[dict[str, Any]]:
         return self._works({"filter": f"doi:{doi}"})
+
+    def affiliation(self, doi: str, title: str) -> str | None:
+        """The organisation most of the paper's authors belong to in OpenAlex
+        (the first listed on a tie), without the country OpenAlex appends
+        ("Meta (United States)"); None when it records none, or when its
+        record of ``doi`` is another paper (OpenAlex attaches some arXiv DOIs
+        to the wrong work: ``title`` must match).
+
+        Raises:
+            httpx.HTTPError, ProviderAuthError: the lookup failed (a dropped
+                connection or timeout is asked again once first).
+        """
+        if "," in doi or "|" in doi:  # filter syntax in OpenAlex
+            return None
+        try:
+            works = self.by_doi(doi)
+        except (httpx.TimeoutException, httpx.TransportError):
+            works = self.by_doi(doi)  # one transient blip; an idempotent GET
+        wanted = normalize_doi(doi)
+        work = next(
+            (
+                w
+                for w in works
+                if normalize_doi(w.get("doi")) == wanted
+                and titles_match(title, w.get("title"))
+            ),
+            None,
+        )
+        names = [
+            _COUNTRY_SUFFIX.sub("", name)
+            for authorship in (work or {}).get("authorships") or []
+            for institution in (authorship.get("institutions") or [])[:1]
+            if (name := " ".join(str(institution.get("display_name") or "").split()))
+        ]
+        if not names:
+            return None
+        counts = Counter(names)
+        return max(names, key=lambda n: (counts[n], -names.index(n)))
 
     def by_dois(self, dois: list[str]) -> list[dict[str, Any]]:
         """The works of several DOIs, ``OPENALEX_MAX_DOIS`` per request. A

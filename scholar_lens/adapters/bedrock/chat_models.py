@@ -11,6 +11,7 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
 
+from scholar_lens.adapters.retry import is_transient_error
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.cost_allocation import application_profile_name
 from scholar_lens.domain.model_registry import (
@@ -185,9 +186,9 @@ def _application_profiles(
     boto_session: boto3.Session, region_name: str
 ) -> dict[str, str]:
     """Name -> ARN of the account's application inference profiles; empty
-    when they cannot be listed (calls then go through system profiles). Only
-    a successful listing is kept, so one throttled call does not leave the
-    rest of the run untagged."""
+    when they cannot be listed (calls then go through system profiles). A
+    successful listing or a lasting refusal is kept; a throttled one is not,
+    so it does not leave the rest of the run untagged."""
     key = (boto_session, region_name)
     if key in _PROFILES:
         return _PROFILES[key]
@@ -209,6 +210,9 @@ def _application_profiles(
             region_name,
             e,
         )
+        if not is_transient_error(e):
+            # Access denied stays denied: do not ask (and warn) on every model.
+            _PROFILES[key] = {}
         return {}
     _PROFILES[key] = found
     return found

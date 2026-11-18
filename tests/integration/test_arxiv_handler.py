@@ -306,3 +306,25 @@ def test_a_pdf_download_asks_again_only_after_a_transient_error(
         with pytest.raises(requests.HTTPError):
             handler._download("https://arxiv.org/pdf/1", path)
         assert len(calls) == 1
+
+
+def test_a_pdf_download_asks_again_after_a_dropped_connection(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any
+) -> None:
+    import requests
+
+    answers: list[Any] = [
+        requests.ConnectionError("reset"),
+        _Response(200, b"%PDF-1.7 x"),
+    ]
+
+    def get(url: str, **_: Any) -> _Response:
+        answer = answers.pop(0)
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    monkeypatch.setattr(arxiv_handler.requests, "get", get)
+    path = tmp_path / "p.pdf"
+    _handler_with(MagicMock())._download("https://arxiv.org/pdf/1", path)
+    assert path.exists() and not answers

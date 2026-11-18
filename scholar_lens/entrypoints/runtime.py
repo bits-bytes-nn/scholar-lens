@@ -149,8 +149,10 @@ def _rejected_input_errors() -> tuple[type[BaseException], ...]:
     from scholar_lens.adapters.scholarly.paper_source import PaperSourceError
     from scholar_lens.domain.guide.models import NotTechnicalContentError
     from scholar_lens.domain.survey.plan import SurveyInputError
+    from scholar_lens.domain.validation import PaperMetadataError
 
     return (
+        PaperMetadataError,
         ArxivNotFoundError,
         PaperSourceError,
         NotTechnicalContentError,

@@ -31,7 +31,7 @@ from scholar_lens.domain.post_format import (
     summary_lead,
 )
 from scholar_lens.domain.prompt_safety import fenced, neutralize_prompt_tags
-from scholar_lens.domain.quality_gate import publish_blockers
+from scholar_lens.domain.quality_gate import added_slips, publish_blockers
 from scholar_lens.domain.quoted import fix_kept
 from scholar_lens.domain.text import parse_lines
 from scholar_lens.domain.usage import TokenBudgetExceeded
@@ -399,6 +399,7 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
             and fixed != summary
             and not lost_structure(summary, fixed)
             and _blockers(fixed) <= _blockers(summary)
+            and not added_slips(summary, fixed)
             and (after := await self._claim_problems(fixed, paper)) is not None
             and fix_kept(problems, after, {"s": summary}, {"s": fixed})
         ):

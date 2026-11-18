@@ -89,21 +89,21 @@ def fix_kept(
 ) -> bool:
     """Whether a corrected text (``new``, its parts) replaces ``old`` after a
     claim check found ``before`` in it and a recheck ``after`` in ``new``:
-    fewer problems, or as many, no more of them wrong (rather than
-    unsupported), and every sentence the first check disputed in ``old``
-    gone from ``new``. The recheck's count alone is noisy: a second reading
+    no more of them wrong (rather than unsupported), and fewer problems, or
+    as many with every sentence the first check disputed in ``old`` gone
+    from ``new``. The recheck's count alone is noisy: a second reading
     finds another problem even in a fixed text. A reworded sentence still
     flagged also counts as gone; the notes then list the recheck's problems,
     which quote the new text."""
-    if len(after) < len(before):
-        return True
 
     def wrong(problems: list[str]) -> int:
         return sum(bool(_WRONG.search(p)) for p in problems)
 
+    if wrong(after) > wrong(before):
+        return False  # the fix made a claim the paper contradicts
+    if len(after) < len(before):
+        return True
     old_text, new_text = "\n".join(old.values()), "\n".join(new.values())
-    return (
-        len(after) == len(before)
-        and wrong(after) <= wrong(before)
-        and all(claim_fixed(problem, old_text, new_text) for problem in before)
+    return len(after) == len(before) and all(
+        claim_fixed(problem, old_text, new_text) for problem in before
     )

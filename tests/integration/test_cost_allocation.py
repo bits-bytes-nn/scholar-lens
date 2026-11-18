@@ -100,3 +100,35 @@ def test_profiles_stack_tags_one_profile_per_kind_and_model() -> None:
         assert p["InferenceProfileName"] == application_profile_name(
             "scholar-lens", "dev", tags["Kind"], source.rsplit("/", 1)[1]
         )
+
+
+def test_a_denied_profile_listing_is_kept_for_the_run() -> None:
+    from botocore.exceptions import ClientError
+
+    factories._PROFILES.clear()
+    session = _session([])
+    listing = session.client.return_value.list_inference_profiles
+    listing.side_effect = ClientError(
+        {"Error": {"Code": "AccessDeniedException"}}, "List"
+    )
+    with cost_allocation("scholar-lens", "dev", "guide"):
+        factories._allocated_profile(session, "us-west-2", OPUS)
+        factories._allocated_profile(session, "us-west-2", OPUS)
+    assert listing.call_count == 1
+
+
+def test_a_cut_profile_name_keeps_models_apart() -> None:
+    project = "p" * 37
+    names = {
+        application_profile_name(project, "prod", "survey_write", model)
+        for model in (
+            "global.anthropic.claude-sonnet-5",
+            "global.anthropic.claude-sonnet-5-5",
+        )
+    }
+    assert len(names) == 2 and all(len(n) <= 64 for n in names)
+    # A name that fits is unchanged.
+    assert (
+        application_profile_name("scholar-lens", "dev", "review", OPUS)
+        == "scholar-lens-dev-review-claude-opus-5-5"
+    )

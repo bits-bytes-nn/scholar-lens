@@ -807,3 +807,20 @@ class _Raw:
     def read(self, *_: Any, **__: Any) -> bytes:
         body, self._body = self._body, b""
         return body
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [("  Brown   University ", "Brown University"), ("   ", None), (None, None)],
+)
+def test_paper_author_is_trimmed_and_blank_is_none(value: Any, expected: Any) -> None:
+    request = JobRequest(kind="review", source="2305.18323", paper_author=value)
+    assert request.paper_author == expected
+
+
+@pytest.mark.parametrize("value", ["<b>Lab</b>", "&lt;i&gt;X"])
+def test_paper_author_with_html_is_refused(value: str) -> None:
+    from pydantic import ValidationError
+
+    with pytest.raises(ValidationError, match="plain text"):
+        JobRequest(kind="review", source="2305.18323", paper_author=value)

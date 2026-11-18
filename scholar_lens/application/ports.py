@@ -608,9 +608,12 @@ class PaperTools(Protocol):
         tracker: UsageTracker,
         *,
         inputs: PaperInputs,
+        paper_author: str | None = None,
     ) -> tuple[Paper, Any, Any]:
         """The parsed paper, and the sections engine's code index and
-        citation summarizer (None unless ``inputs`` asks for them)."""
+        citation summarizer (None unless ``inputs`` asks for them).
+        ``paper_author``: the organisation the request gives, which wins
+        over the paper's and the index's."""
         ...
 
     def writing(self, post: Literal["review", "summary"]) -> PaperWriting: ...

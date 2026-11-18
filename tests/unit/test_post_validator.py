@@ -676,3 +676,13 @@ def test_number_sources_past_the_cap_are_counted_not_listed() -> None:
     text = " ".join(f"{n}.5" for n in range(10, 40))
     found = number_sources(text, paper, max_chars=200)
     assert "more number(s) not listed" in found and found.count("\n- ") < 29
+
+
+def test_number_sources_say_how_many_passages_they_leave_out() -> None:
+    from scholar_lens.domain.validation import number_sources
+
+    paper = "\n".join(f"Setting {k}: the model scores 73.7 here." for k in range(5))
+    found = number_sources("점수는 73.7입니다.", paper, per_number=3)
+    assert (
+        found.count("scores 73.7") == 3 and "(+2 more passage(s) not listed)" in found
+    )

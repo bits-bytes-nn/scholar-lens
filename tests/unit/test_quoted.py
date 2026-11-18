@@ -84,3 +84,16 @@ def test_italics_or_math_marks_added_around_a_passage_do_not_fix_it() -> None:
     finding = '"하지만 보상 계산이 느리면 강화학습은 표본 효율이 떨어집니다." → 완화'
     edited = "하지만 *보상 계산*이 느리면 강화학습은 표본 효율이 떨어집니다."
     assert not finding_fixed(finding, DRAFT, edited)
+
+
+def test_a_fix_that_adds_a_wrong_claim_is_not_kept_even_with_fewer_problems() -> None:
+    from scholar_lens.domain.quoted import fix_kept
+
+    before = ["- A는 B입니다. || unsupported: x", "- C는 D입니다. || unsupported: y"]
+    after = ["- E는 F입니다. || wrong: z"]
+    assert not fix_kept(
+        before, after, {"t": "A는 B입니다. C는 D입니다."}, {"t": "E는 F입니다."}
+    )
+    assert fix_kept(
+        before, before[:1], {"t": "A는 B입니다. C는 D입니다."}, {"t": "A는 B입니다."}
+    )

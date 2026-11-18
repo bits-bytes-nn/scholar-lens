@@ -195,6 +195,13 @@ def build_parser() -> argparse.ArgumentParser:
             action="store_true",
             help="Parse the PDF even when an arXiv HTML rendering exists.",
         )
+        sub.add_argument(
+            "--paper-author",
+            help=(
+                "The paper's organisation for the post's paper_author, when the "
+                "paper names none (a run would otherwise stop before writing)."
+            ),
+        )
         add_run_options(sub)
 
     guide = commands.add_parser(
@@ -459,6 +466,7 @@ def _request_from_args(args: argparse.Namespace) -> JobRequest:
         source=args.source,
         repo_urls=args.repo_urls,
         parse_pdf=args.parse_pdf,
+        paper_author=args.paper_author,
         create_pr=args.create_pr,
         fresh=args.fresh,
         engine=args.engine,

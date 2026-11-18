@@ -822,3 +822,29 @@ def test_a_dollar_in_a_link_destination_stays() -> None:
     assert (
         norm("[t](https://a.b/$c_d$) 와 $x_1$") == "[t](https://a.b/$c_d$) 와 $$x_1$$"
     )
+
+
+def test_dollars_in_inline_code_open_no_display_block() -> None:
+    src = "블로그는 `$$`로 씁니다.\n\n그리고 $L_i$입니다."
+    assert norm(src) == "블로그는 `$$`로 씁니다.\n\n그리고 $$L_i$$입니다."
+
+
+@pytest.mark.parametrize(
+    "src,expected",
+    [
+        # A blank line inside a $$ block: the block stays open.
+        ("$$\na = b\n\n\\text{where $x$ is } y\n$$", None),
+        # `$$` in inline code on the same line as a formula.
+        (
+            "블로그는 `$$`로, 식은 $x_i$로 씁니다.",
+            "블로그는 `$$`로, 식은 $$x_i$$로 씁니다.",
+        ),
+    ],
+)
+def test_the_dollar_rewrite_tracks_display_blocks_as_the_lint_does(
+    src: str, expected: str | None
+) -> None:
+    from scholar_lens.domain.markdown.math import _double_single_dollars
+
+    out = _double_single_dollars(src)
+    assert out == (src if expected is None else expected)
