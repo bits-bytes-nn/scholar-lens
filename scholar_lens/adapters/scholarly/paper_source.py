@@ -45,10 +45,10 @@ from scholar_lens.adapters.http.url_guard import (
 )
 from scholar_lens.adapters.scholarly.arxiv import ArxivHandler, ArxivMetadata
 from scholar_lens.adapters.scholarly.pdf import (
-    CHUNK_BYTES,
     NotPdfContentError,
     PdfDownloadTooSlowError,
     PdfTooLargeError,
+    arriving_chunks,
     save_pdf,
 )
 from scholar_lens.domain.ids import arxiv_id_from_url, is_arxiv_host, normalize_arxiv_id
@@ -273,7 +273,15 @@ class PdfUrlSource(PaperSource):
                 self._limiter.acquire()
             try:
                 response = self._session.request(
-                    method, current, allow_redirects=False, stream=True, **kwargs
+                    method,
+                    current,
+                    allow_redirects=False,
+                    stream=True,
+                    # Uncompressed: a gzip stream could hold a read past the
+                    # download's deadline while it decodes nothing (a PDF is
+                    # compressed already).
+                    headers={"Accept-Encoding": "identity"},
+                    **kwargs,
                 )
             except UnsafeUrlError as e:
                 # The pinned adapter resolves again at connect time.
@@ -345,7 +353,7 @@ class PdfUrlSource(PaperSource):
                         f"(Content-Type: {content_type})."
                     )
                 save_pdf(
-                    response.iter_content(chunk_size=CHUNK_BYTES),
+                    arriving_chunks(response),
                     pdf_path,
                     source=self._raw_url,
                     declared_length=response.headers.get("Content-Length"),

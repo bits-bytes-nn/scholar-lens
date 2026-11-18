@@ -285,7 +285,9 @@ def paper_front_matter(
     ``use_math``."""
     categories = [category_type] + ([meta.topic] if meta.topic else [])
     return render_front_matter(
-        title=paper.title,
+        # The page prints it as HTML: a tag in a paper's title ("<think>")
+        # keeps its name, not its brackets.
+        title=_TAG_BRACKETS.sub(r"\1", paper.title),
         seo_title=meta.seo_title,
         subtitle=subtitle,
         date=meta.date or paper.published,
@@ -375,6 +377,9 @@ def derived_subtitle(explicit: str | None, h1: str | None, title: str) -> bool:
     )
 
 
+_TAG_BRACKETS = re.compile(r"<(/?[A-Za-z!][^<>]*)>")
+
+
 def _subtitle(
     explicit: str | None, h1: str | None, title: str, fallback: str = ""
 ) -> str | None:
@@ -382,7 +387,9 @@ def _subtitle(
     of ``fallback`` (the TL;DR); never one that just repeats the title."""
     for candidate in (explicit, h1, _lead_sentence(fallback)):
         if candidate and candidate.strip() and not same_as_title(candidate, title):
-            return candidate.strip()
+            # The page prints it as HTML: a tag the model wrote ("<think>")
+            # keeps its name, not its brackets (the blog's lint rejects one).
+            return _TAG_BRACKETS.sub(r"\1", candidate).strip()
     return None
 
 
@@ -491,3 +498,18 @@ def format_guide(
     titles = guide.source_titles
     sources = link_list((titles.get(url), url) for url in guide.source_urls)
     return f"{front_matter}{content}\n\n- - -\n### Sources\n{sources}\n"
+
+
+def with_use_math(markdown: str) -> str:
+    """``markdown`` with ``use_math: true`` in its front matter exactly when
+    its final body has math (decided once the body can no longer change:
+    references appended, math normalized, code fenced)."""
+    front, body = split_front_matter_text(markdown)
+    if not front:
+        return markdown
+    lines = [
+        ln for ln in front.rstrip("\n").split("\n") if not ln.startswith("use_math:")
+    ]
+    if has_math(body):
+        lines.insert(len(lines) - 1, "use_math: true")  # before the closing ---
+    return "\n".join(lines) + "\n" + body

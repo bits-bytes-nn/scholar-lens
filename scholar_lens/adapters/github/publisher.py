@@ -27,7 +27,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote, urlsplit
 
 import httpx
@@ -62,6 +62,7 @@ from scholar_lens.domain.markdown.lint import (
     writing_notes,
 )
 from scholar_lens.domain.markdown.math import IMAGE, segments
+from scholar_lens.domain.post_format import with_use_math
 from scholar_lens.domain.post_names import post_slug, same_post
 from scholar_lens.domain.prompt_safety import strip_defanging
 from scholar_lens.domain.publishing import (
@@ -116,6 +117,18 @@ _GITHUB_MAX_RETRIES = 3
 # A primary rate limit is waited out only this long (PyGithub's default waits
 # until the reset, up to an hour per retry).
 _GITHUB_MAX_RATE_LIMIT_WAIT_SECONDS = 120
+
+
+class _CappedGithubRetry(GithubRetry):
+    """PyGithub's retry with urllib3's own Retry-After wait capped too
+    (``max_rate_limit_wait`` covers only the rate-limit body check): a
+    response asking for an hour waits the cap, then the retry gives up."""
+
+    def get_retry_after(self, response: Any) -> float | None:
+        seconds = super().get_retry_after(response)
+        if seconds is None:
+            return None
+        return min(seconds, _GITHUB_MAX_RATE_LIMIT_WAIT_SECONDS)
 
 
 class PostAssetError(Exception):
@@ -477,6 +490,8 @@ class Publisher:
             markdown = await asyncio.to_thread(localizer.localize, markdown)
             # An image the localizer dropped can leave its heading empty.
             markdown = drop_empty_headings(markdown)
+            # The body is final now: whether it has math is decided on it.
+            markdown = with_use_math(markdown)
         except PostAssetError as e:
             # The finished text must not be lost with its figures.
             rejected = self._save_rejected(markdown, request, [f"- image: {e}"])
@@ -691,7 +706,7 @@ class Publisher:
         client = Github(
             auth=Auth.Token(token),
             timeout=_GITHUB_TIMEOUT_SECONDS,
-            retry=GithubRetry(
+            retry=_CappedGithubRetry(
                 total=_GITHUB_MAX_RETRIES,
                 max_rate_limit_wait=_GITHUB_MAX_RATE_LIMIT_WAIT_SECONDS,
                 # urllib3's backoff: the first retry at once, then 2 and 4 s

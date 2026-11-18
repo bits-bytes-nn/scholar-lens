@@ -78,7 +78,7 @@ def claim_fixed(problem: str, checked: str, edited: str) -> bool:
     return gone_after_edit([fragments], edited)
 
 
-_WRONG = re.compile(r"\|\|\s*wrong\b", re.IGNORECASE)
+_WRONG = re.compile(r"\|\|[\s*_`]*wrong(?![A-Za-z])", re.IGNORECASE)
 
 
 def fix_kept(
@@ -101,9 +101,37 @@ def fix_kept(
 
     if wrong(after) > wrong(before):
         return False  # the fix made a claim the paper contradicts
-    if len(after) < len(before):
+    # What would be noted: the recheck's problems and the first ones it
+    # missed that are still there word for word.
+    if len(kept_problems(before, after, new)) < len(before):
         return True
     old_text, new_text = "\n".join(old.values()), "\n".join(new.values())
     return len(after) == len(before) and all(
         claim_fixed(problem, old_text, new_text) for problem in before
     )
+
+
+def _disputed(problem: str) -> list[str]:
+    sentence = problem.split("||", 1)[0].strip().removeprefix("-").strip(' "“”')
+    return _fragments(sentence)
+
+
+def kept_problems(
+    before: list[str], after: list[str], new: dict[str, str]
+) -> list[str]:
+    """What to note once a fix is kept: the recheck's problems (``after``)
+    and every first-check problem (``before``) whose disputed sentence is
+    still in ``new`` word for word and the recheck did not report again (a
+    second reading misses some it saw the first time)."""
+    text = _squash("\n".join(new.values()))
+    reported = [" ".join(_disputed(p)).rstrip(".!?。 ") for p in after]
+    kept = list(after)
+    for problem in before:
+        fragments = _disputed(problem)
+        sentence = " ".join(fragments).rstrip(".!?。 ")
+        again = any(
+            sentence and r and (sentence in r or r in sentence) for r in reported
+        )
+        if fragments and all(f in text for f in fragments) and not again:
+            kept.append(problem)
+    return kept

@@ -18,7 +18,15 @@ from scholar_lens.domain.text import is_placeholder
 # markup inside "[text](url)": brackets end the link, a | turns the list item
 # into a table, braces open Liquid. Each becomes an entity (shown as itself).
 _LINK_TEXT_ENTITIES = str.maketrans(
-    {"[": "&#91;", "]": "&#93;", "|": "&#124;", "{": "&#123;", "}": "&#125;"}
+    {
+        "[": "&#91;",
+        "]": "&#93;",
+        "|": "&#124;",
+        "{": "&#123;",
+        "}": "&#125;",
+        # A title's TeX ("$\\pi_0$") would otherwise become math in a link.
+        "$": "&#36;",
+    }
 )
 
 

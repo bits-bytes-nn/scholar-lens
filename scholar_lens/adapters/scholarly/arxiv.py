@@ -26,7 +26,7 @@ from scholar_lens.adapters.http.rate_limit import (
     is_retryable_status,
 )
 from scholar_lens.adapters.retry import is_transient_error
-from scholar_lens.adapters.scholarly.pdf import CHUNK_BYTES, save_pdf
+from scholar_lens.adapters.scholarly.pdf import arriving_chunks, save_pdf
 from scholar_lens.domain.ids import normalize_arxiv_id
 from scholar_lens.domain.titles import title_similarity, titles_match
 
@@ -209,7 +209,14 @@ class ArxivHandler:
         for attempt in range(ARXIV_RETRIES + 1):
             self._limiter.acquire()
             try:
-                response = requests.get(url, stream=True, timeout=_ARXIV_TIMEOUT)
+                response = requests.get(
+                    url,
+                    stream=True,
+                    timeout=_ARXIV_TIMEOUT,
+                    # Uncompressed: a gzip stream could hold a read past the
+                    # deadline while it decodes nothing (a PDF is compressed).
+                    headers={"Accept-Encoding": "identity"},
+                )
             except (requests.ConnectionError, requests.Timeout) as e:
                 # A dropped connection or a timeout before the answer: asked
                 # again through the limiter, as a 5xx is.
@@ -245,7 +252,7 @@ class ArxivHandler:
                     )
                     raise
                 save_pdf(
-                    response.iter_content(chunk_size=CHUNK_BYTES),
+                    arriving_chunks(response),
                     pdf_path,
                     source=url,
                     declared_length=response.headers.get("Content-Length"),

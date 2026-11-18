@@ -792,3 +792,63 @@ def test_a_bold_first_term_stays_in_the_summary_lead() -> None:
     assert "요약" not in summary_lead(
         "> **요약:** LoRA는 가중치를 고정합니다.\n\n## 문제"
     )
+
+
+def test_a_quoted_fence_with_liquid_is_wrapped_once() -> None:
+    from scholar_lens.domain.markdown.lint import publish_body
+
+    src = "> ```text\n> 질문: {{ question }}\n> ```\n"
+    once = publish_body(src)
+    assert once.count("{% raw %}") == 1 and publish_body(once) == once
+
+
+def test_use_math_follows_the_final_body() -> None:
+    from scholar_lens.domain.post_format import with_use_math
+
+    front = '---\ntitle: "T"\nuse_math: true\n---\n'
+    assert "use_math" not in with_use_math(front + "본문만 있습니다.\n")
+    assert "use_math: true" in with_use_math(
+        '---\ntitle: "T"\n---\n' + "식 $$x$$입니다.\n"
+    )
+
+
+def test_a_titles_dollar_is_text_in_a_link() -> None:
+    from scholar_lens.domain.markdown.links import md_link_text
+
+    assert "$" not in md_link_text("$\\pi_0$: A Flow Model")
+
+
+def test_a_tag_in_a_subtitle_keeps_its_name_not_its_brackets() -> None:
+    from scholar_lens.domain.post_format import _subtitle
+
+    assert (
+        _subtitle("<think> 토큰으로 생각하기", None, "Thinking")
+        == "think 토큰으로 생각하기"
+    )
+
+
+def test_a_figure_readings_label_never_becomes_alt_text() -> None:
+    from scholar_lens.domain.markdown.lint import figure_markers_to_images
+
+    marker = '[Image: alt="image", src="7.png", caption="(Figure analysis, approximate: A bar chart of loss. More.)"]'
+    assert figure_markers_to_images(marker).strip() == "![A bar chart of loss.](7.png)"
+
+
+def test_a_tag_in_a_papers_title_keeps_its_name_in_the_front_matter() -> None:
+    from datetime import datetime
+
+    from scholar_lens.domain.paper.models import Attributes, Content, Paper
+    from scholar_lens.domain.post_format import PostMeta, paper_front_matter
+
+    paper = Paper(
+        arxiv_id="1",
+        title="Thinking with <think> Tokens",
+        published=datetime(2025, 1, 1),
+        pdf_url="https://arxiv.org/pdf/1",
+        content=Content(text="x"),
+        attributes=Attributes(affiliation="Lab", category="Language-Models"),
+    )
+    front = paper_front_matter(
+        paper, "Paper Reviews", PostMeta(topic=None, tags=[], cover="/c.jpg")
+    )
+    assert "<think>" not in front and "Thinking with think Tokens" in front

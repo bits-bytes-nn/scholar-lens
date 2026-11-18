@@ -763,7 +763,7 @@ class PDFParser(RichParser):
                 raise DocumentParseAuthError(
                     f"The document parse API rejected the key ({status}); "
                     f"check {EnvVars.UPSTAGE_API_KEY.value}."
-                ) from None
+                ) from e
             raise ContentParseError(f"Document parsing API request failed: {e}") from e
         except (httpx.HTTPError, OSError) as e:
             raise ContentParseError(f"Document parsing API request failed: {e}") from e
@@ -1036,9 +1036,12 @@ def _real_text(value: str | None) -> str:
 def _figure_description(figure: Figure) -> str:
     caption = _real_text(figure.caption)
     analysis = (figure.analysis or "").strip()
-    if caption and analysis:
-        return f"{caption} (Figure analysis, approximate: {analysis})"
-    return caption or analysis
+    if analysis:
+        # Always labelled: checks tell a vision model's reading from the
+        # paper's own words by it, caption or not.
+        reading = f"(Figure analysis, approximate: {analysis})"
+        return f"{caption} {reading}" if caption else reading
+    return caption
 
 
 def attach_figure_context(

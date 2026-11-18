@@ -760,7 +760,11 @@ class PaperFinalCheckPrompt(BasePrompt):
       benchmark, setting or method that none of its passages names is wrong
       (the paper states it for something else); a comparison whose two
       numbers sit in the other order in the paper is wrong. The list can be
-      partial: a number it does not list is no evidence either way.
+      partial: a number it does not list is no evidence either way;
+    - figure readings: text inside "(Figure analysis, approximate: …)" in
+      paper_text, and passages marked "figure reading", are a vision model's
+      reading of a figure, not the paper's words: a claim or value that only
+      such a reading supports is unsupported.
     The closing's own assessment (what the result means for practitioners,
     clearly the reviewer's view) is not a factual claim; judge only the facts
     inside it.
@@ -823,6 +827,10 @@ class PaperTextCheckPrompt(BasePrompt):
       paper uses ("can", "may", "suggests") dropped;
     - a cause or mechanism the paper does not state, presented as the
       paper's.
+    - figure readings: text inside "(Figure analysis, approximate: …)" in
+      paper_text, and passages marked "figure reading", are a vision model's
+      reading of a figure, not the paper's words: a claim or value that only
+      such a reading supports is unsupported.
     Explanations, analogies and the writer's own clearly marked assessment
     are not factual claims; judge only the facts inside them. Code, formulas
     and image lines are not checked.

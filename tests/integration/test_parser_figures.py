@@ -309,7 +309,7 @@ class TestAttachFigureContext:
         out = attach_figure_context(
             '[Image: alt="", src="3.png"]', [fig], is_pdf_parsed=True
         )
-        assert out.endswith('caption="A bar chart."]')
+        assert out.endswith('caption="(Figure analysis, approximate: A bar chart.)"]')
 
     def test_placeholder_alt_is_not_a_marker_alt(self) -> None:
         from scholar_lens.adapters.documents.parser import attach_figure_context
@@ -332,7 +332,9 @@ class TestAttachFigureContext:
             is_pdf_parsed=True,
         )
         assert out.startswith("a  b ")
-        assert 'src="7.png", caption="A bar chart."' in out
+        assert (
+            'src="7.png", caption="(Figure analysis, approximate: A bar chart.)"' in out
+        )
 
     def test_sourceless_markers_are_counted_and_captions_kept(self) -> None:
         # A table cell holding image markers without a src: no image is
@@ -763,3 +765,12 @@ def test_the_parse_retry_waits_the_retry_after_it_is_given() -> None:
     assert _parse_retry_wait(state({"Retry-After": "45"})) == 45
     assert _parse_retry_wait(state({"Retry-After": "9999"})) == 60
     assert 0 <= _parse_retry_wait(state({})) <= 20
+
+
+def test_a_figure_reading_without_a_caption_is_still_labelled() -> None:
+    from scholar_lens.adapters.documents.parser import _figure_description
+
+    figure = Figure(
+        figure_id="1", path="f.png", caption=None, analysis="loss falls to 0.42"
+    )
+    assert _figure_description(figure).startswith("(Figure analysis, approximate:")
