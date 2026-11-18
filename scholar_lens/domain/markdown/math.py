@@ -304,6 +304,20 @@ def segments(markdown: str) -> list[Segment]:
 # link. One that starts with a digit and has no LaTeX is currency ("$5 … $10").
 SINGLE_DOLLAR = re.compile(r"(?<![\\$])\$(?!\$)(?!\s)[^$\n]+?(?<!\\)\$(?!\$)")
 LATEX_LIKE = re.compile(r"[\\^_{]")
+# A formula between single `$`s, as the blog's lint reads one
+# (lint-posts.rb SINGLE_DOLLAR_MATH; ASCII \w as in Ruby): `$a*b*c$` renders
+# as `$a<em>b</em>c$`. A price starts with a digit, and two prices on a line
+# leave a space before the second `$`, so neither reads as one.
+BLOG_SINGLE_DOLLAR_MATH = re.compile(
+    r"(?<![$\\\w])\$(?=[^$\s\d])(?:[^$\n]{0,80}?[_^*=\\][^$\n]{0,80}?|[A-Za-z])"
+    r"(?<!\s)\$(?![$\w])",
+    re.ASCII,
+)
+# TeX next to a single `$` (lint-posts.rb): math that never opened.
+LONE_DOLLAR_TEX = re.compile(r"\}\$(?!\$)|(?<!\$)\$\\[a-zA-Z]")
+# What a single-dollar formula is looked for in: text outside inline code, $$
+# spans and link destinations.
+_KEPT_SPANS = re.compile(r"(`+)[^`\n]*?\1|\$\$.+?\$\$|\]\([^)\s]*\)")
 # A Markdown link's destination: "](" up to its ")".
 _LINK_DESTINATION = re.compile(r"\]\([a-z][\w+.\-]*://[^)\s]*\)", re.IGNORECASE)
 
@@ -819,7 +833,7 @@ def _vert_inline_bars(markdown: str) -> str:
     return "".join(out)
 
 
-def _collapse_blank_runs(markdown: str) -> str:
+def collapse_blank_runs(markdown: str) -> str:
     """Squeeze 3+ newlines (left by display conversion) outside code fences."""
     out: list[str] = []
     pos = 0
@@ -1279,9 +1293,52 @@ def _unnest_text_math(markdown: str) -> str:
     return _DISPLAY_SPAN.sub(display, markdown)
 
 
+def _double_single_dollars(markdown: str) -> str:
+    """A formula between single `$`s, as the blog's lint finds one, written
+    between `$$`s (outside code and existing $$ spans); a price is left. A
+    line with TeX glued to a single `$` ("Adapter$^{H}$") is left for the
+    validator: pairing its dollars would swallow the prose between them."""
+    lines = markdown.split("\n")
+    roles = fence_roles(lines)
+    code = indented_code_lines(lines)
+    in_display = False  # inside a $$ block over several lines
+    for k, line in enumerate(lines):
+        if roles[k] != "prose" or k in code:
+            continue
+        prefix = ""
+        if in_display:
+            if line.count("$$") % 2 == 0:
+                continue
+            # The block closes on this line: the text after it is prose.
+            closed, line = line.split("$$", 1)
+            prefix = closed + "$$"
+        opens = line.count("$$") % 2 == 1
+        head, tail = line.rsplit("$$", 1) if opens else (line, None)
+        out, pos = [], 0
+        for kept in _KEPT_SPANS.finditer(head):
+            out.append(_doubled(head[pos : kept.start()]))
+            out.append(kept.group(0))
+            pos = kept.end()
+        out.append(_doubled(head[pos:]))
+        doubled = "".join(out)
+        if LONE_DOLLAR_TEX.search(_KEPT_SPANS.sub("", doubled)):
+            # TeX still glued to a single `$` ("Adapter$^{H}$"): the pairing
+            # went wrong on this line, so it stays as written.
+            in_display = opens
+            continue
+        lines[k] = prefix + doubled + ("" if tail is None else "$$" + tail)
+        # Text after an unpaired $$ opens a block: math, left alone.
+        in_display = opens
+    return "\n".join(lines)
+
+
+def _doubled(text: str) -> str:
+    return BLOG_SINGLE_DOLLAR_MATH.sub(lambda m: f"${m.group(0)}$", text)
+
+
 def normalize_math(markdown: str) -> str:
     """Rewrite math delimiters and escaping to the blog's ``$$`` convention."""
-    text = _rewrite_spans(_fold_glued_runs(markdown))
+    text = _rewrite_spans(_fold_glued_runs(_double_single_dollars(markdown)))
     text = _isolate_display_blocks(text)
     text = _isolate_nested_displays(text)
     folded = _fold_spaced_runs(text)
@@ -1291,7 +1348,7 @@ def normalize_math(markdown: str) -> str:
     text = folded
     text = _vert_inline_bars(text)
     text = _unnest_text_math(text)
-    return _collapse_blank_runs(text)
+    return collapse_blank_runs(text)
 
 
 # The blog lint's own reading of a body (script/lint-posts.rb), ported so the

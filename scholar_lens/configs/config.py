@@ -209,6 +209,10 @@ class Explanation(_Section):
     # Sections engine: whole-article edit passes; a second pass runs only for
     # reported coverage gaps. 0 disables editing.
     max_edit_rounds: int = Field(default=2, ge=0, le=3)
+    # Sections engine: after the edit pass, check the whole body against the
+    # paper (numbers with their sources) and fix what it finds in one editor
+    # round; what is left becomes PR notes.
+    check_body_claims: bool = Field(default=True)
     # Sections engine: hard total-token ceiling for one review run (None = no
     # limit; max_cost_usd applies too). The default
     # leaves ~6x headroom over a LoRA-length paper (~1.4M tokens, ~$6 on Opus
@@ -239,6 +243,9 @@ class Summary(_Section):
 
     # Sections engine.
     summarizer_enable_thinking: bool = Field(default=False)
+    # Sections engine: check the finished summary against the paper (numbers
+    # with their sources) and fix what it finds once; the rest become notes.
+    check_claims: bool = Field(default=True)
     thinking_effort: ThinkingEffort = Field(default="medium")
     # Sections engine: hard total-token ceiling for one summary run (None = no
     # limit; max_cost_usd applies too); a typical summary uses ~0.13M tokens.

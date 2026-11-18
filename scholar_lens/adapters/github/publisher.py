@@ -113,6 +113,9 @@ _ARXIV_HTML_FIGURE = re.compile(rf"^/html/({ARXIV_ID_BODY})/(.+)$")
 # budget (GithubRetry also waits out secondary rate limits).
 _GITHUB_TIMEOUT_SECONDS = 30
 _GITHUB_MAX_RETRIES = 3
+# A primary rate limit is waited out only this long (PyGithub's default waits
+# until the reset, up to an hour per retry).
+_GITHUB_MAX_RATE_LIMIT_WAIT_SECONDS = 120
 
 
 class PostAssetError(Exception):
@@ -688,7 +691,10 @@ class Publisher:
         client = Github(
             auth=Auth.Token(token),
             timeout=_GITHUB_TIMEOUT_SECONDS,
-            retry=GithubRetry(total=_GITHUB_MAX_RETRIES),
+            retry=GithubRetry(
+                total=_GITHUB_MAX_RETRIES,
+                max_rate_limit_wait=_GITHUB_MAX_RATE_LIMIT_WAIT_SECONDS,
+            ),
         )
         try:
             return action(client.get_repo(repo_name))

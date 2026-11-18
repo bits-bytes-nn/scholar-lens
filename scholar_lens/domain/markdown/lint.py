@@ -60,6 +60,7 @@ from scholar_lens.domain.markdown.math import (
     blog_fence_roles,
     blog_line_roles,
     blog_unquote,
+    collapse_blank_runs,
     fence_roles,
     in_spans,
     indent_width,
@@ -189,6 +190,9 @@ _ANGLE_TOKEN = re.compile(r"<(/?)([A-Za-z][A-Za-z0-9._-]*)[^<>\n]*?/?>")
 # GFM autolinks — ``<https://…>`` / ``<mailto:…>`` / ``<user@host>`` — are valid
 # Markdown that kramdown renders as links; escaping them produces dead literal
 # text. Recognise and leave them alone (distinct from ``<placeholder>`` tokens).
+# A URL autolink only: kramdown's email autolink takes far fewer characters
+# than _AUTOLINK's email branch ("<svg/onload=x@y>" is a tag to it).
+_URL_AUTOLINK = re.compile(r"<[A-Za-z][A-Za-z0-9+.-]*://[^<>\s]+>")
 _AUTOLINK = re.compile(r"<(?:[A-Za-z][A-Za-z0-9+.-]*://[^<>\s]+|[^<>\s@]+@[^<>\s@]+)>")
 # Constructs that render poorly on the blog's MathJax: the standalone amsmath
 # display environments (use \begin{aligned} inside $$...$$ instead) and \bm (use
@@ -515,6 +519,10 @@ def escape_active_html(markdown: str) -> str:
         if end == -1 or inside(start, end):
             continue
         text = markdown[start:end]
+        if _URL_AUTOLINK.fullmatch(text) and "=" not in text and safe_url(text[1:-1]):
+            # A link kramdown renders (<https://x/online_serving>), not a tag
+            # with an "on…" attribute.
+            continue
         if any(_active(name, attrs) for name, attrs, _, _ in _read_tags(text)):
             edits.append((start, end, text.replace("<", "&lt;").replace(">", "&gt;")))
     for m in _DESTINATION.finditer(markdown):
@@ -1505,4 +1513,5 @@ def publish_body(
         warn=warn,
         defined_macros=defined_macros,
     )
-    return _wrap_liquid(drop_empty_headings(linted))
+    # Last: removed tags and images leave blank-line runs behind.
+    return collapse_blank_runs(_wrap_liquid(drop_empty_headings(linted)))

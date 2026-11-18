@@ -178,12 +178,19 @@ def _allocated_profile(
     return arn
 
 
-@lru_cache(maxsize=8)
+_PROFILES: dict[tuple[boto3.Session, str], dict[str, str]] = {}
+
+
 def _application_profiles(
     boto_session: boto3.Session, region_name: str
 ) -> dict[str, str]:
     """Name -> ARN of the account's application inference profiles; empty
-    when they cannot be listed (calls then go through system profiles)."""
+    when they cannot be listed (calls then go through system profiles). Only
+    a successful listing is kept, so one throttled call does not leave the
+    rest of the run untagged."""
+    key = (boto_session, region_name)
+    if key in _PROFILES:
+        return _PROFILES[key]
     client = boto_session.client("bedrock", region_name=region_name)
     found: dict[str, str] = {}
     kwargs: dict[str, Any] = {"typeEquals": "APPLICATION"}
@@ -193,16 +200,18 @@ def _application_profiles(
             for p in response.get("inferenceProfileSummaries", []):
                 found[p["inferenceProfileName"]] = p["inferenceProfileArn"]
             if not response.get("nextToken"):
-                return found
+                break
             kwargs["nextToken"] = response["nextToken"]
     except ClientError as e:
         logger.warning(
             "Could not list application inference profiles in '%s' (%s); "
-            "Bedrock calls are not tagged by kind.",
+            "these Bedrock calls are not tagged by kind.",
             region_name,
             e,
         )
         return {}
+    _PROFILES[key] = found
+    return found
 
 
 class OutputTruncatedError(RuntimeError):

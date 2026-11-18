@@ -9,3 +9,4 @@
 !scholar_lens/
 scholar_lens/**/__pycache__
 scholar_lens/**/*.py[cod]
+scholar_lens/**/.DS_Store

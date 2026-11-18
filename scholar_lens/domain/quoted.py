@@ -76,3 +76,34 @@ def claim_fixed(problem: str, checked: str, edited: str) -> bool:
     if not fragments or not all(f in _squash(checked) for f in fragments):
         return False
     return gone_after_edit([fragments], edited)
+
+
+_WRONG = re.compile(r"\|\|\s*wrong\b", re.IGNORECASE)
+
+
+def fix_kept(
+    before: list[str],
+    after: list[str],
+    old: dict[str, str],
+    new: dict[str, str],
+) -> bool:
+    """Whether a corrected text (``new``, its parts) replaces ``old`` after a
+    claim check found ``before`` in it and a recheck ``after`` in ``new``:
+    fewer problems, or as many, no more of them wrong (rather than
+    unsupported), and every sentence the first check disputed in ``old``
+    gone from ``new``. The recheck's count alone is noisy: a second reading
+    finds another problem even in a fixed text. A reworded sentence still
+    flagged also counts as gone; the notes then list the recheck's problems,
+    which quote the new text."""
+    if len(after) < len(before):
+        return True
+
+    def wrong(problems: list[str]) -> int:
+        return sum(bool(_WRONG.search(p)) for p in problems)
+
+    old_text, new_text = "\n".join(old.values()), "\n".join(new.values())
+    return (
+        len(after) == len(before)
+        and wrong(after) <= wrong(before)
+        and all(claim_fixed(problem, old_text, new_text) for problem in before)
+    )

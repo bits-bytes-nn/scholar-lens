@@ -132,7 +132,27 @@ def _retry_after(response: httpx.Response) -> float:
     return seconds
 
 
-def _get_json(
+def _get_json(*args: Any, **kwargs: Any) -> Any:
+    """:func:`_get_json_unredacted`, whose HTTP errors carry no query string
+    in their message: the query holds the polite-pool address, and callers
+    log the error and copy it into job results."""
+    try:
+        return _get_json_unredacted(*args, **kwargs)
+    except httpx.HTTPStatusError as e:
+        raise httpx.HTTPStatusError(
+            _described(e), request=e.request, response=e.response
+        ) from None
+    except httpx.RequestError as e:
+        try:
+            request = e.request
+        except RuntimeError:  # no request attached: no URL in the message
+            request = None
+        if request is None:
+            raise
+        raise type(e)(_described(e), request=request) from None
+
+
+def _get_json_unredacted(
     url: str,
     *,
     params: dict[str, str],
@@ -458,3 +478,21 @@ def _strip_jats(abstract: str | None) -> str | None:
     text = BeautifulSoup(abstract, "html.parser").get_text(separator=" ")
     text = " ".join(text.split())
     return text or None
+
+
+def _described(error: Exception) -> str:
+    """``error`` for a log line without its URL's query: the query carries the
+    polite-pool address and API keys (httpx puts the full URL in its
+    messages)."""
+    if isinstance(error, httpx.HTTPStatusError):
+        where = str(error.request.url.copy_with(query=None))
+        return f"HTTP {error.response.status_code} from {where}"
+    if isinstance(error, httpx.RequestError):
+        try:
+            where = str(error.request.url.copy_with(query=None))
+        except RuntimeError:  # no request attached
+            where = "?"
+        # The transport's own message, with any URL query cut out.
+        cause = re.sub(r"\?[^\s'\"]*", "", str(error))
+        return f"{type(error).__name__} for {where}: {cause}"
+    return f"{type(error).__name__}: {error}"

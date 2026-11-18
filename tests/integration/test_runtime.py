@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -59,20 +60,27 @@ class TestLoadSecretsFromSsm:
 
         assert os.environ[EnvVars.GITHUB_TOKEN.value] == "secret"
 
-    def test_missing_secret_is_skipped_not_fatal(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    @staticmethod
+    def _failing(code: str) -> Any:
+        from botocore.exceptions import ClientError
+
+        def fail(session, path):  # type: ignore[no-untyped-def]
+            try:
+                raise ClientError({"Error": {"Code": code}}, "GetParameter")
+            except ClientError as e:
+                raise RuntimeError("SSM read failed") from e
+
+        return fail
+
+    def test_an_unset_secret_is_skipped(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(runtime, "is_running_in_aws", lambda: True)
-
-        def boom(session, path):  # type: ignore[no-untyped-def]
-            raise RuntimeError("not found")
-
-        monkeypatch.setattr(runtime, "get_ssm_param_value", boom)
+        monkeypatch.setattr(
+            runtime, "get_ssm_param_value", self._failing("ParameterNotFound")
+        )
+        monkeypatch.delenv(EnvVars.BRAVE_API_KEY.value, raising=False)
         ctx = MagicMock()
         ctx.config.resources.project_name = "p"
         ctx.config.resources.stage = "dev"
-        monkeypatch.delenv(EnvVars.BRAVE_API_KEY.value, raising=False)
-        # Must not raise — an optional secret simply isn't set.
         runtime.load_secrets_from_ssm(
             ctx, {SSMParams.BRAVE_API_KEY: EnvVars.BRAVE_API_KEY}
         )
@@ -81,34 +89,20 @@ class TestLoadSecretsFromSsm:
         assert EnvVars.BRAVE_API_KEY.value not in os.environ
 
     @pytest.mark.parametrize(
-        "code,level",
-        [("ParameterNotFound", "INFO"), ("AccessDeniedException", "WARNING")],
+        "code", ["AccessDeniedException", "ThrottlingException", "KMSAccessDenied"]
     )
-    def test_only_an_unset_secret_is_quiet(
-        self, monkeypatch: pytest.MonkeyPatch, code: str, level: str
+    def test_any_other_read_failure_stops_the_run(
+        self, monkeypatch: pytest.MonkeyPatch, code: str
     ) -> None:
-        from botocore.exceptions import ClientError
-
         monkeypatch.setattr(runtime, "is_running_in_aws", lambda: True)
-
-        def fail(session, path):  # type: ignore[no-untyped-def]
-            try:
-                raise ClientError({"Error": {"Code": code}}, "GetParameter")
-            except ClientError as e:
-                raise RuntimeError("SSM read failed") from e
-
-        monkeypatch.setattr(runtime, "get_ssm_param_value", fail)
-        logged = MagicMock()
-        monkeypatch.setattr(runtime, "logger", logged)
+        monkeypatch.setattr(runtime, "get_ssm_param_value", self._failing(code))
         ctx = MagicMock()
         ctx.config.resources.project_name = "p"
         ctx.config.resources.stage = "dev"
-        runtime.load_secrets_from_ssm(
-            ctx, {SSMParams.BRAVE_API_KEY: EnvVars.BRAVE_API_KEY}
-        )
-        assert getattr(logged, level.lower()).called
-        if level == "INFO":
-            logged.warning.assert_not_called()
+        with pytest.raises(RuntimeError, match="BRAVE_API_KEY.*ClientError"):
+            runtime.load_secrets_from_ssm(
+                ctx, {SSMParams.BRAVE_API_KEY: EnvVars.BRAVE_API_KEY}
+            )
 
 
 class TestPublishSns:
