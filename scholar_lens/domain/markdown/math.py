@@ -313,6 +313,14 @@ BLOG_SINGLE_DOLLAR_MATH = re.compile(
     r"(?<!\s)\$(?![$\w])",
     re.ASCII,
 )
+# A formula between single `$`s that starts with a digit ("$256 \times d$",
+# "$1.6\times$"): the blog's rule leaves it to look like a price, and it shows
+# as raw TeX. A TeX command, ^ or _ inside tells it from a price.
+DIGIT_DOLLAR_TEX = re.compile(
+    r"(?<![$\\\w])\$(?=\d)[^$\n]{0,80}?(?:\\[a-zA-Z]+|[\^_])[^$\n]{0,80}?"
+    r"(?<!\s)\$(?![$\w])",
+    re.ASCII,
+)
 # TeX next to a single `$` (lint-posts.rb): math that never opened.
 LONE_DOLLAR_TEX = re.compile(r"\}\$(?!\$)|(?<!\$)\$\\[a-zA-Z]")
 _CODE_SPAN = re.compile(r"(`+)[^`\n]*?\1")
@@ -1342,7 +1350,8 @@ def _double_single_dollars(markdown: str) -> str:
 
 
 def _doubled(text: str) -> str:
-    return BLOG_SINGLE_DOLLAR_MATH.sub(lambda m: f"${m.group(0)}$", text)
+    text = BLOG_SINGLE_DOLLAR_MATH.sub(lambda m: f"${m.group(0)}$", text)
+    return DIGIT_DOLLAR_TEX.sub(lambda m: f"${m.group(0)}$", text)
 
 
 def normalize_math(markdown: str) -> str:

@@ -488,3 +488,19 @@ def test_a_structured_call_caches_each_context_part(
         <= 4
         for r in stub.requests
     )
+
+
+def test_an_invocations_latency_goes_on_its_last_cycle_only() -> None:
+    events: list = []
+    model = StrandsLanguageModel(
+        None,  # type: ignore[arg-type]
+        {"write": RoleModel("arn", "global.anthropic.claude-opus-5-5")},
+        events.append,
+    )
+    usage = {"inputTokens": 10, "outputTokens": 5}
+    metrics = SimpleNamespace(
+        agent_invocations=[SimpleNamespace(cycles=[SimpleNamespace(usage=usage)] * 3)],
+        accumulated_usage=usage,
+    )
+    model._usage("write", metrics, latency_ms=1234)  # type: ignore[arg-type]
+    assert [e.latency_ms for e in events] == [None, None, 1234]

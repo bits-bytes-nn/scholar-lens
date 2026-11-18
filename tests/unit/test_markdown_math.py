@@ -848,3 +848,20 @@ def test_the_dollar_rewrite_tracks_display_blocks_as_the_lint_does(
 
     out = _double_single_dollars(src)
     assert out == (src if expected is None else expected)
+
+
+@pytest.mark.parametrize(
+    "src,expected",
+    [
+        ("메모리는 $256 \\times d$입니다.", "메모리는 $$256 \\times d$$입니다."),
+        ("학습률 $2.2 \\times 10^{-5}$", "학습률 $$2.2 \\times 10^{-5}$$"),
+        ("$2^{10}$개", "$$2^{10}$$개"),
+        ("가격 $5와 $10", "가격 $5와 $10"),  # prices carry no TeX
+        ("비용 $5.50 and $3.20", "비용 $5.50 and $3.20"),
+    ],
+)
+def test_digit_led_tex_between_single_dollars_is_doubled(
+    src: str, expected: str
+) -> None:
+    out = norm(src)
+    assert out == expected and norm(out) == out
