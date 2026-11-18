@@ -26,7 +26,7 @@ from scholar_lens.adapters.http.rate_limit import (
     is_retryable_status,
 )
 from scholar_lens.adapters.retry import is_transient_error
-from scholar_lens.adapters.scholarly.pdf import save_pdf
+from scholar_lens.adapters.scholarly.pdf import arriving_chunks, save_pdf
 from scholar_lens.domain.ids import normalize_arxiv_id
 from scholar_lens.domain.titles import title_similarity, titles_match
 
@@ -245,10 +245,7 @@ class ArxivHandler:
                     )
                     raise
                 save_pdf(
-                    # As it arrives (not filled to a chunk size): the download's
-                    # deadline is checked between reads, so a trickle cannot
-                    # hold one chunk past it.
-                    response.iter_content(chunk_size=None),
+                    arriving_chunks(response),
                     pdf_path,
                     source=url,
                     declared_length=response.headers.get("Content-Length"),

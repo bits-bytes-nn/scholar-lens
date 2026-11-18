@@ -282,6 +282,18 @@ class _Response:
     def iter_content(self, chunk_size: int) -> list[bytes]:
         return [self._body]
 
+    @property
+    def raw(self) -> Any:
+        if not hasattr(self, "_raw"):
+            body = [self._body]
+
+            class Raw:
+                def read1(self, amt: int, decode_content: bool = True) -> bytes:
+                    return body.pop() if body else b""
+
+            self._raw = Raw()
+        return self._raw
+
 
 @pytest.mark.parametrize("statuses,downloads", [([503, 200], True), ([404], False)])
 def test_a_pdf_download_asks_again_only_after_a_transient_error(

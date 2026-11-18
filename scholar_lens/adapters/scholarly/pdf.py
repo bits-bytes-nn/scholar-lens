@@ -7,8 +7,9 @@ and never leave a partial file behind.
 from __future__ import annotations
 
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
+from typing import Any
 
 # Cap PDF downloads so a hostile or oversized URL cannot exhaust disk or memory.
 MAX_PDF_BYTES = 100 * 1024 * 1024
@@ -32,6 +33,16 @@ class NotPdfContentError(ValueError):
 
 class PdfDownloadTooSlowError(TimeoutError):
     """The download did not finish within its deadline."""
+
+
+def arriving_chunks(response: Any) -> Iterator[bytes]:
+    """A streamed ``requests`` response's body as it arrives: each read
+    returns what the socket has (up to :data:`CHUNK_BYTES`) instead of
+    filling a chunk (``iter_content`` does, and with no chunk size it reads
+    a sized body whole), so :func:`save_pdf` checks its deadline and cap
+    between reads even against a server that trickles."""
+    while chunk := response.raw.read1(CHUNK_BYTES, decode_content=True):
+        yield chunk
 
 
 def save_pdf(

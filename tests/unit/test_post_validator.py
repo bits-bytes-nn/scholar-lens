@@ -696,11 +696,13 @@ def test_number_sources_give_every_number_a_passage_first() -> None:
         + [f"On MMLU the model scores {n}.5." for n in range(10, 40)]
     )
     text = " ".join(f"MMLU에서 {n}.5" for n in range(10, 40))
-    found = number_sources(text, paper, per_number=2, max_chars=2_500)
-    # All numbers get one passage before any gets a second, and the one that
-    # shares the sentence's words (MMLU) comes first.
+    found = number_sources(text, paper, per_number=2, max_chars=3_500)
+    # All numbers get one passage before any gets a second (the cap leaves
+    # room for every first, not every second), and the one that shares the
+    # sentence's words (MMLU, with its particle) comes first.
     assert "not listed: not being listed" not in found
     assert found.count("On MMLU") == 30
+    assert found.count("Intro mentions") < 30
 
 
 def test_a_figure_reading_is_marked_and_ranked_after_the_papers_text() -> None:

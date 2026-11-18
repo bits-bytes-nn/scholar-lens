@@ -48,6 +48,7 @@ from scholar_lens.adapters.scholarly.pdf import (
     NotPdfContentError,
     PdfDownloadTooSlowError,
     PdfTooLargeError,
+    arriving_chunks,
     save_pdf,
 )
 from scholar_lens.domain.ids import arxiv_id_from_url, is_arxiv_host, normalize_arxiv_id
@@ -344,10 +345,7 @@ class PdfUrlSource(PaperSource):
                         f"(Content-Type: {content_type})."
                     )
                 save_pdf(
-                    # As it arrives (not filled to a chunk size): the download's
-                    # deadline is checked between reads, so a trickle cannot
-                    # hold one chunk past it.
-                    response.iter_content(chunk_size=None),
+                    arriving_chunks(response),
                     pdf_path,
                     source=self._raw_url,
                     declared_length=response.headers.get("Content-Length"),

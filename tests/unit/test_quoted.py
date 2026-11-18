@@ -120,3 +120,30 @@ def test_a_bolded_wrong_label_counts() -> None:
     before = ["- A는 B입니다. || unsupported: x"]
     after = ["- C는 D입니다. || **wrong**: y"]
     assert not fix_kept(before, after, {"t": "A는 B입니다."}, {"t": "C는 D입니다."})
+
+
+def test_a_finding_reported_again_with_other_punctuation_is_noted_once() -> None:
+    from scholar_lens.domain.quoted import kept_problems
+
+    before = ["- C는 D입니다. || unsupported: y"]
+    after = ["- C는 D입니다 || unsupported: y"]  # no final period
+    assert kept_problems(before, after, {"t": "C는 D입니다."}) == after
+
+
+def test_a_fix_whose_recheck_misses_old_findings_is_not_kept_as_better() -> None:
+    from scholar_lens.domain.quoted import fix_kept
+
+    before = [f"- {s}는 그대로입니다. || unsupported: x" for s in ("A", "B", "C")]
+    after = ["- G는 새로 썼습니다. || unsupported: y"]
+    new = {
+        "t": "A는 그대로입니다. B는 그대로입니다. C는 그대로입니다. G는 새로 썼습니다."
+    }
+    assert not fix_kept(before, after, {"t": new["t"]}, new)
+
+
+def test_an_underscored_wrong_label_counts() -> None:
+    from scholar_lens.domain.quoted import fix_kept
+
+    before = ["- A는 B입니다. || unsupported: x"]
+    after = ["- C는 D입니다. || _wrong_: y"]
+    assert not fix_kept(before, after, {"t": "A는 B입니다."}, {"t": "C는 D입니다."})

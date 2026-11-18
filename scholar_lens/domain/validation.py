@@ -1392,11 +1392,22 @@ def unsourced_numbers(text: str, source: str) -> list[str]:
 
 
 _FIGURE_READING = "(Figure analysis, approximate:"
-_WORD = re.compile(r"[^\W\d_][\w.-]*|\d+[A-Za-z][\w.-]*", re.UNICODE)
+# A Latin name ("MMLU", "GPT-4.1", "Qwen3") apart from a Korean particle glued
+# to it ("MMLU에서"), or a Hangul word.
+_WORD = re.compile(r"[A-Za-z][A-Za-z0-9.+-]*[A-Za-z0-9]|[\uac00-\ud7a3]{2,}")
+_STOPWORDS = frozenset(
+    "the and for with from that this these those are was were our its their "
+    "than then also into over under per via using used use can may has have "
+    "had not but all any each other more most such which when where while".split()
+)
 
 
 def _words(text: str) -> set[str]:
-    return {w.lower() for w in _WORD.findall(text) if len(w) >= 3}
+    return {
+        w.lower()
+        for w in _WORD.findall(text)
+        if len(w) >= 3 and w.lower() not in _STOPWORDS
+    }
 
 
 def number_sources(
@@ -1435,7 +1446,6 @@ def number_sources(
         parts = [heading, table_header if in_table else ""]
         context.append(" / ".join(part for part in parts if part))
     stated = [_numbers(line) for line in lines]
-    line_words = [_words(f"{context[k]} {line}") for k, line in enumerate(lines)]
 
     order: list[str] = []
     candidates: dict[str, list[str]] = {}
@@ -1482,7 +1492,8 @@ def number_sources(
                 f"  - {where}{'…' if a else ''}{excerpt}{'…' if b < len(line) else ''}"
             )
             # Paper text before figure readings, then the most shared words.
-            scored.append((int(figure), -len(around & line_words[k]), passage))
+            near = _words(f"{context[k]} {line[a:b]}")  # the passage itself
+            scored.append((int(figure), -len(around & near), passage))
         if scored:
             scored.sort(key=lambda item: (item[0], item[1]))
             order.append(number.text)
@@ -1495,8 +1506,9 @@ def number_sources(
             passages = candidates[number_text]
             if depth >= len(passages):
                 continue
-            cost = len(passages[depth]) + (len(number_text) + 4 if depth == 0 else 1)
-            if size + cost > max_chars:
+            # The block header and its "(+N more)" line on the first.
+            cost = len(passages[depth]) + (len(number_text) + 48 if depth == 0 else 1)
+            if size + cost > max_chars - 100:  # the closing line
                 continue
             chosen[number_text].append(passages[depth])
             size += cost
