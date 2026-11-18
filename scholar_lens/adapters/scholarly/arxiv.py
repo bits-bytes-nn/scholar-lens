@@ -208,7 +208,17 @@ class ArxivHandler:
         an error's Retry-After (capped) holds later arXiv requests."""
         for attempt in range(ARXIV_RETRIES + 1):
             self._limiter.acquire()
-            with requests.get(url, stream=True, timeout=_ARXIV_TIMEOUT) as response:
+            try:
+                response = requests.get(url, stream=True, timeout=_ARXIV_TIMEOUT)
+            except (requests.ConnectionError, requests.Timeout) as e:
+                # A dropped connection or a timeout before the answer: asked
+                # again through the limiter, as a 5xx is.
+                if attempt == ARXIV_RETRIES:
+                    raise
+                self._limiter.penalize(arxiv_retry_hold(e, attempt))
+                logger.info("'%s' failed (%s); asking arXiv again.", url, e)
+                continue
+            with response:
                 try:
                     response.raise_for_status()
                 except requests.HTTPError as e:

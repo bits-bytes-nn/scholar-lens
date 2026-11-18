@@ -73,17 +73,29 @@ class ReaderContext(Protocol):
 async def with_affiliation(
     attributes: Attributes,
     doi: str | None,
-    lookup: Callable[[str], str | None] | None,
+    title: str,
+    lookup: Callable[[str, str], str | None] | None,
+    notes: list[str],
 ) -> Attributes:
     """``attributes`` with an organisation from ``lookup`` (an index's record
     of the authors' institutions) when the paper names none the model could
-    read: some list only e-mail addresses. Unchanged otherwise."""
+    read: some list only e-mail addresses. Unchanged otherwise. What it did
+    goes to ``notes`` (the run's PR notes)."""
     if not is_placeholder(attributes.affiliation) or lookup is None or not doi:
         return attributes
-    found = await asyncio.to_thread(lookup, doi)
+    try:
+        found = await asyncio.to_thread(lookup, doi, title)
+    except Exception as e:  # noqa: BLE001 - the post then names none (rejected)
+        logger.warning("Affiliation lookup of %s failed: %s", doi, e)
+        notes.append(
+            f"The paper names no organisation and its index lookup failed "
+            f"({type(e).__name__}): set paper_author."
+        )
+        return attributes
     if not found:
         return attributes
     logger.info("Affiliation from the paper's index record: %s", found)
+    notes.append(f"paper_author '{found}' is taken from OpenAlex: check it.")
     return attributes.model_copy(update={"affiliation": found})
 
 
@@ -98,7 +110,7 @@ async def prepare_paper_data(
     inputs: PaperInputs,
     index_factory: CodeIndexFactory | None = None,
     citations_factory: CitationsFactory | None = None,
-    affiliation_lookup: Callable[[str], str | None] | None = None,
+    affiliation_lookup: Callable[[str, str], str | None] | None = None,
 ) -> tuple[Paper, Any, Any]:
     """Parse the paper and extract what the selected generator needs
     (``inputs``): citations and the code index are slow and costly, so they
@@ -148,7 +160,9 @@ async def prepare_paper_data(
         if inputs.citations and citations_factory is not None
         else None
     )
-    attributes = await with_affiliation(attributes, metadata.doi, affiliation_lookup)
+    attributes = await with_affiliation(
+        attributes, metadata.doi, metadata.title, affiliation_lookup, content.notes
+    )
     meta_fields = backfill_metadata(
         metadata.model_dump(),
         attributes,

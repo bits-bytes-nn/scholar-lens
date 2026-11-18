@@ -539,8 +539,10 @@ class PaperReviewStack(Stack):
             compute_environments=[],
             # A job that can never start would wait in RUNNABLE unnoticed:
             # cancel it, so the failure rule below sends its alert. A job
-            # waiting for the running ones (the environment at its vCPU cap)
-            # is normal queueing and is left alone.
+            # waiting for the running ones is normal queueing (no reason here)
+            # and is left alone. Cancelled: no instance capacity for an hour;
+            # a job no instance type fits; a job needing more vCPU than the
+            # environment's cap.
             job_state_time_limit_actions=[
                 batch.JobStateTimeLimitAction(
                     max_time=Duration.minutes(60),
@@ -549,6 +551,10 @@ class PaperReviewStack(Stack):
                 batch.JobStateTimeLimitAction(
                     max_time=Duration.minutes(10),
                     reason=batch.JobStateTimeLimitActionsReason.JOB_RESOURCE_REQUIREMENT,
+                ),
+                batch.JobStateTimeLimitAction(
+                    max_time=Duration.minutes(10),
+                    reason=batch.JobStateTimeLimitActionsReason.COMPUTE_ENVIRONMENT_MAX_RESOURCE,
                 ),
             ],
         )

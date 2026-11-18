@@ -649,8 +649,8 @@ def _check_paper_author(value: Any, add: Add) -> None:
             "paper-author",
             1,
             f"paper_author (publishing organisation) must be one string, got "
-            f"{value!r}; when the paper and its index record name none, set it "
-            "in the saved post and publish it with `scholar-lens publish`",
+            f"{value!r}; when no organisation was found (see the run's notes), "
+            "set it in the saved post and publish it with `scholar-lens publish`",
         )
         return
     if re.search(r"et al", value, re.IGNORECASE):

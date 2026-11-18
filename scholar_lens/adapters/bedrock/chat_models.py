@@ -11,6 +11,7 @@ from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.messages import BaseMessage
 from langchain_core.outputs import ChatResult
 
+from scholar_lens.adapters.retry import is_transient_error
 from scholar_lens.domain.constants import LanguageModelId
 from scholar_lens.domain.cost_allocation import application_profile_name
 from scholar_lens.domain.model_registry import (
@@ -209,6 +210,9 @@ def _application_profiles(
             region_name,
             e,
         )
+        if not is_transient_error(e):
+            # Access denied stays denied: do not ask (and warn) on every model.
+            _PROFILES[key] = {}
         return {}
     _PROFILES[key] = found
     return found
