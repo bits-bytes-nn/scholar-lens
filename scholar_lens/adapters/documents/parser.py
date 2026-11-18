@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import logging
+import math
 import os
 import re
 from collections.abc import Coroutine, Sequence
@@ -33,6 +34,7 @@ from scholar_lens.adapters.http.rate_limit import (
     ARXIV_ASSET_LIMITER,
     ARXIV_RATE_LIMITER,
     ARXIV_RETRIES,
+    MAX_RETRY_AFTER_SECONDS,
     RateLimiter,
     arxiv_asset_penalty,
     arxiv_retry_after_seconds,
@@ -583,6 +585,30 @@ def _caption_text(caption: Tag) -> str:
     return " ".join(extract_text_from_html(str(caption)).split())
 
 
+class DocumentParseAuthError(RuntimeError):
+    """The parse API rejected the configured key: a configuration error the
+    run stops on, not a parse failure to fall back from (text only, no
+    figures, with nothing said about why)."""
+
+
+_PARSE_BACKOFF = tenacity.wait_exponential_jitter(multiplier=2, max=20)
+
+
+def _parse_retry_wait(state: tenacity.RetryCallState) -> float:
+    """The API's Retry-After (capped at :data:`MAX_RETRY_AFTER_SECONDS`) when
+    it sends one, else a jittered exponential wait."""
+    error = state.outcome.exception() if state.outcome else None
+    if isinstance(error, httpx.HTTPStatusError):
+        raw = error.response.headers.get("Retry-After")
+        try:
+            seconds = float(raw) if raw else None
+        except ValueError:
+            seconds = None
+        if seconds is not None and math.isfinite(seconds) and seconds >= 0:
+            return min(seconds, MAX_RETRY_AFTER_SECONDS)
+    return _PARSE_BACKOFF(state)
+
+
 def _transient_parse_error(exc: BaseException) -> bool:
     if isinstance(exc, httpx.HTTPStatusError):
         return is_retryable_status(exc.response.status_code)
@@ -704,7 +730,7 @@ class PDFParser(RichParser):
         # billed): the text-only fallback follows.
         retry=tenacity.retry_if_exception(_transient_parse_error),
         stop=tenacity.stop_after_attempt(3),
-        wait=tenacity.wait_exponential_jitter(multiplier=2, max=20),
+        wait=_parse_retry_wait,
         reraise=True,
     )
     async def _post_document(self, name: str, data: bytes) -> dict[str, Any]:
@@ -725,6 +751,14 @@ class PDFParser(RichParser):
             raise ContentParseError(f"Cannot read PDF file '{pdf_path}': {e}") from e
         try:
             return await self._post_document(pdf_path.name, data)
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            if status in (401, 403):
+                raise DocumentParseAuthError(
+                    f"The document parse API rejected the key ({status}); "
+                    f"check {EnvVars.UPSTAGE_API_KEY.value}."
+                ) from None
+            raise ContentParseError(f"Document parsing API request failed: {e}") from e
         except (httpx.HTTPError, OSError) as e:
             raise ContentParseError(f"Document parsing API request failed: {e}") from e
         except ValueError as e:

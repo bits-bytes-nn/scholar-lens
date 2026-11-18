@@ -261,3 +261,48 @@ class TestFetchMetadataBatch:
         with pytest.raises(arxiv_handler.ArxivPaperError):
             handler.fetch_metadata_batch(["1706.03762"])
         assert handler.client.results.call_count == calls
+
+
+class _Response:
+    def __init__(self, status: int, body: bytes = b"") -> None:
+        self.status_code, self._body, self.headers = status, body, {}
+
+    def __enter__(self) -> _Response:
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        pass
+
+    def raise_for_status(self) -> None:
+        import requests
+
+        if self.status_code >= 400:
+            raise requests.HTTPError(f"{self.status_code}", response=self)  # type: ignore[arg-type]
+
+    def iter_content(self, chunk_size: int) -> list[bytes]:
+        return [self._body]
+
+
+@pytest.mark.parametrize("statuses,downloads", [([503, 200], True), ([404], False)])
+def test_a_pdf_download_asks_again_only_after_a_transient_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Any, statuses: list[int], downloads: bool
+) -> None:
+    import requests
+
+    answers = iter(_Response(s, b"%PDF-1.7 body") for s in statuses)
+    calls: list[str] = []
+
+    def get(url: str, **_: Any) -> _Response:
+        calls.append(url)
+        return next(answers)
+
+    monkeypatch.setattr(arxiv_handler.requests, "get", get)
+    handler = _handler_with(MagicMock())
+    path = tmp_path / "p.pdf"
+    if downloads:
+        handler._download("https://arxiv.org/pdf/1", path)
+        assert path.exists() and len(calls) == 2
+    else:
+        with pytest.raises(requests.HTTPError):
+            handler._download("https://arxiv.org/pdf/1", path)
+        assert len(calls) == 1

@@ -19,8 +19,11 @@ from pydantic import (
 
 from scholar_lens.adapters.http.rate_limit import (
     ARXIV_RATE_LIMITER,
+    ARXIV_RETRIES,
     RateLimiter,
     arxiv_retry_after_seconds,
+    arxiv_retry_hold,
+    is_retryable_status,
 )
 from scholar_lens.adapters.retry import is_transient_error
 from scholar_lens.adapters.scholarly.pdf import CHUNK_BYTES, save_pdf
@@ -203,19 +206,34 @@ class ArxivHandler:
         """Stream the PDF with timeouts and a size cap (``urlretrieve``, used
         by the arxiv library, has neither), paced by the arXiv rate limiter;
         an error's Retry-After (capped) holds later arXiv requests."""
-        self._limiter.acquire()
-        with requests.get(url, stream=True, timeout=_ARXIV_TIMEOUT) as response:
-            try:
-                response.raise_for_status()
-            except requests.HTTPError as e:
-                self._limiter.penalize(arxiv_retry_after_seconds(e))
-                raise
-            save_pdf(
-                response.iter_content(chunk_size=CHUNK_BYTES),
-                pdf_path,
-                source=url,
-                declared_length=response.headers.get("Content-Length"),
-            )
+        for attempt in range(ARXIV_RETRIES + 1):
+            self._limiter.acquire()
+            with requests.get(url, stream=True, timeout=_ARXIV_TIMEOUT) as response:
+                try:
+                    response.raise_for_status()
+                except requests.HTTPError as e:
+                    # A 429 or 5xx is asked again through the limiter, as the
+                    # other arXiv fetches are; anything else fails now.
+                    if (
+                        is_retryable_status(response.status_code)
+                        and attempt < ARXIV_RETRIES
+                    ):
+                        self._limiter.penalize(arxiv_retry_hold(e, attempt))
+                        logger.info(
+                            "'%s' answered %d; asking arXiv again.",
+                            url,
+                            response.status_code,
+                        )
+                        continue
+                    self._limiter.penalize(arxiv_retry_after_seconds(e))
+                    raise
+                save_pdf(
+                    response.iter_content(chunk_size=CHUNK_BYTES),
+                    pdf_path,
+                    source=url,
+                    declared_length=response.headers.get("Content-Length"),
+                )
+                return
 
     def fetch_metadata(self, arxiv_id: str) -> ArxivMetadata:
         try:

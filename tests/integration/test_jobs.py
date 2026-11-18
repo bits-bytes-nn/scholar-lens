@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from unittest import mock
 
 import boto3
@@ -203,6 +204,64 @@ class TestSubmitAndDescribe:
         assert (
             JobRequest.model_validate_json(kwargs["parameters"]["request"]) == request
         )
+
+    @staticmethod
+    def _submit_with(aws: boto3.Session, batch: Any) -> Any:
+        real_client = aws.client
+        with mock.patch.object(
+            aws,
+            "client",
+            side_effect=lambda name, **kw: (
+                batch if name == "batch" else real_client(name, **kw)
+            ),
+        ):
+            return submit_job(
+                aws,
+                JobRequest(kind="summarize", source="2106.09685"),
+                project_name="p",
+                stage="dev",
+            )
+
+    @staticmethod
+    def _server_error() -> Exception:
+        from botocore.exceptions import ClientError
+
+        return ClientError(
+            {
+                "Error": {"Code": "ServerException"},
+                "ResponseMetadata": {"HTTPStatusCode": 500},
+            },
+            "SubmitJob",
+        )
+
+    def test_a_job_accepted_before_a_lost_answer_is_not_submitted_twice(
+        self, aws: boto3.Session
+    ) -> None:
+        batch = mock.MagicMock()
+        batch.submit_job.side_effect = self._server_error()
+        batch.list_jobs.return_value = {"jobSummaryList": [{"jobId": "job-9"}]}
+        assert self._submit_with(aws, batch).job_id == "job-9"
+        assert batch.submit_job.call_count == 1
+
+    def test_a_job_not_found_after_a_server_error_is_submitted_once_more(
+        self, aws: boto3.Session
+    ) -> None:
+        batch = mock.MagicMock()
+        batch.submit_job.side_effect = [self._server_error(), {"jobId": "job-2"}]
+        batch.list_jobs.return_value = {"jobSummaryList": []}
+        assert self._submit_with(aws, batch).job_id == "job-2"
+
+    def test_a_failed_lookup_does_not_risk_a_second_submit(
+        self, aws: boto3.Session
+    ) -> None:
+        from scholar_lens.adapters.aws.batch import BatchJobError
+
+        batch = mock.MagicMock()
+        batch.submit_job.side_effect = self._server_error()
+        batch.list_jobs.side_effect = self._server_error()
+        with pytest.raises(BatchJobError, match="may have been submitted"):
+            self._submit_with(aws, batch)
+        assert batch.submit_job.call_count == 1
 
     def test_a_pr_failure_survives_the_manifest(self, aws: boto3.Session) -> None:
         handler = S3Handler(aws, BUCKET)
