@@ -27,7 +27,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import unquote, urlsplit
 
 import httpx
@@ -116,6 +116,18 @@ _GITHUB_MAX_RETRIES = 3
 # A primary rate limit is waited out only this long (PyGithub's default waits
 # until the reset, up to an hour per retry).
 _GITHUB_MAX_RATE_LIMIT_WAIT_SECONDS = 120
+
+
+class _CappedGithubRetry(GithubRetry):
+    """PyGithub's retry with urllib3's own Retry-After wait capped too
+    (``max_rate_limit_wait`` covers only the rate-limit body check): a
+    response asking for an hour waits the cap, then the retry gives up."""
+
+    def get_retry_after(self, response: Any) -> float | None:
+        seconds = super().get_retry_after(response)
+        if seconds is None:
+            return None
+        return min(seconds, _GITHUB_MAX_RATE_LIMIT_WAIT_SECONDS)
 
 
 class PostAssetError(Exception):
@@ -691,7 +703,7 @@ class Publisher:
         client = Github(
             auth=Auth.Token(token),
             timeout=_GITHUB_TIMEOUT_SECONDS,
-            retry=GithubRetry(
+            retry=_CappedGithubRetry(
                 total=_GITHUB_MAX_RETRIES,
                 max_rate_limit_wait=_GITHUB_MAX_RATE_LIMIT_WAIT_SECONDS,
                 # urllib3's backoff: the first retry at once, then 2 and 4 s

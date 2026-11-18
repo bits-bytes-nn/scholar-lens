@@ -1388,21 +1388,35 @@ def unsourced_numbers(text: str, source: str) -> list[str]:
     return missing
 
 
+_FIGURE_READING = "(Figure analysis, approximate:"
+_WORD = re.compile(r"[^\W\d_][\w.-]*|\d+[A-Za-z][\w.-]*", re.UNICODE)
+
+
+def _words(text: str) -> set[str]:
+    return {w.lower() for w in _WORD.findall(text) if len(w) >= 3}
+
+
 def number_sources(
     text: str,
     source: str,
     *,
     per_number: int = 3,
-    window: int = 120,
-    max_chars: int = 8_000,
+    window: int = 100,
+    max_chars: int = 16_000,
 ) -> str:
     """For each number of ``text``, the ``source`` (paper) passages stating
     it, each with where it sits: the nearest heading, and a table row's
     header row. What a fact checker needs to tell which model, benchmark or
     setting a number belongs to; "" when ``text`` states no number the
-    source has. Matching is :func:`unsourced_numbers`'s. A bare integer
-    under 10 is left out (it is in every paragraph); numbers past
-    ``max_chars`` are counted in a closing line, not listed."""
+    source has. Matching is :func:`unsourced_numbers`'s.
+
+    Every number gets its most relevant passage (the one sharing the most
+    words, names, benchmarks, with the sentence around the number) before
+    any gets a second, so a long post's later numbers are not crowded out.
+    A passage inside the vision model's figure reading is marked: it is not
+    the paper's own words. A bare integer under 10 is left out (it is in
+    every paragraph); what does not fit ``max_chars`` is counted in closing
+    lines, not listed."""
     lines = source.split("\n")
     context: list[str] = []
     heading, table_header = "", ""
@@ -1418,19 +1432,19 @@ def number_sources(
         parts = [heading, table_header if in_table else ""]
         context.append(" / ".join(part for part in parts if part))
     stated = [_numbers(line) for line in lines]
-    blocks: list[str] = []
-    seen: set[str] = set()
-    size = left = 0
+    line_words = [_words(f"{context[k]} {line}") for k, line in enumerate(lines)]
+
+    order: list[str] = []
+    candidates: dict[str, list[str]] = {}
     for number in _numbers(text):
-        if number.text in seen or (
+        if number.text in candidates or (
             not number.scaled
             and number.value == number.value.to_integral()
             and abs(number.value) < 10
         ):
             continue
-        seen.add(number.text)
-        hits: list[str] = []
-        more = 0
+        around = _words(text[max(0, number.start - 150) : number.start + 150])
+        scored: list[tuple[int, int, str]] = []
         for k, found in enumerate(stated):
             match = next(
                 (
@@ -1447,30 +1461,57 @@ def number_sources(
             )
             if match is None:
                 continue
-            if len(hits) == per_number:
-                more += 1
-                continue
             line = lines[k]
             a, b = max(0, match.start - window), match.start + window
             excerpt = " ".join(line[a:b].split())
-            where = f"[{context[k]}] " if context[k] else ""
-            hits.append(
+            marker = line.find(_FIGURE_READING)
+            figure = 0 <= marker < match.start
+            tags = [
+                t
+                for t in (
+                    context[k],
+                    "figure reading, not the paper's text" if figure else "",
+                )
+                if t
+            ]
+            where = f"[{' / '.join(tags)}] " if tags else ""
+            passage = (
                 f"  - {where}{'…' if a else ''}{excerpt}{'…' if b < len(line) else ''}"
             )
-        if hits:
-            if more:
-                # The rest are not shown: a number may belong to one of them.
-                hits.append(f"  - (+{more} more passage(s) not listed)")
-            block = f"- {number.text}:\n" + "\n".join(hits)
-            if size + len(block) > max_chars:
-                left += 1
+            # Paper text before figure readings, then the most shared words.
+            scored.append((int(figure), -len(around & line_words[k]), passage))
+        if scored:
+            scored.sort(key=lambda item: (item[0], item[1]))
+            order.append(number.text)
+            candidates[number.text] = [p for _, _, p in scored]
+
+    chosen: dict[str, list[str]] = {n: [] for n in order}
+    size = 0
+    for depth in range(per_number):
+        for number_text in order:
+            passages = candidates[number_text]
+            if depth >= len(passages):
                 continue
-            blocks.append(block)
-            size += len(block)
-    if left:
+            cost = len(passages[depth]) + (len(number_text) + 4 if depth == 0 else 1)
+            if size + cost > max_chars:
+                continue
+            chosen[number_text].append(passages[depth])
+            size += cost
+    blocks: list[str] = []
+    unlisted = 0
+    for number_text in order:
+        shown = chosen[number_text]
+        if not shown:
+            unlisted += 1
+            continue
+        if (more := len(candidates[number_text]) - len(shown)) > 0:
+            # The rest are not shown: a number may belong to one of them.
+            shown = [*shown, f"  - (+{more} more passage(s) not listed)"]
+        blocks.append(f"- {number_text}:\n" + "\n".join(shown))
+    if unlisted:
         blocks.append(
-            f"({left} more number(s) not listed: not being listed is no evidence "
-            "either way)"
+            f"({unlisted} more number(s) not listed: not being listed is no "
+            "evidence either way)"
         )
     return "\n".join(blocks)
 

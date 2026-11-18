@@ -32,10 +32,10 @@ from scholar_lens.domain.post_format import (
 )
 from scholar_lens.domain.prompt_safety import fenced, neutralize_prompt_tags
 from scholar_lens.domain.quality_gate import added_slips, publish_blockers
-from scholar_lens.domain.quoted import fix_kept
+from scholar_lens.domain.quoted import fix_kept, kept_problems
 from scholar_lens.domain.text import parse_lines
 from scholar_lens.domain.usage import TokenBudgetExceeded
-from scholar_lens.domain.usage_context import staged
+from scholar_lens.domain.usage_context import staged, usage_stage
 from scholar_lens.domain.validation import (
     description_markup,
     description_problems,
@@ -385,7 +385,10 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         )
         try:
             self._enforce_token_budget()
-            fixed = ((await self._fix(request, summary)).get("summary") or "").strip()
+            fixed = (
+                (await self._fix(request, summary, stage="claim_fix")).get("summary")
+                or ""
+            ).strip()
         except TokenBudgetExceeded as e:
             logger.warning("Summary claim fix skipped: %s", e)
             fixed = ""
@@ -403,11 +406,13 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
             and (after := await self._claim_problems(fixed, paper)) is not None
             and fix_kept(problems, after, {"s": summary}, {"s": fixed})
         ):
-            summary, problems = fixed, after
+            problems = kept_problems(problems, after, {"s": fixed})
+            summary = fixed
         if problems:
             self.notes.append(
                 "Summary claims to check against the paper: "
                 + neutralize_prompt_tags(" | ".join(p[:200] for p in problems[:5]))
+                + (f" (+{len(problems) - 5} more)" if len(problems) > 5 else "")
             )
         return summary
 
@@ -431,11 +436,14 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         )
 
     @RetryableBase._retry("paper_summary_fix")
-    @staged("fix")
-    async def _fix(self, request: str, summary: str) -> dict[str, str]:
-        return await self.fix_chain.ainvoke(
-            {"request": request, "summary": summary, "language": self.language}
-        )
+    async def _fix(
+        self, request: str, summary: str, *, stage: str = "fix"
+    ) -> dict[str, str]:
+        # Its own usage stage per caller: a blocker fix and a claim fix.
+        with usage_stage(stage):
+            return await self.fix_chain.ainvoke(
+                {"request": request, "summary": summary, "language": self.language}
+            )
 
     @RetryableBase._retry("paper_summary_shortening")
     @staged("shorten")

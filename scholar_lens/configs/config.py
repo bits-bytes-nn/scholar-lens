@@ -222,7 +222,7 @@ class Explanation(_Section):
     # 5.5) and stops a runaway run near $40.
     max_total_tokens: int | None = Field(default=8_000_000, gt=0)
     # Both engines: hard ceiling on one run's estimated cost (list prices,
-    # USD; None = no limit). A review costs about $5-13.
+    # USD; None = no limit). A review costs about $6-15 with its claim checks.
     max_cost_usd: float | None = Field(default=40.0, gt=0)
     # Evidence engine: paper characters one reading agent covers (a longer
     # paper gets more readers, each on its own part).
@@ -254,7 +254,7 @@ class Summary(_Section):
     # limit; max_cost_usd applies too); a typical summary uses ~0.13M tokens.
     max_total_tokens: int | None = Field(default=1_000_000, gt=0)
     # Both engines: hard ceiling on one run's estimated cost (list prices,
-    # USD; None = no limit). A summary costs about $1-3.
+    # USD; None = no limit). A summary costs about $1-3.5 with its claim check.
     max_cost_usd: float | None = Field(default=12.0, gt=0)
     # Evidence engine: paper characters one reading agent covers; a summary
     # needs fewer details, so one reader covers more of the paper.

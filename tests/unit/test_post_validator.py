@@ -686,3 +686,31 @@ def test_number_sources_say_how_many_passages_they_leave_out() -> None:
     assert (
         found.count("scores 73.7") == 3 and "(+2 more passage(s) not listed)" in found
     )
+
+
+def test_number_sources_give_every_number_a_passage_first() -> None:
+    from scholar_lens.domain.validation import number_sources
+
+    paper = "\n".join(
+        [f"Intro mentions {n}.5 in passing." for n in range(10, 40)]
+        + [f"On MMLU the model scores {n}.5." for n in range(10, 40)]
+    )
+    text = " ".join(f"MMLU에서 {n}.5" for n in range(10, 40))
+    found = number_sources(text, paper, per_number=2, max_chars=2_500)
+    # All numbers get one passage before any gets a second, and the one that
+    # shares the sentence's words (MMLU) comes first.
+    assert "not listed: not being listed" not in found
+    assert found.count("On MMLU") == 30
+
+
+def test_a_figure_reading_is_marked_and_ranked_after_the_papers_text() -> None:
+    from scholar_lens.domain.validation import number_sources
+
+    paper = (
+        "Figure 3: Loss curves. (Figure analysis, approximate: the loss falls to 0.42.)\n"
+        "Table 2 reports a final loss of 0.42 on WikiText."
+    )
+    found = number_sources("최종 손실은 0.42입니다.", paper)
+    lines = found.splitlines()
+    assert "Table 2 reports" in lines[1]
+    assert "figure reading, not the paper's text" in lines[2]

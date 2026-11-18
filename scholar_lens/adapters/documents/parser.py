@@ -763,7 +763,7 @@ class PDFParser(RichParser):
                 raise DocumentParseAuthError(
                     f"The document parse API rejected the key ({status}); "
                     f"check {EnvVars.UPSTAGE_API_KEY.value}."
-                ) from None
+                ) from e
             raise ContentParseError(f"Document parsing API request failed: {e}") from e
         except (httpx.HTTPError, OSError) as e:
             raise ContentParseError(f"Document parsing API request failed: {e}") from e

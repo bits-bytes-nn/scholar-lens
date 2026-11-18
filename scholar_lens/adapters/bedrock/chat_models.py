@@ -5,7 +5,7 @@ from typing import Any, ClassVar, Generic, TypeVar
 
 import boto3
 from botocore.config import Config as BotoConfig
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
 from langchain_aws import ChatBedrockConverse
 from langchain_core.callbacks import CallbackManagerForLLMRun
 from langchain_core.messages import BaseMessage
@@ -203,7 +203,7 @@ def _application_profiles(
             if not response.get("nextToken"):
                 break
             kwargs["nextToken"] = response["nextToken"]
-    except ClientError as e:
+    except (ClientError, BotoCoreError) as e:
         logger.warning(
             "Could not list application inference profiles in '%s' (%s); "
             "these Bedrock calls are not tagged by kind.",

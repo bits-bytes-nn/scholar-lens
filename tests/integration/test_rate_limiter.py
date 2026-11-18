@@ -230,3 +230,16 @@ async def test_the_last_html_5xx_holds_later_arxiv_requests() -> None:
     with pytest.raises(ContentParseError):
         await parser._fetch_html_from_url("https://arxiv.org/html/1")
     assert holds[-1] > 0 and len(holds) == 3
+
+
+def test_githubs_retry_after_wait_is_capped() -> None:
+    from types import SimpleNamespace
+
+    from scholar_lens.adapters.github.publisher import (
+        _GITHUB_MAX_RATE_LIMIT_WAIT_SECONDS,
+        _CappedGithubRetry,
+    )
+
+    retry = _CappedGithubRetry(total=3, max_rate_limit_wait=120)
+    response = SimpleNamespace(headers={"Retry-After": "3600"})
+    assert retry.get_retry_after(response) == _GITHUB_MAX_RATE_LIMIT_WAIT_SECONDS  # type: ignore[arg-type]

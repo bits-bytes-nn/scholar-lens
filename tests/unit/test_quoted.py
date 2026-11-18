@@ -97,3 +97,26 @@ def test_a_fix_that_adds_a_wrong_claim_is_not_kept_even_with_fewer_problems() ->
     assert fix_kept(
         before, before[:1], {"t": "A는 B입니다. C는 D입니다."}, {"t": "A는 B입니다."}
     )
+
+
+def test_a_kept_fix_still_notes_first_findings_left_in_the_text() -> None:
+    from scholar_lens.domain.quoted import kept_problems
+
+    before = [
+        "- A는 B입니다. || wrong: x",
+        "- C는 D입니다. || unsupported: y",
+        "- E는 F입니다. || unsupported: z",
+    ]
+    after = ["- C는 D입니다. || unsupported: y again"]
+    new = {"t": "A는 고쳤습니다. C는 D입니다. E는 F입니다."}
+    kept = kept_problems(before, after, new)
+    # A was fixed; C was found again (once); E was missed by the recheck.
+    assert kept == [after[0], before[2]]
+
+
+def test_a_bolded_wrong_label_counts() -> None:
+    from scholar_lens.domain.quoted import fix_kept
+
+    before = ["- A는 B입니다. || unsupported: x"]
+    after = ["- C는 D입니다. || **wrong**: y"]
+    assert not fix_kept(before, after, {"t": "A는 B입니다."}, {"t": "C는 D입니다."})
