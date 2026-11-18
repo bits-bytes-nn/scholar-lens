@@ -328,3 +328,19 @@ def test_list_restart_compares_siblings(body: str, warns: bool) -> None:
         if v.rule == "list"
     ]
     assert bool(found) is warns
+
+
+@pytest.mark.parametrize(
+    "body,flagged",
+    [
+        ("식 $x_i$ 입니다.", True),
+        ("변수 $T$와", True),
+        ("가격은 $5와 $10입니다.", False),
+        ("식 $$x_i$$ 입니다.", False),
+    ],
+)
+def test_math_between_single_dollars_is_an_error_as_in_the_blog(
+    body: str, flagged: bool
+) -> None:
+    found = [m for m in math_errors(body) if "single `$`s" in m]
+    assert bool(found) is flagged

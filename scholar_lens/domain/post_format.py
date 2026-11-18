@@ -413,7 +413,6 @@ def format_review(
 
 
 _LEAD_BLOCKQUOTE = re.compile(r"\A((?:>[^\n]*\n?)+)")
-_SUMMARY_LABEL = re.compile(r"^\*\*[^*]{1,20}:?\*\*:?\s*")
 
 
 def _summary_lead(body: str) -> tuple[str, str]:
@@ -423,7 +422,8 @@ def _summary_lead(body: str) -> tuple[str, str]:
     if not match:
         return "", body
     lines = [line[1:].strip() for line in match.group(1).splitlines()]
-    text = _SUMMARY_LABEL.sub("", " ".join(line for line in lines if line))
+    # Only a label ("**요약:**"): a bold first term ("**LoRA**는") is text.
+    text = _LABEL.sub("", " ".join(line for line in lines if line))
     return text, body[match.end() :].lstrip("\n")
 
 

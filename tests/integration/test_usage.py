@@ -53,8 +53,8 @@ def test_cached_tokens_are_split_out_and_priced_at_their_multiples() -> None:
         8_000,
         1_000,
     )
-    # Opus 5.5: $4 in / $20 out per MTok; reads 0.1x, writes 1.25x the input.
-    expected = (1_000 * 4 + 8_000 * 0.4 + 1_000 * 5 + 500 * 20) / 1e6
+    # Opus 5.5: $4 in / $20 out per MTok; reads 0.05x, writes 1.25x the input.
+    expected = (1_000 * 4 + 8_000 * 0.2 + 1_000 * 5 + 500 * 20) / 1e6
     assert event.cost_usd == pytest.approx(expected)
     # The budget still counts every token the model read.
     assert tracker.input_tokens == 10_000
@@ -180,3 +180,30 @@ def test_one_cost_ceiling_stops_the_sections_engine_too() -> None:
         guard._enforce_token_budget()
     guard._init_token_budget([tracker], max_total_tokens=None, max_cost_usd=6.0)
     guard._enforce_token_budget()
+
+
+@pytest.mark.parametrize(
+    "model_id,multiple",
+    [
+        ("global.anthropic.claude-opus-5-5", 0.05),
+        ("global.anthropic.claude-sonnet-5-5", 0.1),
+        ("not-a-registered-model", 0.1),
+    ],
+)
+def test_cache_reads_are_priced_at_the_models_multiple(
+    model_id: str, multiple: float
+) -> None:
+    from scholar_lens.domain.model_registry import event_cost_usd, price_per_mtok
+    from scholar_lens.domain.usage import UsageEvent
+
+    reads = UsageEvent(
+        stage="s",
+        model_id=model_id,
+        input_tokens=0,
+        output_tokens=0,
+        cache_read_tokens=1_000_000,
+        cache_write_tokens=0,
+    )
+    assert event_cost_usd(reads) == pytest.approx(
+        price_per_mtok(model_id)[0] * multiple
+    )

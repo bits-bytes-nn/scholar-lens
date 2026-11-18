@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import re
+from typing import Any
 from unittest import mock
 
 import boto3
@@ -184,6 +186,12 @@ def aws(boto_session: boto3.Session):
 
 
 class TestSubmitAndDescribe:
+    @pytest.fixture(autouse=True)
+    def _no_lookup_pause(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from scholar_lens.adapters.aws import batch as batch_module
+
+        monkeypatch.setattr(batch_module, "_sleep", lambda _: None)
+
     def test_submit_sends_request_as_single_parameter(self, aws: boto3.Session) -> None:
         batch = mock.MagicMock()
         batch.submit_job.return_value = {"jobId": "job-1"}
@@ -203,6 +211,179 @@ class TestSubmitAndDescribe:
         assert (
             JobRequest.model_validate_json(kwargs["parameters"]["request"]) == request
         )
+
+    @staticmethod
+    def _submit_with(aws: boto3.Session, batch: Any) -> Any:
+        real_client = aws.client
+        with mock.patch.object(
+            aws,
+            "client",
+            side_effect=lambda name, **kw: (
+                batch if name == "batch" else real_client(name, **kw)
+            ),
+        ):
+            return submit_job(
+                aws,
+                JobRequest(kind="summarize", source="2106.09685"),
+                project_name="p",
+                stage="dev",
+            )
+
+    @staticmethod
+    def _server_error() -> Exception:
+        from botocore.exceptions import ClientError
+
+        return ClientError(
+            {
+                "Error": {"Code": "ServerException"},
+                "ResponseMetadata": {"HTTPStatusCode": 500},
+            },
+            "SubmitJob",
+        )
+
+    def test_the_sdk_never_resends_a_submit(
+        self, aws: boto3.Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A real Batch client, answered before the network: a read timeout
+        # on every SubmitJob, and no job listed by the lookup.
+        from botocore.exceptions import ReadTimeoutError
+
+        from scholar_lens.adapters.aws import batch as batch_module
+        from scholar_lens.adapters.aws.batch import BatchJobError
+
+        monkeypatch.setattr(batch_module, "_sleep", lambda _: None)
+        sent: list[str] = []
+        real_client = aws.client
+
+        def client(name: str, **kw: Any) -> Any:
+            made = real_client(name, **kw)
+            if name == "batch":
+
+                def answer(request: Any, **_: Any) -> Any:
+                    action = request.url.rsplit("/", 1)[-1]
+                    sent.append(action)
+                    if action == "submitjob":
+                        raise ReadTimeoutError(endpoint_url=request.url)
+                    from botocore.awsrequest import AWSResponse
+
+                    return AWSResponse(
+                        request.url, 200, {}, _Raw(b'{"jobSummaryList": []}')
+                    )
+
+                made.meta.events.register("before-send.batch.*", answer)
+            return made
+
+        with mock.patch.object(aws, "client", side_effect=client):
+            with pytest.raises(BatchJobError, match="may have been submitted"):
+                submit_job(
+                    aws,
+                    JobRequest(kind="summarize", source="2106.09685"),
+                    project_name="p",
+                    stage="dev",
+                )
+        # One submit: a timeout may come after Batch accepted it, so the job
+        # is looked up (twice) and never sent again.
+        assert sent.count("submitjob") == 1 and sent.count("listjobs") == 2
+
+    def test_a_job_accepted_before_a_lost_answer_is_not_submitted_twice(
+        self, aws: boto3.Session
+    ) -> None:
+        batch = mock.MagicMock()
+        batch.submit_job.side_effect = self._server_error()
+        batch.list_jobs.return_value = {"jobSummaryList": [{"jobId": "job-9"}]}
+        assert self._submit_with(aws, batch).job_id == "job-9"
+        assert batch.submit_job.call_count == 1
+
+    def test_a_job_not_found_after_a_server_error_is_not_submitted_again(
+        self, aws: boto3.Session
+    ) -> None:
+        from scholar_lens.adapters.aws.batch import BatchJobError
+
+        batch = mock.MagicMock()
+        batch.submit_job.side_effect = [self._server_error(), {"jobId": "job-2"}]
+        batch.list_jobs.return_value = {"jobSummaryList": []}
+        with pytest.raises(BatchJobError, match="may have been submitted"):
+            self._submit_with(aws, batch)
+        assert batch.submit_job.call_count == 1 and batch.list_jobs.call_count == 2
+        filters = batch.list_jobs.call_args.kwargs["filters"]
+        assert filters[0]["name"] == "JOB_NAME"
+
+    @pytest.mark.parametrize("kind", ["throttled", "no endpoint", "connect timeout"])
+    def test_a_submit_that_never_reached_batch_is_sent_again_without_a_lookup(
+        self, aws: boto3.Session, kind: str
+    ) -> None:
+        from botocore.exceptions import (
+            ClientError,
+            ConnectTimeoutError,
+            EndpointConnectionError,
+        )
+
+        error = {
+            "throttled": ClientError(
+                {"Error": {"Code": "TooManyRequestsException"}}, "SubmitJob"
+            ),
+            "no endpoint": EndpointConnectionError(endpoint_url="https://batch"),
+            "connect timeout": ConnectTimeoutError(endpoint_url="https://batch"),
+        }[kind]
+        batch = mock.MagicMock()
+        batch.submit_job.side_effect = [error, {"jobId": "job-3"}]
+        submitted = self._submit_with(aws, batch)
+        assert submitted.job_id == "job-3"
+        batch.list_jobs.assert_not_called()
+        # Every name carries a random tail, so a lookup finds only this job.
+        assert re.search(r"-[0-9a-f]{6}$", submitted.job_name)
+
+    @pytest.mark.parametrize("kind", ["read timeout", "closed", "ssl"])
+    def test_a_submit_that_may_have_reached_batch_is_looked_up(
+        self, aws: boto3.Session, kind: str
+    ) -> None:
+        from botocore.exceptions import (
+            ConnectionClosedError,
+            ReadTimeoutError,
+            SSLError,
+        )
+
+        error = {
+            "read timeout": ReadTimeoutError(endpoint_url="https://batch"),
+            "closed": ConnectionClosedError(endpoint_url="https://batch"),
+            "ssl": SSLError(endpoint_url="https://batch", error=RuntimeError("eof")),
+        }[kind]
+        batch = mock.MagicMock()
+        batch.submit_job.side_effect = error
+        batch.list_jobs.return_value = {"jobSummaryList": [{"jobId": "job-4"}]}
+        assert self._submit_with(aws, batch).job_id == "job-4"
+        assert batch.submit_job.call_count == 1
+
+    def test_a_refused_submit_raises_without_a_lookup(self, aws: boto3.Session) -> None:
+        from botocore.exceptions import ClientError
+
+        from scholar_lens.adapters.aws.batch import BatchJobError
+
+        refused = ClientError(
+            {
+                "Error": {"Code": "ClientException"},
+                "ResponseMetadata": {"HTTPStatusCode": 400},
+            },
+            "SubmitJob",
+        )
+        batch = mock.MagicMock()
+        batch.submit_job.side_effect = refused
+        with pytest.raises(BatchJobError) as caught:
+            self._submit_with(aws, batch)
+        assert "may have been" not in str(caught.value)
+        batch.list_jobs.assert_not_called()
+
+    def test_a_failed_lookup_does_not_risk_a_second_submit(
+        self, aws: boto3.Session
+    ) -> None:
+        from scholar_lens.adapters.aws.batch import BatchJobError
+
+        batch = mock.MagicMock()
+        batch.submit_job.side_effect = self._server_error()
+        batch.list_jobs.side_effect = self._server_error()
+        with pytest.raises(BatchJobError, match="may have been submitted"):
+            self._submit_with(aws, batch)
+        assert batch.submit_job.call_count == 1
 
     def test_a_pr_failure_survives_the_manifest(self, aws: boto3.Session) -> None:
         handler = S3Handler(aws, BUCKET)
@@ -614,3 +795,15 @@ def test_progress_reads_the_batch_attempt(
 
     monkeypatch.setenv("AWS_BATCH_JOB_ATTEMPT", value)
     assert ProgressReporter(S3Handler(aws, BUCKET), "sl", "j").attempt == attempt
+
+
+class _Raw:
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def stream(self, **_: Any) -> Any:
+        yield self._body
+
+    def read(self, *_: Any, **__: Any) -> bytes:
+        body, self._body = self._body, b""
+        return body

@@ -68,6 +68,7 @@ class SectionsPaperWriter:
             max_synthesis_attempts=cfg.max_synthesis_attempts,
             max_sections=cfg.max_sections,
             max_edit_rounds=cfg.max_edit_rounds,
+            check_body_claims=cfg.check_body_claims,
             thinking_effort=cfg.thinking_effort,
             planning_effort=cfg.planning_effort,
             evaluator_enable_thinking=cfg.evaluator_enable_thinking,
@@ -98,6 +99,7 @@ class SectionsPaperWriter:
             max_total_tokens=cfg.max_total_tokens,
             max_cost_usd=cfg.max_cost_usd,
             callbacks=[tracker],
+            check_claims=cfg.check_claims,
         )
         result = await summarizer.summarize(paper)
         logger.info("Generated the paper summary.")

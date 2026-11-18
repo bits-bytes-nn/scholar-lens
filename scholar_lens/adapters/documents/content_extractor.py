@@ -7,9 +7,11 @@ from collections.abc import Sequence
 
 import boto3
 from langchain_core.callbacks import BaseCallbackHandler
+from langchain_core.runnables import RunnableLambda
 
 from scholar_lens.adapters.bedrock.chat_models import BedrockLanguageModelFactory
 from scholar_lens.adapters.bedrock.output_parsers import HTMLTagOutputParser
+from scholar_lens.adapters.bedrock.prompts.base import with_cache_points
 from scholar_lens.adapters.bedrock.prompts.extraction import (
     AttributesExtractionPrompt,
     CitationExtractionPrompt,
@@ -162,6 +164,7 @@ class ContentExtractor(RetryableBase):
         self._attributes_model_id = attributes_extraction_model_id
         self.citation_extractor = (
             CitationExtractionPrompt.get_prompt()
+            | RunnableLambda(with_cache_points(CitationExtractionPrompt))
             | citation_llm
             | HTMLTagOutputParser(tag_names=CitationExtractionPrompt.output_variables)
         )

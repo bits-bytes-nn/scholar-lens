@@ -24,6 +24,7 @@ cache-write price.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -170,14 +171,20 @@ class StrandsLanguageModel:
         )
 
     def _usage(
-        self, role: ModelRole, metrics: EventLoopMetrics, label: str | None = None
+        self,
+        role: ModelRole,
+        metrics: EventLoopMetrics,
+        label: str | None = None,
+        latency_ms: int | None = None,
     ) -> None:
+        """One usage record per model cycle of the last invocation; the
+        invocation's wall time (``latency_ms``) goes on its last cycle."""
         label = label or self._roles[role].model_label
         stage = current_stage()
         invocations = metrics.agent_invocations
         cycles = invocations[-1].cycles if invocations else []
         usages = [c.usage for c in cycles] or [metrics.accumulated_usage]
-        for usage in usages:
+        for k, usage in enumerate(usages):
             self._record(
                 UsageEvent(
                     stage=stage,
@@ -186,6 +193,7 @@ class StrandsLanguageModel:
                     output_tokens=int(usage.get("outputTokens", 0)),
                     cache_read_tokens=int(usage.get("cacheReadInputTokens", 0)),
                     cache_write_tokens=int(usage.get("cacheWriteInputTokens", 0)),
+                    latency_ms=latency_ms if k == len(usages) - 1 else None,
                 )
             )
 
@@ -195,12 +203,14 @@ class StrandsLanguageModel:
         """(result or None, text, stop reason) of one invocation, its usage
         recorded whatever happens. An answer cut at the output limit comes
         back with its partial text and ``"max_tokens"``."""
+        started = time.monotonic()
         try:
             result = await agent.invoke_async(content, **kwargs)
         except MaxTokensReachedException:
             return None, _last_text(agent), "max_tokens"
         finally:
-            self._usage(role, agent.event_loop_metrics, label)
+            elapsed = round((time.monotonic() - started) * 1000)
+            self._usage(role, agent.event_loop_metrics, label, elapsed)
         return result, str(result), str(result.stop_reason)
 
     def _tries(self, role: ModelRole) -> list[tuple[RoleModel, bool | None]]:

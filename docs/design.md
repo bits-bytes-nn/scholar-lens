@@ -114,7 +114,7 @@ domain (순수 코드: 모델, 규칙, 검증, Markdown, 프롬프트 본문)
 
 stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다. 인자 누락 같은 사용법 오류도 사용법은 stderr로, `{"status": "rejected"}`는 stdout으로 내고 2로 끝납니다. 종료 코드의 정본은 `cli.py` 모듈 docstring이고, `JobResult.status`의 `succeeded`·`failed`·`rejected`가 각각 0·1·2입니다(`_EXIT_BY_STATUS`). 다만 PR을 요청했고 GitHub 연동이 켜져 있는데 PR 생성이 실패하면 산출물은 저장된 `failed` 결과에 `pr_error`가 붙고 5(`EXIT_PR_FAILED`, `cli.py::result_exit_code`)로 끝납니다. `status`도 그 결과 매니페스트에 같은 코드를 돌려줍니다. `publish`도 실행과 같은 코드를 씁니다(글이 아직 규칙을 어기면 1, 글이나 그 옆의 게시 요청이 없거나 읽을 수 없으면 2, PR 실패는 5). 로컬 실행이 설정·자격 증명 문제로 시작하지 못해도 `failed`(1)입니다.
 
-`--remote`는 `SubmittedJob`을 출력하고 0으로 끝납니다. `status`는 결과 매니페스트가 있으면 그 상태의 종료 코드를 돌려줍니다. 없으면 Batch가 `FAILED`일 때 1, 아직 끝나지 않았거나 `--wait`가 시간 초과되면 3, `SUCCEEDED`인데 매니페스트가 없으면 0입니다. `--wait` 중 Batch 조회나 결과 매니페스트 읽기의 요청 제한·5xx·네트워크 오류는 건너뛰고 계속 조회합니다.
+`--remote`는 `SubmittedJob`을 출력하고 0으로 끝납니다. 로컬 자격 증명에는 `batch:SubmitJob`과 `batch:ListJobs` 권한이 필요합니다. SubmitJob에는 멱등성 토큰이 없으므로 SDK가 다시 보내지 않게 하고(`adapters/aws/batch.py::submit_job`), 작업 이름 끝에 임의 6자리를 붙입니다. 요청 제한이나 연결 실패처럼 접수되지 않은 것이 확실한 실패만 잠시 뒤 한 번 더 제출합니다. 시간 초과·5xx처럼 접수됐을 수 있는 실패 뒤에는 이름으로 두 번(3초 간격) 찾아 그 작업을 쓰고, 찾지 못하면 다시 제출하지 않고 "may have been submitted" 오류로 멈춥니다(중복 실행보다 확인 요청이 낫습니다). `status`는 결과 매니페스트가 있으면 그 상태의 종료 코드를 돌려줍니다. 없으면 Batch가 `FAILED`일 때 1, 아직 끝나지 않았거나 `--wait`가 시간 초과되면 3, `SUCCEEDED`인데 매니페스트가 없으면 0입니다. `--wait` 중 Batch 조회나 결과 매니페스트 읽기의 요청 제한·5xx·네트워크 오류는 건너뛰고 계속 조회합니다.
 
 `--remote`, `status`, `costs`가 실패하면(자격 증명, 설정, Batch·S3·Cost Explorer API 오류) `{"status": "error"}`와 종료 코드 4를 냅니다. 다만 `survey write --remote`가 올릴 계획을 읽을 수 없으면(파일 없음, JSON 아님, 버킷 없음, 설정한 버킷이 아닌 `s3://` 계획(`cli.py::_check_plan_bucket`)) 입력 문제이므로 `{"status": "rejected"}`와 종료 코드 2입니다. 작업 실패(1)와 구분하기 위해서이며, 이때 원격 작업의 상태는 알 수 없습니다.
 
@@ -149,7 +149,7 @@ stdout에는 JSON 객체 하나만 출력하고 로그는 stderr로 보냅니다
 3. 파이프라인을 실행합니다. 입력 오류는 `rejected`, `PostValidationError`는 `failed`와 `violations`, `PostAssetError`(논문 그림을 저장하지 못함)는 `failed`, 그 밖의 예외는 `failed`로 기록합니다. 글을 저장한 뒤 블로그 PR 생성이 실패하면(`PublishError`, `application/run.py::publish_artifact`) 경로(`markdown_path`·`s3_uri`)는 그대로 두고 `failed`와 `pr_error`를 기록합니다. worker는 이때 실패 알림을 보내고 10으로 끝납니다. 앞의 두 발행 오류는 `markdown_path`·`s3_uri`에 거부된 초안(`<slug>.rejected.md`)의 위치를 담습니다. `SystemExit`·`KeyboardInterrupt`는 정리 후 다시 던집니다. 로컬 실행의 Ctrl-C는 `cli.py::main`이 받아 `INTERRUPTED_ERROR`인 `failed` 결과를 JSON으로 출력하고 1로 끝냅니다.
 4. `finally`에서 지표를 보내고, AWS 안에서 `TOPIC_ARN`이 있으면 성공·실패 모두 SNS로 알리며(`format_result_notification`), Batch 실행이면 결과 매니페스트를 저장합니다.
 
-worker는 SIGTERM을 `SystemExit`로 바꿔(`cli.py::_raise_on_sigterm`) Batch 시간 초과나 취소, 호스트 종료 때도 4단계가 실행되게 합니다. 파이프라인은 `asyncio.run` 대신 `entrypoints/runtime.py::run_coroutine`으로 돌려, 중단 시 작업자 스레드에서 진행 중인 Bedrock 호출을 기다리지 않고 바로 정리 단계로 갑니다(Batch는 SIGTERM 약 30초 뒤 SIGKILL). 이때는 매니페스트만 저장하고(`INTERRUPTED_ERROR`) SNS 실패 알림은 보내지 않습니다. 정상 종료는 인터프리터가 남은 작업자 스레드를 기다리므로, worker는 정리 뒤 중단된 실행의 `JobResult`를 stdout에 출력하고 `os._exit(143)`으로 바로 끝납니다(`cli.py::_work`). `run_job` 밖에서 받은 SIGTERM(실행 시작 전이나 결과 출력 뒤)은 더 출력하지 않습니다. 호스트가 사라졌으면 Batch가 재시도하고, 최종 실패면 EventBridge 규칙이 알립니다.
+worker는 SIGTERM을 `SystemExit`로 바꿔(`cli.py::_raise_on_sigterm`) Batch 시간 초과나 취소, 호스트 종료 때도 4단계가 실행되게 합니다. 파이프라인은 `asyncio.run` 대신 `entrypoints/runtime.py::run_coroutine`으로 돌려, 중단 시 작업자 스레드에서 진행 중인 Bedrock 호출을 기다리지 않고 바로 정리 단계로 갑니다(Batch는 SIGTERM 약 30초 뒤 SIGKILL). 이때는 매니페스트만 저장하고(`INTERRUPTED_ERROR`) SNS 실패 알림은 보내지 않습니다. 정상 종료는 인터프리터가 남은 작업자 스레드를 기다리므로, worker는 정리 뒤 중단된 실행의 `JobResult`를 stdout에 출력하고 `os._exit(143)`으로 바로 끝납니다(`cli.py::_work`). `run_job` 밖에서 받은 SIGTERM(실행 시작 전이나 결과 출력 뒤)은 더 출력하지 않습니다. 호스트가 사라졌으면 Batch가 재시도하고, 최종 실패면 EventBridge 규칙이 알립니다. 시작하지 못하는 작업도 알립니다. 작업 대기열은 인스턴스 용량을 얻지 못한 작업을 60분 뒤, 컴퓨팅 환경이 줄 수 없는 자원을 요구한 작업을 10분 뒤 취소하고, 그 실패가 같은 규칙으로 알려집니다. 앞선 작업이 vCPU 상한을 쓰고 있어 기다리는 작업은 정상적인 대기라 취소하지 않습니다.
 
 `run_job` 밖의 실패(잘못된 요청 JSON, 런타임 모듈 import 실패 등)는 `cli.py::_work`가 받아 `entrypoints/runtime.py::record_unstarted_run`으로 알림과 매니페스트를 남깁니다. worker는 실패 알림을 보낸 뒤 로컬 CLI와 다른 종료 코드 10(실패)·11(거부)(`APP_REPORTED_EXIT_CODES`)로 끝납니다. 1·2는 worker 코드가 돌기 전의 Python 오류·인자 오류와 겹치기 때문입니다. 실패 알림을 보내지 못하면(`run_job` 안이든 밖이든, `JobResult.notification_failed`) 4로 끝나 EventBridge 규칙이 대신 알립니다.
 
@@ -227,15 +227,17 @@ LLM 라우팅 호출 없이 계획을 따릅니다(`PaperReviewer._enrich`). 참
 
 **주장 대조.** TL;DR과 마무리 절은 편집된 글만 보고 쓰므로, 블라인드 판정에서 이 엔진의 사실 오류(비교·순위, 결과의 범위, 논문이 실제로 시험한 한계)가 가장 많이 나온 곳입니다. 마무리 뒤 평가 모델(`PaperFinalCheckPrompt`)이 두 부분과 검색 설명의 문장을 논문 본문(프롬프트 태그를 무력화한 원문을 `fit_text`로 맞춤)과 대조합니다. 깨끗한 답은 `- none`이며, 태그가 없거나 빈 답은 판정 없음으로 봅니다. 문제가 나오면 그 목록을 `repair_note`로 붙여 마무리를 한 번 더 요청하고, 형식이 맞고 다시 대조했을 때 문제가 줄었을 때만 새 TL;DR과 마무리 절을 씁니다. 설명은 수정과 함께 쓴 새 답의 설명이 새 TL;DR과 맞으면 그것을, 아니면 기존 설명을, 둘 다 맞지 않으면 비워 블로그가 만들게 하며, 다시 대조할 때 함께 읽습니다. 부제는 대조하지 않습니다. 남은 문제, 대조 실패(형식을 어긴 답 포함), 예산 소진이나 오류로 대조나 수정을 못 한 경우는 그 이유와 함께 PR 메모로 남기고, 다 쓴 리뷰는 그대로 둡니다(`_checked_claims`, 권한 오류만 실행을 멈춤).
 
+**본문 대조.** 편집 단계 뒤에는 평가 모델(`PaperTextCheckPrompt`)이 본문 전체를 논문과 대조합니다(`_checked_body`, `explanation.check_body_claims`, 기본 켜짐). 두 대조 모두 수치마다 그 수치를 쓴 논문 구절을 가장 가까운 제목과 표 머리글과 함께 넘깁니다(`domain/validation.py::number_sources`). 그래서 수치가 붙은 모델·벤치마크·설정이나 비교 순서가 논문과 다른지 볼 수 있습니다. 문제가 나오면 편집기에 한 번 고치게 하고, 다시 대조했을 때 문제가 줄거나, 수가 같으면서 wrong이 늘지 않고 지적된 문장이 모두 바뀌었을 때만 고친 본문을 씁니다(`domain/quoted.py::fix_kept`). 남은 문제와 대조 실패는 PR 메모로 남깁니다. 그림에만 있는 수치(본문이 모델 이름 없이 말하는 값)는 이 대조로 가려낼 수 없습니다. 요약도 마지막에 같은 대조와 한 번의 수정을 거칩니다(`summary.check_claims`).
+
 ### 3.6 호출 수와 한계
 
-8개 절 논문에서 계획 1회, 절마다 집필·검수 약 2–3회, 편집 1–2회, 마무리 1회, 주장 대조 1–2회(문제가 나오면 마무리 1회 추가)입니다. 계획과 편집은 논문 전체를 입력으로 받고, 컨텍스트를 넘으면 `fit_text`가 뒷부분을 잘라냅니다. 이때도 미배정 구간 보정이 남은 문장을 절에 붙입니다. 모든 단계는 `max_total_tokens` 예산 가드를 거칩니다.
+8개 절 논문에서 계획 1회, 절마다 집필·검수 약 2–3회, 편집 1–2회, 본문 대조 1–2회(문제가 나오면 편집 1회 추가), 마무리 1회, 주장 대조 1–2회(문제가 나오면 마무리 1회 추가)입니다. 계획과 편집은 논문 전체를 입력으로 받고, 컨텍스트를 넘으면 `fit_text`가 뒷부분을 잘라냅니다. 이때도 미배정 구간 보정이 남은 문장을 절에 붙입니다. 모든 단계는 `max_total_tokens` 예산 가드를 거칩니다.
 
 ## 4. 요약, 기술 가이드, 논문 서베이 파이프라인
 
 ### 4.1 요약
 
-요약의 기본 엔진(`summary.engine: sections`)입니다(`evidence` 엔진은 4.4절). `sections_engine/summarizer.py::PaperSummarizer.summarize`는 파싱한 논문 전체(컨텍스트에 맞게 자름)와 코드베이스 요약으로 한 번 호출하고, 한국어 요약이 너무 길면 줄이는 호출을 한 번 더 합니다(`_shorten_if_long`, 구조가 깨지면 원문 유지). 그 뒤에도 게시를 막는 문제(`domain/quality_gate.py::publish_blockers`)가 남으면 그 문제만 고치는 표적 수정 호출을 한 번 합니다(`_fix_blockers`, `PaperSummaryFixPrompt`, 지시는 `sections_engine/section_loop.py::TARGETED_FIX`). 고친 글은 문제가 줄고 새 종류가 생기지 않으며 구조를 잃지 않을 때만(`sections_engine/section_loop.py::lost_structure`) 쓰고, 아니면 원문을 두어 발행 검증이 문제를 알립니다. 출력 태그는 `subtitle`, `description`, `summary`, `urls`입니다. 다시 요청하는 단계가 없으므로 TL;DR(앞 인용문)의 수치가 논문에 없거나 설명이 규칙(3.5)을 어기면 PR 메모로 남기고, 마크업이 있거나 페이지 `<title>`보다 길지 않은 설명은 버립니다. 요약은 `> **요약:**` 인용문과 `##` 절 다섯 개(연구 배경, 제안 방법, 구현 방식, 실험 결과, 의의와 한계)로 이루어지고, 실증 논문이면 결과 절에 무게를 둡니다. `domain/post_format.py::summary_with_tldr`가 앞의 인용문을 `## TL;DR` 절로 바꿔 블로그 규칙에 맞춥니다.
+요약의 기본 엔진(`summary.engine: sections`)입니다(`evidence` 엔진은 4.4절). `sections_engine/summarizer.py::PaperSummarizer.summarize`는 파싱한 논문 전체(컨텍스트에 맞게 자름)와 코드베이스 요약으로 한 번 호출하고, 한국어 요약이 너무 길면 줄이는 호출을 한 번 더 합니다(`_shorten_if_long`, 구조가 깨지면 원문 유지). 그 뒤에도 게시를 막는 문제(`domain/quality_gate.py::publish_blockers`)가 남으면 그 문제만 고치는 표적 수정 호출을 한 번 합니다(`_fix_blockers`, `PaperSummaryFixPrompt`, 지시는 `sections_engine/section_loop.py::TARGETED_FIX`). 고친 글은 문제가 줄고 새 종류가 생기지 않으며 구조를 잃지 않을 때만(`sections_engine/section_loop.py::lost_structure`) 쓰고, 아니면 원문을 두어 발행 검증이 문제를 알립니다. 마지막으로 요약 전체를 논문과 대조하고(`_checked_claims`, `summary.check_claims`, 요약 모델), 문제가 나오면 표적 수정을 한 번 더 한 뒤 다시 대조해 문제가 줄었을 때만 씁니다(3.5절 본문 대조와 같은 규칙). 출력 태그는 `subtitle`, `description`, `summary`, `urls`입니다. 다시 요청하는 단계가 없으므로 TL;DR(앞 인용문)의 수치가 논문에 없거나 설명이 규칙(3.5)을 어기면 PR 메모로 남기고, 마크업이 있거나 페이지 `<title>`보다 길지 않은 설명은 버립니다. 요약은 `> **요약:**` 인용문과 `##` 절 다섯 개(연구 배경, 제안 방법, 구현 방식, 실험 결과, 의의와 한계)로 이루어지고, 실증 논문이면 결과 절에 무게를 둡니다. `domain/post_format.py::summary_with_tldr`가 앞의 인용문을 `## TL;DR` 절로 바꿔 블로그 규칙에 맞춥니다.
 
 ### 4.2 기술 가이드
 
@@ -358,8 +360,8 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 ### 5.2 파싱
 
-- arXiv 소스는 arXiv HTML(`arxiv.org/html`)을 먼저 씁니다(`adapters/documents/parser.py::HTMLRichParser`). HTML 페이지와 PDF 내려받기(`ArxivHandler._download`)도 arXiv API와 같은 프로세스 전역 제한기(3초에 1회)를 거치고, 오류 응답의 `Retry-After`(최대 60초)만큼 이후 arXiv 요청을 미룹니다. 실패하거나 내용이 비면 PDF로 넘어가고, 그림은 PDF에서 잘라 로컬 파일로 씁니다. ar5iv는 쓰지 않습니다. 잃어버린 그림을 HTTP 200의 "NO IMAGE AVAILABLE" PNG로 돌려주기 때문입니다. 이렇게 얻은 논문 그림(arXiv HTML 그림, arXiv 원본에서 되살린 그림, PDF에서 잘라낸 그림)만 게시 단계에서 블로그로 복사합니다(7장).
-- PDF는 Upstage Document Parse(`adapters/documents/parser.py::PDFParser`)로 파싱하고, 실패하면 PyMuPDF로 텍스트만 추출하고(`Content.text_only`), 그림과 표가 없다는 메모를 PR 체크리스트에 올립니다. Upstage 호출은 재시도하지 않습니다. 빈 응답은 캐시하지 않습니다.
+- arXiv 소스는 arXiv HTML(`arxiv.org/html`)을 먼저 씁니다(`adapters/documents/parser.py::HTMLRichParser`). HTML 페이지와 PDF 내려받기(`ArxivHandler._download`)도 arXiv API와 같은 프로세스 전역 제한기(3초에 1회)를 거치고, 오류 응답의 `Retry-After`(최대 60초)만큼 이후 arXiv 요청을 미룹니다. PDF 내려받기는 429·5xx면 제한기를 거쳐 두 번 더 시도합니다. 실패하거나 내용이 비면 PDF로 넘어가고, 그림은 PDF에서 잘라 로컬 파일로 씁니다. ar5iv는 쓰지 않습니다. 잃어버린 그림을 HTTP 200의 "NO IMAGE AVAILABLE" PNG로 돌려주기 때문입니다. 이렇게 얻은 논문 그림(arXiv HTML 그림, arXiv 원본에서 되살린 그림, PDF에서 잘라낸 그림)만 게시 단계에서 블로그로 복사합니다(7장).
+- PDF는 Upstage Document Parse(`adapters/documents/parser.py::PDFParser`)로 파싱하고, 실패하면 PyMuPDF로 텍스트만 추출하고(`Content.text_only`), 그림과 표가 없다는 메모를 PR 체크리스트에 올립니다. Upstage 호출은 429·5xx·끊긴 연결만 두 번 더 시도하고(Retry-After가 있으면 최대 60초까지 따름), 읽기 시간 초과는 다시 과금되므로 재시도하지 않습니다. 키를 거부하면(401·403) 텍스트만 추출하지 않고 실행을 멈춥니다(`DocumentParseAuthError`). 빈 응답은 캐시하지 않습니다.
 - 그림은 비전 모델(`figure_analysis_model_id`)로 분석하고, `adapters/documents/parser.py::attach_figure_context`가 본문의 이미지 마커에 경로와 분석을 붙입니다. 짝짓기는 순서가 아니라 요소 ID와 파일명으로 합니다.
 
 ### 5.3 HTML을 텍스트로
@@ -519,7 +521,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 
 ### 8.2 재시도와 제한 시간
 
-재시도는 한 계층만 소유합니다. botocore는 standard 모드에서 1회만 시도하고(연결 30초, 읽기 3600초: 비스트리밍 호출이 출력 128k 토큰을 끝까지 생성하는 시간), `adapters/retry.py::RetryableBase._retry`가 tenacity로 요청 제한, 5xx, 연결·읽기 시간 초과만 지수 백오프와 지터로 재시도합니다. 읽기 시간 초과는 긴 생성 전체를 다시 과금하므로 한 번만 재시도합니다. AccessDenied, ValidationException, ResourceNotFound, 예산 초과, 입력 검증 오류는 바로 실패합니다. `sections_engine/batch.py::BatchProcessor`(코드 분석 일괄 처리)는 실패한 항목만 다시 처리합니다.
+재시도는 호출 경로마다 한 계층이 소유합니다. LangChain 경로(아래)와 Strands 경로(4.3절 끝: botocore 재시도 1회 + 응답 스트림 안의 스로틀을 다루는 Strands 재시도)는 서로 겹치지 않습니다. LangChain 경로에서 botocore는 standard 모드에서 1회만 시도하고(연결 30초, 읽기 3600초: 비스트리밍 호출이 출력 128k 토큰을 끝까지 생성하는 시간), `adapters/retry.py::RetryableBase._retry`가 tenacity로 요청 제한, 5xx, 연결·읽기 시간 초과만 지수 백오프와 지터로 재시도합니다. 읽기 시간 초과는 긴 생성 전체를 다시 과금하므로 한 번만 재시도합니다. AccessDenied, ValidationException, ResourceNotFound, 예산 초과, 입력 검증 오류는 바로 실패합니다. `sections_engine/batch.py::BatchProcessor`(코드 분석 일괄 처리)는 실패한 항목만 다시 처리합니다.
 
 ### 8.3 예산과 비용
 
@@ -554,7 +556,7 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
   - SNS 게시와 토픽 KMS 키 사용
   - `cloudwatch:PutMetricData`(`ScholarLens` 네임스페이스 조건)
   - SSM 비밀값 8개 읽기(`RUN_SECRETS`)
-- **SSM**: 스택은 `batch-job-queue`, `batch-job-definition`(String)을 씁니다. 비밀값(SecureString)은 CloudFormation이 만들 수 없으므로 `scripts/put_secrets.py`로 따로 기록합니다(이름을 주면 그 비밀값만). `cdk synth`/`diff`는 비밀값을 건드리지 않습니다. 실행 시 기록되지 않은 비밀값(`ParameterNotFound`)은 조용히 건너뛰고, 권한 오류 등은 warning으로 남깁니다.
+- **SSM**: 스택은 `batch-job-queue`, `batch-job-definition`(String)을 씁니다. 비밀값(SecureString)은 CloudFormation이 만들 수 없으므로 `scripts/put_secrets.py`로 따로 기록합니다(이름을 주면 그 비밀값만). `cdk synth`/`diff`는 비밀값을 건드리지 않습니다. 실행 시 기록되지 않은 비밀값(`ParameterNotFound`)은 조용히 건너뜁니다. 권한·KMS 오류나 SDK 재시도 뒤에도 남은 스로틀처럼 다른 이유로 읽지 못하면, 비용이 들기 전에 실행을 실패시킵니다. 그대로 진행하면 검색 공급자나 API 키가 빠진 채 글이 조용히 나빠지기 때문입니다.
 - **비용 할당**: 모든 리소스에 `ProjectName`, `Stage`, `CostCenter`, `ManagedBy` 태그를 붙이고 Batch 인스턴스·볼륨에도 실행 템플릿으로 전파합니다. `BedrockProfilesStack`은 산출물 종류(`domain/cost_allocation.py::ARTIFACT_KINDS`)와 설정이 쓰는 모델(global 교차 리전 프로필)의 조합마다 응용 추론 프로필(`<project>-<stage>-<kind>-<model>`, `application_profile_name`)을 만들고 `Kind` 태그를 더합니다. `runtime.run_job`이 실행의 종류를 `cost_allocation`으로 정하고, 모델 팩토리가 그 이름의 프로필 ARN으로 호출합니다(`adapters/bedrock/chat_models.py::_allocated_profile`, 목록 조회는 프로세스마다 한 번). 프로필이 없거나 조회가 실패하면 시스템 프로필로 호출하므로 실행은 막히지 않고 태그만 빠집니다. 사용량 기록과 가격은 ARN이 아니라 원래 모델로 남깁니다(`domain/model_registry.py::profile_source`). 작업 역할은 계정의 `application-inference-profile/*` 호출도 허용합니다.
 - **설정 파일**: 이미지에는 배포하는 체크아웃의 `scholar_lens/configs/config.yaml`이 들어갑니다. 설정을 고치면 `cdk deploy --all`를 다시 해야 Batch에 반영됩니다. `scripts/deploy_infra.py::check_deployable`은 이 파일이나 `s3_bucket_name`이 없으면 배포를 멈춥니다. `cdk` 명령에는 `resources.profile_name`과 같은 `--profile`을 넘깁니다.
 - **알림**: KMS 암호화 SNS 토픽(SSL 강제)에 이메일을 구독합니다. 토픽 정책은 이 계정의 CloudWatch 경보(`aws:SourceAccount`·`aws:SourceArn` 조건)와 실패 규칙 하나의 EventBridge 게시만 허용합니다. EventBridge 대상이 자동으로 만드는 허용은 조건이 없으므로, 그 규칙이 아닌 게시를 막는 Deny 문을 따로 둡니다. 토픽 KMS 키의 EventBridge 허용은 CDK가 만든 그대로입니다.

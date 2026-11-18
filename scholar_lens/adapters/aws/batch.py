@@ -6,13 +6,21 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Any
+from uuid import uuid4
 
 import boto3
-from botocore.exceptions import ClientError, HTTPClientError
+from botocore.config import Config
+from botocore.exceptions import (
+    ClientError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    HTTPClientError,
+)
 from botocore.exceptions import ConnectionError as BotoConnectionError
 from pydantic import ValidationError
 
@@ -67,6 +75,69 @@ def read_result_manifest(
         raise S3OperationError(f"Malformed result manifest '{key}': {e}") from e
 
 
+_SUBMIT_ATTEMPTS = 2
+# Lookups after a submit that may have been accepted, each after a pause.
+_LOOKUPS = 2
+_LOOKUP_WAIT_SECONDS = 3.0
+_RESUBMIT_WAIT_SECONDS = 2.0
+_THROTTLED = frozenset(
+    {"TooManyRequestsException", "ThrottlingException", "Throttling"}
+)
+_sleep = time.sleep  # replaced in tests
+
+
+def _not_accepted(error: Exception) -> bool:
+    """Whether a failed SubmitJob certainly never reached Batch: throttled,
+    or no connection was made. A timeout, a dropped connection or a 5xx may
+    come after Batch accepted the job."""
+    if isinstance(error, (EndpointConnectionError, ConnectTimeoutError)):
+        return True
+    if isinstance(error, ClientError):
+        return error.response.get("Error", {}).get("Code") in _THROTTLED
+    return False
+
+
+def _rejected(error: Exception) -> bool:
+    """Whether Batch answered SubmitJob with a refusal (a 4xx other than
+    throttling): the job certainly was not created. Any other failure (a
+    5xx, a timeout, a TLS or connection error mid-request) may come after
+    Batch accepted it."""
+    if not isinstance(error, ClientError):
+        return False
+    status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+    code = error.response.get("Error", {}).get("Code")
+    if status is None:
+        return not is_transient_error(error)
+    return 400 <= int(status) < 500 and code not in _THROTTLED
+
+
+def _submitted(session: boto3.Session, job_queue: str, job_name: str) -> str | None:
+    """The id of a job named ``job_name`` in ``job_queue`` (one Batch accepted
+    before its answer was lost), or None.
+
+    Raises:
+        BatchJobError: the lookup failed, so a second submit could duplicate
+            the job.
+    """
+    try:
+        # A read: the SDK's own retries are safe here.
+        jobs = (
+            session.client("batch")
+            .list_jobs(
+                jobQueue=job_queue,
+                filters=[{"name": "JOB_NAME", "values": [job_name]}],
+            )
+            .get("jobSummaryList", [])
+        )
+    except (ClientError, HTTPClientError, BotoConnectionError) as e:
+        raise BatchJobError(
+            f"Submitting Batch job '{job_name}' failed and it could not be looked "
+            f"up ({e}); it may have been submitted: check the queue before "
+            "submitting again."
+        ) from e
+    return str(jobs[0]["jobId"]) if jobs else None
+
+
 def submit_job(
     session: boto3.Session,
     request: JobRequest,
@@ -83,21 +154,58 @@ def submit_job(
         session, f"{base}/{SSMParams.BATCH_JOB_DEFINITION.value}"
     )
     timestamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
-    job_name = f"{project_name}-{stage}-{request.kind}-{timestamp}"
-    try:
-        response = session.client("batch").submit_job(
-            jobName=job_name,
-            jobQueue=job_queue,
-            jobDefinition=job_definition,
-            # Defaults are left out so a worker image from before a newly added
-            # field (extra="forbid") still accepts requests that do not use it.
-            parameters={"request": request.model_dump_json(exclude_defaults=True)},
-        )
-    except ClientError as e:
-        raise BatchJobError(f"Failed to submit Batch job '{job_name}': {e}") from e
-    logger.info("Submitted Batch job '%s' (%s)", job_name, response["jobId"])
+    # A random tail: two submits in one second never share a name, so the
+    # lookup below cannot return another request's job.
+    job_name = f"{project_name}-{stage}-{request.kind}-{timestamp}-{uuid4().hex[:6]}"
+    # SubmitJob has no idempotency token: the SDK must not resend it (a
+    # timeout after Batch accepted the job would start a second, billed run).
+    # Only a failure that means the request was not accepted (throttled, no
+    # connection made) is submitted again; after one that may have been
+    # accepted, the job is looked up by its name and never submitted twice.
+    client = session.client(
+        "batch",
+        config=Config(retries={"total_max_attempts": 1, "mode": "standard"}),
+    )
+    job_id = ""
+    for attempt in range(_SUBMIT_ATTEMPTS):
+        try:
+            job_id = client.submit_job(
+                jobName=job_name,
+                jobQueue=job_queue,
+                jobDefinition=job_definition,
+                # Defaults are left out so a worker image from before a newly
+                # added field (extra="forbid") still accepts requests that do
+                # not use it.
+                parameters={"request": request.model_dump_json(exclude_defaults=True)},
+            )["jobId"]
+            break
+        except (ClientError, HTTPClientError, BotoConnectionError) as e:
+            if _not_accepted(e) and attempt < _SUBMIT_ATTEMPTS - 1:
+                logger.warning(
+                    "Submitting '%s' failed (%s); trying again.", job_name, e
+                )
+                _sleep(_RESUBMIT_WAIT_SECONDS * (1 + random.random()))
+                continue
+            if _not_accepted(e) or _rejected(e):
+                raise BatchJobError(
+                    f"Failed to submit Batch job '{job_name}': {e}"
+                ) from e
+            # Batch may have accepted it: find it, or stop.
+            found = None
+            for _ in range(_LOOKUPS):
+                _sleep(_LOOKUP_WAIT_SECONDS)
+                if found := _submitted(session, job_queue, job_name):
+                    break
+            if not found:
+                raise BatchJobError(
+                    f"Failed to submit Batch job '{job_name}' ({e}); it may have "
+                    "been submitted: check the queue before submitting again."
+                ) from e
+            job_id = found
+            break
+    logger.info("Submitted Batch job '%s' (%s)", job_name, job_id)
     return SubmittedJob(
-        job_id=response["jobId"],
+        job_id=job_id,
         job_name=job_name,
         kind=request.kind,
         input=request.describe(),

@@ -782,3 +782,44 @@ def test_rate_limit_retries_are_bounded(monkeypatch: pytest.MonkeyPatch) -> None
             rate_limit_retries=2,
         )
     assert len(citation_metadata._SEMANTIC_SCHOLAR_LIMITER.penalties) == 2  # type: ignore[attr-defined]
+
+
+def test_a_failed_lookup_logs_no_query_string(
+    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    def fake_get(url: str, **kwargs: Any) -> httpx.Response:
+        request = httpx.Request("GET", url, params=kwargs.get("params"))
+        return httpx.Response(404, request=request)
+
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
+    with caplog.at_level("WARNING"):
+        assert CrossrefProvider(mailto="secret@example.org").lookup("T") is None
+    assert "lookup failed" in caplog.text
+    assert "secret@example.org" not in caplog.text and "mailto" not in caplog.text
+
+
+def test_an_index_error_carries_no_query_string(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scholar_lens.adapters.scholarly.index import OpenAlexIndex
+
+    def fake_get(url: str, **kwargs: Any) -> httpx.Response:
+        request = httpx.Request("GET", url, params=kwargs.get("params"))
+        return httpx.Response(404, request=request)
+
+    monkeypatch.setattr("scholar_lens.adapters.scholarly.metadata.httpx.get", fake_get)
+    with pytest.raises(httpx.HTTPStatusError) as caught:
+        OpenAlexIndex(mailto="secret@example.org")._works({"filter": "x"})
+    assert "secret" not in str(caught.value) and "mailto" not in str(caught.value)
+    assert caught.value.response.status_code == 404
+
+
+def test_a_transport_error_keeps_its_cause_without_the_query() -> None:
+    from scholar_lens.adapters.scholarly.metadata import _described
+
+    request = httpx.Request(
+        "GET", "https://api.x.org/works", params={"mailto": "a@b.c"}
+    )
+    error = httpx.ConnectError("nodename nor servname provided", request=request)
+    text = _described(error)
+    assert "nodename nor servname" in text and "a@b.c" not in text

@@ -493,6 +493,18 @@ class TestHardenedFetch:
         )
         assert researcher._fetch_page("https://docs.x.dev/big") is None
 
+    def test_a_page_past_its_deadline_is_skipped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens.adapters.web import research as web_research
+
+        ticks = iter([0.0, 61.0])
+        monkeypatch.setattr(web_research, "_clock", lambda: next(ticks, 61.0))
+        researcher = _researcher(
+            {"https://docs.x.dev/slow": (200, "text/html", "<p>slow</p>")}
+        )
+        assert researcher._fetch_page("https://docs.x.dev/slow") is None
+
     def test_content_links_leave_out_the_site_navigation(self) -> None:
         html = (
             "<html><body><nav><a href='https://arxiv.org/abs/1111.11111'>x</a>"

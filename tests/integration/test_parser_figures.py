@@ -716,3 +716,50 @@ class TestArxivHtmlOnly:
             await parser._fetch_html("1412.6980")
         # ar5iv serves placeholder images for figures it lost: never asked.
         assert urls == ["https://arxiv.org/html/1412.6980"]
+
+
+def _parse_api(handler: object) -> PDFParser:
+    parser = PDFParser(
+        LanguageModelId.CLAUDE_V4_5_HAIKU,
+        boto3.Session(region_name="us-east-1"),
+        api_key="test-key",
+        http_client=httpx.AsyncClient(transport=httpx.MockTransport(handler)),  # type: ignore[arg-type]
+    )
+    return parser
+
+
+async def test_a_rejected_parse_key_stops_the_run(tmp_path: Path) -> None:
+    from scholar_lens.adapters.documents.parser import DocumentParseAuthError
+
+    pdf = tmp_path / "p.pdf"
+    pdf.write_bytes(b"%PDF-1.7 x")
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(401, request=request)
+
+    with pytest.raises(DocumentParseAuthError, match="401"):
+        await _parse_api(handler).parse(pdf, use_cache=False)
+    assert len(calls) == 1  # not retried, and no text-only fallback
+
+
+def test_the_parse_retry_waits_the_retry_after_it_is_given() -> None:
+    from scholar_lens.adapters.documents.parser import _parse_retry_wait
+
+    request = httpx.Request("POST", "https://api.x.ai/parse")
+
+    def state(headers: dict[str, str]) -> tenacity.RetryCallState:
+        error = httpx.HTTPStatusError(
+            "429",
+            request=request,
+            response=httpx.Response(429, headers=headers, request=request),
+        )
+        retry_state = tenacity.RetryCallState(None, None, (), {})  # type: ignore[arg-type]
+        retry_state.attempt_number = 1
+        retry_state.set_exception((type(error), error, None))
+        return retry_state
+
+    assert _parse_retry_wait(state({"Retry-After": "45"})) == 45
+    assert _parse_retry_wait(state({"Retry-After": "9999"})) == 60
+    assert 0 <= _parse_retry_wait(state({})) <= 20
