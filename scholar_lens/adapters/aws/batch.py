@@ -97,6 +97,20 @@ def _not_accepted(error: Exception) -> bool:
     return False
 
 
+def _rejected(error: Exception) -> bool:
+    """Whether Batch answered SubmitJob with a refusal (a 4xx other than
+    throttling): the job certainly was not created. Any other failure (a
+    5xx, a timeout, a TLS or connection error mid-request) may come after
+    Batch accepted it."""
+    if not isinstance(error, ClientError):
+        return False
+    status = error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+    code = error.response.get("Error", {}).get("Code")
+    if status is None:
+        return not is_transient_error(error)
+    return 400 <= int(status) < 500 and code not in _THROTTLED
+
+
 def _submitted(session: boto3.Session, job_queue: str, job_name: str) -> str | None:
     """The id of a job named ``job_name`` in ``job_queue`` (one Batch accepted
     before its answer was lost), or None.
@@ -172,7 +186,7 @@ def submit_job(
                 )
                 _sleep(_RESUBMIT_WAIT_SECONDS * (1 + random.random()))
                 continue
-            if _not_accepted(e) or not is_transient_error(e):
+            if _not_accepted(e) or _rejected(e):
                 raise BatchJobError(
                     f"Failed to submit Batch job '{job_name}': {e}"
                 ) from e

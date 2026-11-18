@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 from unittest import mock
 
@@ -307,17 +308,69 @@ class TestSubmitAndDescribe:
         filters = batch.list_jobs.call_args.kwargs["filters"]
         assert filters[0]["name"] == "JOB_NAME"
 
-    def test_a_throttled_submit_is_sent_again_without_a_lookup(
-        self, aws: boto3.Session
+    @pytest.mark.parametrize("kind", ["throttled", "no endpoint", "connect timeout"])
+    def test_a_submit_that_never_reached_batch_is_sent_again_without_a_lookup(
+        self, aws: boto3.Session, kind: str
     ) -> None:
+        from botocore.exceptions import (
+            ClientError,
+            ConnectTimeoutError,
+            EndpointConnectionError,
+        )
+
+        error = {
+            "throttled": ClientError(
+                {"Error": {"Code": "TooManyRequestsException"}}, "SubmitJob"
+            ),
+            "no endpoint": EndpointConnectionError(endpoint_url="https://batch"),
+            "connect timeout": ConnectTimeoutError(endpoint_url="https://batch"),
+        }[kind]
+        batch = mock.MagicMock()
+        batch.submit_job.side_effect = [error, {"jobId": "job-3"}]
+        submitted = self._submit_with(aws, batch)
+        assert submitted.job_id == "job-3"
+        batch.list_jobs.assert_not_called()
+        # Every name carries a random tail, so a lookup finds only this job.
+        assert re.search(r"-[0-9a-f]{6}$", submitted.job_name)
+
+    @pytest.mark.parametrize("kind", ["read timeout", "closed", "ssl"])
+    def test_a_submit_that_may_have_reached_batch_is_looked_up(
+        self, aws: boto3.Session, kind: str
+    ) -> None:
+        from botocore.exceptions import (
+            ConnectionClosedError,
+            ReadTimeoutError,
+            SSLError,
+        )
+
+        error = {
+            "read timeout": ReadTimeoutError(endpoint_url="https://batch"),
+            "closed": ConnectionClosedError(endpoint_url="https://batch"),
+            "ssl": SSLError(endpoint_url="https://batch", error=RuntimeError("eof")),
+        }[kind]
+        batch = mock.MagicMock()
+        batch.submit_job.side_effect = error
+        batch.list_jobs.return_value = {"jobSummaryList": [{"jobId": "job-4"}]}
+        assert self._submit_with(aws, batch).job_id == "job-4"
+        assert batch.submit_job.call_count == 1
+
+    def test_a_refused_submit_raises_without_a_lookup(self, aws: boto3.Session) -> None:
         from botocore.exceptions import ClientError
 
-        throttled = ClientError(
-            {"Error": {"Code": "TooManyRequestsException"}}, "SubmitJob"
+        from scholar_lens.adapters.aws.batch import BatchJobError
+
+        refused = ClientError(
+            {
+                "Error": {"Code": "ClientException"},
+                "ResponseMetadata": {"HTTPStatusCode": 400},
+            },
+            "SubmitJob",
         )
         batch = mock.MagicMock()
-        batch.submit_job.side_effect = [throttled, {"jobId": "job-3"}]
-        assert self._submit_with(aws, batch).job_id == "job-3"
+        batch.submit_job.side_effect = refused
+        with pytest.raises(BatchJobError) as caught:
+            self._submit_with(aws, batch)
+        assert "may have been" not in str(caught.value)
         batch.list_jobs.assert_not_called()
 
     def test_a_failed_lookup_does_not_risk_a_second_submit(

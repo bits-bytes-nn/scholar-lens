@@ -18,7 +18,7 @@ Every CLI option, the survey plan file, resuming and republishing, outputs and e
 | `--plan PATH_OR_S3_URI` | survey write | The plan file: a local path or `s3://<bucket>/<key>` in the configured bucket; with `--remote` a local plan is uploaded to `<s3_prefix>/surveys/<slug>/plan-<first 16 hex digits of its sha256>.json` first |
 | `--no-pr` | review, summarize, guide, survey write, publish | Save (and upload) the post but open no PR |
 | `--fresh` | review, summarize, guide, survey write | Compute every stage again: ignore the saved stage checkpoints and the evidence cache (both are still written), and for a guide gather the sources again (implies `--fresh-sources`) |
-| `--remote` | review, summarize, guide, survey plan, survey write | Submit to AWS Batch and return the job id |
+| `--remote` | review, summarize, guide, survey plan, survey write | Submit to AWS Batch and return the job id. The local credentials need `batch:SubmitJob` and `batch:ListJobs` (to find a submit whose answer was lost; without it such a submit stops with "may have been submitted"), plus `batch:DescribeJobs` for `status` and `batch:TerminateJob` for `cancel` |
 | `--wait`, `--timeout S` | status | Poll until the job finishes or `S` seconds pass (default 14400, four hours) |
 | `--since D`, `--until D`, `--by kind\|stage\|model\|day`, `--billed` | costs | Group the Batch runs that finished in `[since, until)` (UTC days) by kind, stage, model or day from their result manifests, with what failed runs spent; `--billed` adds Cost Explorer's cost of resources tagged `ProjectName=<resources.project_name>` (the stack and the per-kind Bedrock inference profiles); activate `ProjectName` (and `Kind`) as cost allocation tags in Billing first |
 
