@@ -12,7 +12,10 @@ inside it) also settles the finding.
 
 from __future__ import annotations
 
+import logging
 import re
+
+logger = logging.getLogger(__name__)
 
 # A double-quoted span (backslash escapes allowed) or a curly-quoted one.
 _QUOTED = re.compile(r'"((?:[^"\\]|\\.)+)"|“([^”]+)”')
@@ -28,14 +31,14 @@ _LINK = re.compile(r"\[([^\]\n]*)\]\([^)\n]*\)")
 _MARKS = re.compile(r"[*_`$]")
 
 
-def _squash(text: str) -> str:
+def squash(text: str) -> str:
     """``text``'s words: whitespace folded; emphasis, code and math marks
     and link targets dropped (on both sides of a comparison)."""
     return " ".join(_MARKS.sub("", _LINK.sub(r"\1", text)).split())
 
 
 def _fragments(span: str) -> list[str]:
-    parts = (_squash(p) for p in _ELLIPSIS.split(span.replace('\\"', '"')))
+    parts = (squash(p) for p in _ELLIPSIS.split(span.replace('\\"', '"')))
     return [p for p in parts if len(p) >= _MIN_FRAGMENT]
 
 
@@ -43,7 +46,7 @@ def quoted_passages(finding: str, checked: str) -> list[list[str]]:
     """The passages ``finding`` quotes from ``checked``: each quoted span
     split at its ellipses, kept only when every fragment is in ``checked``
     (whitespace folded), so a quote of the paper is not one."""
-    text = _squash(checked)
+    text = squash(checked)
     passages: list[list[str]] = []
     for match in _QUOTED.finditer(finding):
         fragments = _fragments(match.group(1) or match.group(2))
@@ -57,7 +60,7 @@ def gone_after_edit(passages: list[list[str]], edited: str) -> bool:
     there is nothing to look for."""
     if not passages:
         return False
-    text = _squash(edited)
+    text = squash(edited)
     return not any(all(f in text for f in passage) for passage in passages)
 
 
@@ -73,12 +76,42 @@ def claim_fixed(problem: str, checked: str, edited: str) -> bool:
     longer in ``edited``."""
     sentence = problem.split("||", 1)[0].strip().removeprefix("-").strip(' "“”')
     fragments = _fragments(sentence)
-    if not fragments or not all(f in _squash(checked) for f in fragments):
+    if not fragments or not all(f in squash(checked) for f in fragments):
         return False
     return gone_after_edit([fragments], edited)
 
 
 _WRONG = re.compile(r"\|\|[\s*_`]*wrong(?![A-Za-z])", re.IGNORECASE)
+# Words after a claim check's ``||`` (the copied sentence may hold one, as
+# a norm or in code): the verdicts that keep a line, and the words that
+# withdraw it.
+_AFTER_BAR = re.compile(r"\|\|(.*)", re.DOTALL)
+_WORD = re.compile(r"(?<![\w-])([A-Za-z]+)(?![\w-])")
+_REPORTS = {"wrong", "unsupported"}
+_WITHDRAWN = {"none", "fine", "ok", "correct", "supported", "withdrawn", "na"}
+
+
+def reported_claims(lines: list[str]) -> list[str]:
+    """The claim-check ``lines`` that report a problem. A line is dropped
+    when a whole word right after one of its ``||`` withdraws it (``|| none``,
+    ``|| fine``) and no "wrong" or "unsupported" follows its first ``||``;
+    any other line is kept. A withdrawal word that opens a complaint
+    ("|| correct: but the number is 7") is still dropped: the format puts the
+    verdict first."""
+    kept = []
+    for line in lines:
+        after = _AFTER_BAR.search(line)
+        words = {w.lower() for w in _WORD.findall(after.group(1))} if after else set()
+        openers = {
+            m.group(1).lower()
+            for part in line.split("||")[1:]
+            if (m := _WORD.match(part.strip(" \t*_`")))
+        }
+        if words & _REPORTS or not openers & _WITHDRAWN:
+            kept.append(line)
+    if dropped := len(lines) - len(kept):
+        logger.info("Dropped %d claim-check line(s) the checker withdrew.", dropped)
+    return kept
 
 
 def fix_kept(
@@ -111,7 +144,9 @@ def fix_kept(
     )
 
 
-def _disputed(problem: str) -> list[str]:
+def disputed(problem: str) -> list[str]:
+    """The fragments of the sentence a claim-check line copies (before
+    ``||``), split at its ellipses."""
     sentence = problem.split("||", 1)[0].strip().removeprefix("-").strip(' "“”')
     return _fragments(sentence)
 
@@ -123,11 +158,11 @@ def kept_problems(
     and every first-check problem (``before``) whose disputed sentence is
     still in ``new`` word for word and the recheck did not report again (a
     second reading misses some it saw the first time)."""
-    text = _squash("\n".join(new.values()))
-    reported = [" ".join(_disputed(p)).rstrip(".!?。 ") for p in after]
+    text = squash("\n".join(new.values()))
+    reported = [" ".join(disputed(p)).rstrip(".!?。 ") for p in after]
     kept = list(after)
     for problem in before:
-        fragments = _disputed(problem)
+        fragments = disputed(problem)
         sentence = " ".join(fragments).rstrip(".!?。 ")
         again = any(
             sentence and r and (sentence in r or r in sentence) for r in reported
