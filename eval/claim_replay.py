@@ -298,7 +298,8 @@ def main(argv: list[str] | None = None) -> int:
         for name, problems in replay["problems"].items()
         if name in cases
     ]
-    print(json.dumps(report(scores), ensure_ascii=False, indent=1))
+    scope = (replay.get("meta") or {}).get("scope", "unrecorded")
+    print(json.dumps({"scope": scope} | report(scores), ensure_ascii=False, indent=1))
     return 0
 
 

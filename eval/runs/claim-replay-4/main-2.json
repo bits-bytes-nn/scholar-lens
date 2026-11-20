@@ -1,7 +1,8 @@
 {
  "meta": {
   "commit": "e5834ce+dirty",
-  "prompt_sha256": "465aae6991a9"
+  "prompt_sha256": "465aae6991a9",
+  "scope": "engine"
  },
  "problems": {
   "rewoo": [

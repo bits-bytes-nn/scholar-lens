@@ -15,9 +15,9 @@ from __future__ import annotations
 import logging
 import re
 
-# A double-quoted span (backslash escapes allowed) or a curly-quoted one.
 logger = logging.getLogger(__name__)
 
+# A double-quoted span (backslash escapes allowed) or a curly-quoted one.
 _QUOTED = re.compile(r'"((?:[^"\\]|\\.)+)"|“([^”]+)”')
 _ELLIPSIS = re.compile(r"\s*(?:\.\.\.|…)\s*")
 # Shorter fragments ("a", "그") match by chance anywhere.
@@ -82,22 +82,32 @@ def claim_fixed(problem: str, checked: str, edited: str) -> bool:
 
 
 _WRONG = re.compile(r"\|\|[\s*_`]*wrong(?![A-Za-z])", re.IGNORECASE)
-# A claim-check verdict after any ``||`` (the copied sentence may hold one,
-# as a norm or in code): what keeps a line, and the words that withdraw it.
-_VERDICT = re.compile(r"\|\|[\s*_`]*([A-Za-z]+)")
+# Words after a claim check's ``||`` (the copied sentence may hold one, as
+# a norm or in code): the verdicts that keep a line, and the words that
+# withdraw it.
+_AFTER_BAR = re.compile(r"\|\|(.*)", re.DOTALL)
+_WORD = re.compile(r"(?<![\w-])([A-Za-z]+)(?![\w-])")
 _REPORTS = {"wrong", "unsupported"}
 _WITHDRAWN = {"none", "fine", "ok", "correct", "supported", "withdrawn", "na"}
 
 
 def reported_claims(lines: list[str]) -> list[str]:
     """The claim-check ``lines`` that report a problem. A line is dropped
-    only when no ``||`` in it is followed by "wrong" or "unsupported" and one
-    is followed by a word that withdraws it (``|| none``, ``|| fine``); any
-    other line is kept."""
+    when a whole word right after one of its ``||`` withdraws it (``|| none``,
+    ``|| fine``) and no "wrong" or "unsupported" follows its first ``||``;
+    any other line is kept. A withdrawal word that opens a complaint
+    ("|| correct: but the number is 7") is still dropped: the format puts the
+    verdict first."""
     kept = []
     for line in lines:
-        verdicts = {m.group(1).lower() for m in _VERDICT.finditer(line)}
-        if verdicts & _REPORTS or not verdicts & _WITHDRAWN:
+        after = _AFTER_BAR.search(line)
+        words = {w.lower() for w in _WORD.findall(after.group(1))} if after else set()
+        openers = {
+            m.group(1).lower()
+            for part in line.split("||")[1:]
+            if (m := _WORD.match(part.strip(" \t*_`")))
+        }
+        if words & _REPORTS or not openers & _WITHDRAWN:
             kept.append(line)
     if dropped := len(lines) - len(kept):
         logger.info("Dropped %d claim-check line(s) the checker withdrew.", dropped)

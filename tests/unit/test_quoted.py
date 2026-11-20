@@ -164,6 +164,12 @@ def test_withdrawn_claim_lines_are_dropped() -> None:
         "F sentence. || none || wrong: the second reading stands",
         # A verdict word off the list is kept: only a withdrawal drops.
         "G sentence. || overstated: the paper says may",
+        # Whole words only, and a report anywhere after the bar keeps it.
+        "Code `a || none_flag` is set. || overstated: x",
+        "X uses `p || fine_tune`.",
+        "H sentence. || fine-grained claim is wrong",
+        "I sentence. || none -- actually wrong: table 3",
+        "J sentence. || OK, but unsupported: no source",
     ]
     assert reported_claims(lines) == [
         lines[0],
@@ -173,4 +179,5 @@ def test_withdrawn_claim_lines_are_dropped() -> None:
         lines[6],
         lines[7],
         lines[8],
+        *lines[9:],
     ]
