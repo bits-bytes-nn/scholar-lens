@@ -389,7 +389,7 @@ OpenAlex는 arXiv 시대 ML 논문의 인용 수를 크게 적게 세고(실측:
 
 ### 5.6 웹 조사
 
-`adapters/web/research.py::WebResearcher`는 시드 경로 접두어(끝 `/` 포함) 안의 하위 페이지를 최대 8개 따라가며(확장자 없는 말단 페이지면 상위 디렉터리를 범위로 씀), 본문 영역의 링크를 우선합니다. 리디렉션 후 최종 URL 기준으로 링크를 해석하고, 5MB를 넘는 페이지는 건너뜁니다. 검색은 Tavily, 없으면 Brave, 둘 다 없으면 생략합니다(`bootstrap.py::build_search_provider`). 실패한 검색은 다시 시도하지 않고 세어(`WebSearchProvider.failed_searches`) 실행 메모로 남깁니다. 페이지 본문·제목·URL의 프롬프트 경계 태그는 무력화합니다(`neutralize_prompt_tags`).
+`adapters/web/research.py::WebResearcher`는 시드 경로 접두어(끝 `/` 포함) 안의 하위 페이지를 최대 8개 따라가며(확장자 없는 말단 페이지면 상위 디렉터리를 범위로 씀), 본문 영역의 링크를 우선합니다. 리디렉션 후 최종 URL 기준으로 링크를 해석하고, 5MB를 넘는 페이지는 건너뜁니다. 검색은 `tech_guide.web_search` 순서(기본 AgentCore Web Search → Tavily → Brave)로 하고, 앞 단계가 실패한 검색어만 다음 단계로 넘깁니다. 키가 없는 Tavily·Brave는 빠지고, 모두 없으면 검색을 생략합니다(`bootstrap.py::build_search_provider`). AgentCore Web Search는 서울 리전에 없어 `tech_guide.web_search_region`(기본 `ap-northeast-1`)으로 호출하며, 스택은 그 리전의 관리형 도구 `web-search.v1`에만 `InvokeWebSearch`를 허용합니다. 결과는 약 1천 자 발췌라 Brave처럼 페이지를 직접 가져옵니다. 한국어 검색어는 결과가 약하므로 검색어는 영어로 만듭니다. Tavily·Brave는 실패한 검색을 다시 시도하지 않고, AgentCore는 SDK 클라이언트가 한 번 더 묻습니다. 끝내 실패한 검색은 세어(`WebSearchProvider.failed_searches`) 실행 메모로 남깁니다. 권한 거부처럼 그 실행 내내 실패할 답을 받은 백엔드는 이후 건너뛰고, 실행 메모에 오류 코드를 남깁니다(`stopped_backends`). 페이지 본문·제목·URL의 프롬프트 경계 태그는 무력화합니다(`neutralize_prompt_tags`).
 
 ### 5.7 SSRF 방지
 

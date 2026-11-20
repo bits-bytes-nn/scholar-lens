@@ -52,7 +52,8 @@ Prerequisites:
 - Python 3.12+ and [Poetry](https://python-poetry.org/)
 - An AWS profile with Bedrock access to the configured Claude models
 - `UPSTAGE_API_KEY` for PDF parsing
-- Optional: `TAVILY_API_KEY` or `BRAVE_API_KEY` (guide web research), `GITHUB_TOKEN` (blog PRs), `CROSSREF_MAILTO`, `OPENALEX_API_KEY`, `SEMANTIC_SCHOLAR_API_KEY` (citation lookups)
+- Guide web research searches with AgentCore Web Search (the run's AWS credentials, `tech_guide.web_search_region`) and falls back to Tavily or Brave when `TAVILY_API_KEY` or `BRAVE_API_KEY` is set (`tech_guide.web_search`)
+- Optional: `GITHUB_TOKEN` (blog PRs), `CROSSREF_MAILTO`, `OPENALEX_API_KEY`, `SEMANTIC_SCHOLAR_API_KEY` (citation lookups)
 
 ```bash
 git clone https://github.com/bits-bytes-nn/scholar-lens.git && cd scholar-lens

@@ -10,6 +10,7 @@ from __future__ import annotations
 import functools
 import logging
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal, cast
@@ -24,6 +25,7 @@ from scholar_lens.adapters.agentcore.code_interpreter import (
     SYSTEM_INTERPRETER,
     AgentCoreCodeRunner,
 )
+from scholar_lens.adapters.agentcore.web_search import AgentCoreSearchProvider
 from scholar_lens.adapters.aws.batch import BatchJobs
 from scholar_lens.adapters.aws.billing import CostExplorerBilling
 from scholar_lens.adapters.aws.environment import is_running_in_aws
@@ -62,6 +64,7 @@ from scholar_lens.adapters.web.research import (
     TavilySearchProvider,
     WebResearcher,
     WebSearchProvider,
+    search_chain,
 )
 from scholar_lens.adapters.web.snapshot import SnapshotPolicy
 from scholar_lens.application.checkpoints import FreshStore
@@ -268,19 +271,31 @@ def package_release(name: str) -> str | None:
     return (found[0] or None) if found else None
 
 
-def build_search_provider() -> WebSearchProvider:
-    """Tavily (LLM-oriented, returns cleaned content) > Brave > no web search."""
-    if os.getenv(EnvVars.TAVILY_API_KEY.value):
-        if os.getenv(EnvVars.BRAVE_API_KEY.value):
-            logger.info("Using Tavily Search, falling back to Brave, for web research.")
-            return FallbackSearchProvider(TavilySearchProvider(), BraveSearchProvider())
-        logger.info("Using Tavily Search for web research.")
-        return TavilySearchProvider()
-    if os.getenv(EnvVars.BRAVE_API_KEY.value):
-        logger.info("Using Brave Search for web research.")
-        return BraveSearchProvider()
-    logger.info("No search API key set; researching the supplied URLs only.")
-    return NullSearchProvider()
+def build_search_provider(
+    backends: Sequence[str],
+    *,
+    session: AwsSession | None = None,
+    web_search_region: str = "",
+) -> WebSearchProvider:
+    """The ``backends`` in order, each falling back to the next; a key-based
+    backend is left out while its key is unset, ``agentcore`` without a
+    session or region. No backend: no web search."""
+    chain: list[WebSearchProvider] = []
+    for name in backends:
+        if name == "agentcore" and session is not None and web_search_region:
+            chain.append(AgentCoreSearchProvider(session, web_search_region))
+        elif name == "tavily" and os.getenv(EnvVars.TAVILY_API_KEY.value):
+            chain.append(TavilySearchProvider())
+        elif name == "brave" and os.getenv(EnvVars.BRAVE_API_KEY.value):
+            chain.append(BraveSearchProvider())
+    if not chain:
+        logger.info("No web search backend; researching the supplied URLs only.")
+        return NullSearchProvider()
+    provider = chain[-1]
+    for primary in reversed(chain[:-1]):
+        provider = FallbackSearchProvider(primary, provider)
+    logger.info("Web research searches with %s.", search_chain(provider))
+    return provider
 
 
 class GuideToolkit:
@@ -330,7 +345,13 @@ class GuideToolkit:
         return AgentCoreCodeRunner(self.context.default_boto_session, interpreter)
 
     def researcher(self) -> WebResearcher:
-        return WebResearcher(search_provider=build_search_provider())
+        return WebResearcher(
+            search_provider=build_search_provider(
+                self.cfg.web_search,
+                session=self.context.default_boto_session,
+                web_search_region=self.cfg.web_search_region,
+            )
+        )
 
     def research(
         self, researcher: WebResearch, tracker: UsageTracker, *, title_max_length: int

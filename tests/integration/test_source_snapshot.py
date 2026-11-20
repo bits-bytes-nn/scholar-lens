@@ -260,6 +260,31 @@ async def test_an_incomplete_gather_is_not_saved(policy, gap: str) -> None:  # t
     assert again.researcher.research.call_count >= 1
 
 
+async def test_a_stopped_backend_still_saves_a_complete_gather(policy) -> None:  # type: ignore[no-untyped-def]
+    # The next backend answered every query: nothing is missing, so a rerun
+    # (with a backend still denied) reuses the corpus instead of paying again.
+    from scholar_lens.adapters.web.research import WebResearcher
+
+    class Denied(NullSearchProvider):
+        supports_search = True
+        exhausted = True
+        stop_reason = "AccessDeniedException"
+
+    chain = FallbackSearchProvider(Denied(), NullSearchProvider())
+    gen = _generator()
+    gen.researcher.search_provider = chain
+    gen.researcher.search_notes = WebResearcher(search_provider=chain).search_notes
+    await gen.gather([DOCS], discover_subpages=False, snapshots=policy)
+    again = _generator()
+    again.researcher.search_provider = chain
+    await again.gather([DOCS], discover_subpages=False, snapshots=policy)
+    again.researcher.research.assert_not_called()
+    assert any(
+        "AccessDeniedException" in n and "while the sources were gathered" in n
+        for n in again.notes
+    )
+
+
 def test_the_key_holds_the_whole_search_chain() -> None:
     tavily, brave = TavilySearchProvider("k"), BraveSearchProvider("k")
     chains = {

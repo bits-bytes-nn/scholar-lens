@@ -25,6 +25,7 @@ from scripts.deploy_infra import (  # noqa: E402
     JOB_COMMAND,
     PaperReviewStack,
     cost_alarm_usd,
+    web_search_region,
 )
 
 FAKE_ACCOUNT = "123456789012"
@@ -45,6 +46,7 @@ def synth_template() -> dict[str, Any]:
         bedrock_region_name="us-west-2",
         environment_vars={},
         cost_alarm_usd=cost_alarm_usd(Config()),
+        web_search_region=web_search_region(Config()),
         env=Environment(account=FAKE_ACCOUNT, region=FAKE_REGION),
     )
     return app.synth().get_stack_by_name(STACK_NAME).template

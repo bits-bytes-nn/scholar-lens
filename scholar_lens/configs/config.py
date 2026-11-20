@@ -1,7 +1,8 @@
 import logging
 import os
+import re
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, ClassVar, Literal, get_args
 
 import yaml
 from dotenv import load_dotenv
@@ -28,6 +29,20 @@ CONFIG_PATH_ENV = "SCHOLAR_LENS_CONFIG"
 # effort means shorter reasoning traces — faster and cheaper. Ignored by legacy
 # thinking models, which use a fixed token budget instead.
 ThinkingEffort = Literal["low", "medium", "high", "xhigh", "max"]
+# A host name or a host pattern ("*.example.com"), not a URL or a path.
+_LABEL = r"(?:[*?]|[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)"
+_EXCLUDED_DOMAIN = re.compile(rf"{_LABEL}(?:\.{_LABEL})+")
+# Web search backends for guide research, in the default order.
+SearchBackend = Literal["agentcore", "tavily", "brave"]
+# The regions that offer AgentCore Web Search (2026-11).
+WebSearchRegion = Literal[
+    "us-east-1",
+    "us-east-2",
+    "us-west-2",
+    "ap-southeast-2",
+    "ap-northeast-1",
+    "eu-west-1",
+]
 
 
 class _Section(BaseModel):
@@ -296,8 +311,17 @@ class TechGuide(_Section):
     thinking_effort: ThinkingEffort = Field(default="medium")
     # Deep-research planning: derive web-search queries from the seed docs so the
     # guide draws on complementary material, not just a single page. Requires a
-    # configured search provider (Tavily or Brave); a no-op otherwise.
+    # search backend below; a no-op otherwise.
     auto_research: bool = Field(default=True)
+    # The search backends in order: a query a backend fails goes to the next.
+    # agentcore (AgentCore Web Search) signs with the run's AWS credentials;
+    # tavily and brave are left out while their API key is unset.
+    web_search: list[SearchBackend] = Field(
+        default_factory=lambda: list(get_args(SearchBackend))
+    )
+    # A region that offers AgentCore Web Search (not every region does; the
+    # stack grants the call in this one).
+    web_search_region: WebSearchRegion = Field(default="ap-northeast-1")
     max_research_queries: int = Field(default=6, gt=0)
     # How many top search-result pages to fetch into the corpus so the gathered
     # material reaches the section writer (not just the outline planner); taken
@@ -329,8 +353,8 @@ class TechGuide(_Section):
     demoted_domains: dict[str, list[str]] = Field(
         default_factory=lambda: {k: list(v) for k, v in DEMOTED_DOMAINS.items()}
     )
-    # Domains the search backends leave out (Tavily exclude_domains, Brave
-    # -site:); "*.example.com" is sent as example.com.
+    # Domains the search backends leave out (AgentCore and Tavily filters,
+    # Brave -site:); "*.example.com" is sent as example.com.
     excluded_domains: list[str] = Field(default_factory=list)
     # The gathered corpus (queries, results, pages and their records) is
     # saved under a hash of the inputs and reused by a rerun with the same
@@ -361,6 +385,18 @@ class TechGuide(_Section):
     run_block_timeout_s: int = Field(default=60, ge=5, le=600)
     # At most 840: one synchronous Code Interpreter call may take 15 minutes.
     run_timeout_s: int = Field(default=600, ge=30, le=840)
+
+    @field_validator("excluded_domains")
+    @classmethod
+    def _plain_domains(cls, domains: list[str]) -> list[str]:
+        # A URL or a path is sent to the search backends as is, and AgentCore
+        # rejects every query that carries one (at most 100 domains).
+        bad = [d for d in domains if not _EXCLUDED_DOMAIN.fullmatch(d.strip())]
+        if bad:
+            raise ValueError(f"excluded_domains must be host names: {bad}")
+        if len(domains) > 100:
+            raise ValueError("excluded_domains holds at most 100 domains")
+        return domains
 
     @model_validator(mode="after")
     def _length_range(self) -> "TechGuide":

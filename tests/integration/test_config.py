@@ -19,6 +19,22 @@ class TestConfigValidation:
         with pytest.raises(ValidationError):
             Code(chunk_size=1024, chunk_overlap=2048)
 
+    @pytest.mark.parametrize(
+        "domain",
+        ["https://x.com", "x.com/path", "localhost", "a b.com", "-bad.com", "a.b-.com"],
+    )
+    def test_excluded_domains_are_host_names(self, domain: str) -> None:
+        with pytest.raises(ValidationError):
+            TechGuideConfig(excluded_domains=[domain])
+
+    def test_host_patterns_are_accepted_as_excluded_domains(self) -> None:
+        domains = ["pinterest.com", "*.example.com", "forum.*"]
+        assert TechGuideConfig(excluded_domains=domains).excluded_domains == domains
+
+    def test_web_search_region_must_offer_the_api(self) -> None:
+        with pytest.raises(ValidationError):
+            TechGuideConfig(web_search_region="ap-northeast-2")
+
     def test_chunk_size_must_be_positive(self) -> None:
         with pytest.raises(ValidationError):
             Code(chunk_size=0, chunk_overlap=0)

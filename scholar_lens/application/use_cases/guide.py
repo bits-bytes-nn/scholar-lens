@@ -110,9 +110,9 @@ async def run_guide(
     )
     if request.search_queries and not researcher.supports_search:
         raise ValueError(
-            "--search-query needs a web search provider: set TAVILY_API_KEY or "
-            "BRAVE_API_KEY (in Batch, the SSM parameters tavily-api-key or "
-            "brave-api-key)."
+            "--search-query needs a web search backend: keep agentcore in "
+            "tech_guide.web_search, or set TAVILY_API_KEY or BRAVE_API_KEY (in "
+            "Batch, the SSM parameters tavily-api-key or brave-api-key)."
         )
     generator = tools.research(
         researcher, tracker, title_max_length=spec.seo_title_max_length

@@ -49,7 +49,8 @@ class TechGuideResearchPlanPrompt(BasePrompt):
     Pages marked as reference material in <sources> were chosen by the user as primary sources: build on them and
     search for what they leave out, not for what they already explain. Do not duplicate the seed page.
 
-    Each query must be a concrete, search-engine-ready phrase (not a question to me). Prefer specific,
+    Each query must be a concrete, search-engine-ready phrase in English (not a question to me), whatever
+    the language of the sources. Prefer specific,
     high-signal phrasings that surface primary sources over generic ones. Output FEWER than {max_queries} if the
     topic is narrow — quality over quantity.
 

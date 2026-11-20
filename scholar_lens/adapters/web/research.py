@@ -160,11 +160,14 @@ class WebSearchProvider(ABC):
     # Whether this backend can actually return results. Callers gate expensive
     # research planning on this so they don't generate queries for a no-op.
     supports_search: bool = True
-    # Searches that failed (429, 5xx, timeout, malformed answer) and so
-    # returned nothing; not retried, reported as a run note instead.
+    # Searches that failed (429, 5xx, timeout, an unreadable body) and so
+    # returned nothing, reported as a run note (Tavily and Brave ask once;
+    # AgentCore's SDK client asks once more).
     failed_searches: int = 0
-    # True once the backend reports its quota or key spent.
+    # True once the backend reports its quota or key spent, or the caller
+    # denied; ``stop_reason`` says why (the error code or HTTP status).
     exhausted: bool = False
+    stop_reason: str = ""
 
     @abstractmethod
     def search(
@@ -211,6 +214,17 @@ class FallbackSearchProvider(WebSearchProvider):
         if self.secondary.failed_searches > before:
             self.failed_searches += 1
         return results
+
+
+def stopped_backends(provider: WebSearchProvider) -> list[str]:
+    """The backends of ``provider`` that stopped for the rest of the run
+    ("TavilySearchProvider (HTTP 432)"): their queries went to the next one."""
+    if isinstance(provider, FallbackSearchProvider):
+        return stopped_backends(provider.primary) + stopped_backends(provider.secondary)
+    if provider.exhausted is not True:
+        return []
+    name = type(provider).__name__
+    return [f"{name} ({provider.stop_reason})" if provider.stop_reason else name]
 
 
 def search_chain(provider: WebSearchProvider) -> str:
@@ -302,6 +316,7 @@ class BraveSearchProvider(WebSearchProvider):
             if status in _AUTH_FAILED_STATUSES:
                 # A rejected key fails every later query the same way.
                 self.exhausted = True
+                self.stop_reason = f"HTTP {status}"
             return []
         web = data.get("web") if isinstance(data, dict) else None
         results = web.get("results") if isinstance(web, dict) else None
@@ -386,6 +401,7 @@ class TavilySearchProvider(WebSearchProvider):
             if status in _TAVILY_EXHAUSTED_STATUSES:
                 # The plan's quota or key is spent: later queries fail too.
                 self.exhausted = True
+                self.stop_reason = f"HTTP {status}"
             return []
         results = data.get("results") if isinstance(data, dict) else None
         if not isinstance(results, list):
@@ -531,15 +547,22 @@ class WebResearcher:
         return self.search_provider.supports_search
 
     def search_notes(self) -> list[str]:
-        """A run note when web searches failed (their results are missing
-        from the research), else nothing."""
-        failed = self.search_provider.failed_searches
-        if not failed:
-            return []
-        return [
-            f"{failed} web search(es) failed (rate limit, server error or "
-            "timeout) and were not retried: the research is missing their results."
+        """Run notes for a search backend that stopped (the next one took its
+        queries) and for web searches that failed (their results are missing
+        from the research); none when every search went through."""
+        notes = [
+            f"Web search backend {name} stopped answering while the sources "
+            "were gathered; later searches used the next backend, or none "
+            "(check its key or permission, or leave it out of "
+            "tech_guide.web_search)."
+            for name in stopped_backends(self.search_provider)
         ]
+        if failed := self.search_provider.failed_searches:
+            notes.append(
+                f"{failed} web search(es) failed and were not retried: the "
+                "research is missing their results."
+            )
+        return notes
 
     def close(self) -> None:
         """Close the lazily-created HTTP client (releases its connection pool)."""
