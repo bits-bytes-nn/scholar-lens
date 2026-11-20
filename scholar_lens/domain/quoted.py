@@ -12,9 +12,12 @@ inside it) also settles the finding.
 
 from __future__ import annotations
 
+import logging
 import re
 
 # A double-quoted span (backslash escapes allowed) or a curly-quoted one.
+logger = logging.getLogger(__name__)
+
 _QUOTED = re.compile(r'"((?:[^"\\]|\\.)+)"|“([^”]+)”')
 _ELLIPSIS = re.compile(r"\s*(?:\.\.\.|…)\s*")
 # Shorter fragments ("a", "그") match by chance anywhere.
@@ -79,20 +82,25 @@ def claim_fixed(problem: str, checked: str, edited: str) -> bool:
 
 
 _WRONG = re.compile(r"\|\|[\s*_`]*wrong(?![A-Za-z])", re.IGNORECASE)
-# A claim-check line's verdict: the word after ``||``.
+# A claim-check verdict after any ``||`` (the copied sentence may hold one,
+# as a norm or in code): what keeps a line, and the words that withdraw it.
 _VERDICT = re.compile(r"\|\|[\s*_`]*([A-Za-z]+)")
+_REPORTS = {"wrong", "unsupported"}
+_WITHDRAWN = {"none", "fine", "ok", "correct", "supported", "withdrawn", "na"}
 
 
 def reported_claims(lines: list[str]) -> list[str]:
-    """The claim-check ``lines`` that report a problem: a line whose verdict
-    after ``||`` is neither "wrong" nor "unsupported" (``|| none``, ``||
-    fine``: the checker withdrew it) is dropped; a line without a verdict is
-    kept."""
+    """The claim-check ``lines`` that report a problem. A line is dropped
+    only when no ``||`` in it is followed by "wrong" or "unsupported" and one
+    is followed by a word that withdraws it (``|| none``, ``|| fine``); any
+    other line is kept."""
     kept = []
     for line in lines:
-        verdict = _VERDICT.search(line)
-        if verdict is None or verdict.group(1).lower() in {"wrong", "unsupported"}:
+        verdicts = {m.group(1).lower() for m in _VERDICT.finditer(line)}
+        if verdicts & _REPORTS or not verdicts & _WITHDRAWN:
             kept.append(line)
+    if dropped := len(lines) - len(kept):
+        logger.info("Dropped %d claim-check line(s) the checker withdrew.", dropped)
     return kept
 
 

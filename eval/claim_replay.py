@@ -11,13 +11,16 @@ against the hand-fixed sentences of ``eval/sets/claim_truth.yaml``.
 configured evaluation model and thinking effort, number sources capped at
 32k characters for a review and 16k for a summary) on the text the engine
 checks: a review's article without its TL;DR and closing (those have their
-own check), a summary without its reference list. Two differences remain:
-the paper is the current arXiv HTML (no version pinned), not the run's
-parsed PDF, so a figure reading the run had is missing; and the post is the
-published one, after the run's own fixes. Posts and papers are cached in
-WORK_DIR, a private scratch directory
-(``mktemp -d "$HOME/.cache/claim-replay.XXXX"``). Each replay records the
-commit and a hash of the check prompt.
+own check; the closing is taken to be the last ``##`` section, so a review
+whose closing is missing loses its last section here), a summary without its
+reference list. Differences that remain: the paper is the current arXiv HTML
+(no version pinned), not the run's parsed PDF, so a figure reading the run
+had is missing; the post is the published one, after the run's own claim
+fixes, edits and math normalization, where the engine checks the article
+before them. Posts and papers are cached in WORK_DIR, a private scratch
+directory (``mktemp -d "$HOME/.cache/claim-replay.XXXX"``). A replay keeps
+the raw check lines (``score`` drops the withdrawn ones as the engine does)
+with the commit, a hash of the check prompt, the scope and the efforts.
 
 A check line counts as finding a hand-fixed sentence when the sentence it
 copies (before ``||``) holds the entry's anchor, whitespace, markup and the
@@ -184,7 +187,11 @@ def _meta() -> dict[str, str]:
     }
 
 
-async def _run(work: Path, cases: dict[str, dict[str, Any]]) -> dict[str, Any]:
+async def _run(
+    work: Path, cases: dict[str, dict[str, Any]], path: Path
+) -> dict[str, Any]:
+    """Replay ``cases`` and write the raw check lines to ``path`` after each
+    one (a failed case keeps the earlier ones)."""
     cfg = Config.load()
     session = boto3.Session(
         profile_name=cfg.resources.profile_name,
@@ -199,7 +206,11 @@ async def _run(work: Path, cases: dict[str, dict[str, Any]]) -> dict[str, Any]:
         ),
         "summary": (cfg.summary.summary_model_id, cfg.summary.thinking_effort),
     }
-    out: dict[str, Any] = {"meta": _meta(), "problems": {}, "models": {}}
+    meta = _meta() | {
+        "scope": "engine",
+        "efforts": {k: str(v[1]) for k, v in models.items()},
+    }
+    out: dict[str, Any] = {"meta": meta, "problems": {}, "models": {}}
     for name, case in cases.items():
         kind = case["kind"]
         model_id, effort = models[kind]
@@ -226,15 +237,18 @@ async def _run(work: Path, cases: dict[str, dict[str, Any]]) -> dict[str, Any]:
                     body, paper, max_chars=SOURCE_CAPS[kind]
                 )
                 or "- none",
-                "text": neutralize_prompt_tags(body),
+                # The engine defangs a review body, not a summary.
+                "text": neutralize_prompt_tags(body) if kind == "review" else body,
                 "text_name": TEXT_NAMES[kind],
                 "language": "Korean",
             }
         )
-        out["problems"][name] = reported_claims(parse_lines(result.get("problems")))
+        # Raw lines: ``score`` applies the engine's filter.
+        out["problems"][name] = parse_lines(result.get("problems"))
         out["models"][name] = model_id.value
-        print(f"{name}: {len(out['problems'][name])} problems", flush=True)
-    out["cost_usd"] = round(tracker.cost_usd, 2)
+        out["cost_usd"] = round(tracker.cost_usd, 2)
+        path.write_text(json.dumps(out, ensure_ascii=False, indent=1), "utf-8")
+        print(f"{name}: {len(out['problems'][name])} lines", flush=True)
     return out
 
 
@@ -272,11 +286,10 @@ def main(argv: list[str] | None = None) -> int:
         if unknown := set(args.only or ()) - set(cases):
             raise SystemExit(f"unknown cases: {sorted(unknown)}")
         chosen = {k: v for k, v in cases.items() if not args.only or k in args.only}
-        replay = asyncio.run(_run(args.work, chosen))
         path = args.work / args.out
         if path.exists():
             raise SystemExit(f"{path} exists: pass another --out")
-        path.write_text(json.dumps(replay, ensure_ascii=False, indent=1), "utf-8")
+        replay = asyncio.run(_run(args.work, chosen, path))
         print(f"cost_usd={replay['cost_usd']} -> {path}")
         args.replay = path
     replay = json.loads(args.replay.read_text(encoding="utf-8"))

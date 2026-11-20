@@ -158,5 +158,19 @@ def test_withdrawn_claim_lines_are_dropped() -> None:
         "C sentence. || none",
         "D sentence. || fine: it matches Table 2",
         "E sentence without a verdict",
+        # A || inside the copied sentence (a norm, code) does not decide.
+        "노름 ||W||가 1을 넘습니다. || wrong: the bound is 2",
+        "`a || b`를 씁니다. || unsupported: not in the paper",
+        "F sentence. || none || wrong: the second reading stands",
+        # A verdict word off the list is kept: only a withdrawal drops.
+        "G sentence. || overstated: the paper says may",
     ]
-    assert reported_claims(lines) == [lines[0], lines[1], lines[4]]
+    assert reported_claims(lines) == [
+        lines[0],
+        lines[1],
+        lines[4],
+        lines[5],
+        lines[6],
+        lines[7],
+        lines[8],
+    ]
