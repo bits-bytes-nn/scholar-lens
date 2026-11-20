@@ -70,6 +70,7 @@ from constructs import Construct
 sys.path.append(str(Path(__file__).parent.parent))
 from dotenv import load_dotenv
 
+from scholar_lens.adapters.agentcore.web_search import WEB_SEARCH_ID
 from scholar_lens.adapters.aws.metrics import COST_METRIC_NAME, METRICS_NAMESPACE
 from scholar_lens.adapters.aws.storage import get_account_id
 from scholar_lens.cli import APP_REPORTED_EXIT_CODES
@@ -124,6 +125,7 @@ class PaperReviewStack(Stack):
         bedrock_region_name: str | None = None,
         environment_vars: dict[str, str] | None = None,
         cost_alarm_usd: float,
+        web_search_region: str | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -134,6 +136,7 @@ class PaperReviewStack(Stack):
         self.s3_prefix = s3_prefix
         self.bedrock_region_name = bedrock_region_name
         self.cost_alarm_usd = cost_alarm_usd
+        self.web_search_region = web_search_region
         # Keep encryption keys and logs when a prod stack is deleted.
         self.removal_policy = (
             RemovalPolicy.RETAIN if stage == "prod" else RemovalPolicy.DESTROY
@@ -223,6 +226,22 @@ class PaperReviewStack(Stack):
 
     def _aws_partition_arn(self, service: str, resource: str) -> str:
         return f"arn:{self.partition}:{service}:{self.region}:{self.account}:{resource}"
+
+    def _web_search_statements(self) -> list[iam.PolicyStatement]:
+        """AgentCore Web Search in its configured region: the AWS-managed
+        tool only (none when the guide does not search with it)."""
+        if not self.web_search_region:
+            return []
+        return [
+            iam.PolicyStatement(
+                sid="GuideWebSearch",
+                actions=["bedrock-agentcore:InvokeWebSearch"],
+                resources=[
+                    f"arn:{self.partition}:bedrock-agentcore:"
+                    f"{self.web_search_region}:aws:tool/{WEB_SEARCH_ID}"
+                ],
+            )
+        ]
 
     def _alarm_source_condition(self) -> dict[str, dict[str, str]]:
         """Only this account's CloudWatch alarms (confused-deputy guard)."""
@@ -351,6 +370,7 @@ class PaperReviewStack(Stack):
                 ],
                 resources=[self.code_interpreter.attr_code_interpreter_arn],
             ),
+            *self._web_search_statements(),
             iam.PolicyStatement(
                 sid="SsmReadSecrets",
                 actions=["ssm:GetParameter", "ssm:GetParameters"],
@@ -763,6 +783,13 @@ class BedrockProfilesStack(Stack):
                 Tags.of(profile).add("Kind", kind)
 
 
+def web_search_region(config: Config) -> str | None:
+    """The region the guide's AgentCore Web Search calls go to (None: the
+    guide does not search with it)."""
+    guide = config.tech_guide
+    return guide.web_search_region if "agentcore" in guide.web_search else None
+
+
 def cost_alarm_usd(config: Config) -> float:
     """The hourly cost alarm's threshold: two runs at the largest per-run
     ceiling in one hour (one run up to its own ceiling is expected spend);
@@ -863,6 +890,7 @@ def main() -> None:
             bedrock_region_name=resources.bedrock_region_name,
             environment_vars=env_vars,
             cost_alarm_usd=cost_alarm_usd(config),
+            web_search_region=web_search_region(config),
             env=core.Environment(
                 account=account_id, region=resources.default_region_name
             ),

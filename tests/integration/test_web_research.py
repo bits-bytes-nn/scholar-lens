@@ -418,6 +418,25 @@ class TestFailedSearchesAreCounted:
             assert note.startswith("2 web search(es) failed")
         assert len(calls) == 4  # one request per search: no retry
 
+    def test_a_stopped_backend_is_noted_with_its_reason(self) -> None:
+        from scholar_lens.adapters.web.research import (
+            FallbackSearchProvider,
+            WebResearcher,
+            stopped_backends,
+        )
+
+        rejected = TavilySearchProvider(
+            api_key="k", client=_api(lambda _: httpx.Response(432))
+        )
+        brave = BraveSearchProvider(
+            api_key="k", client=_api(lambda _: httpx.Response(200, json={}))
+        )
+        chain = FallbackSearchProvider(rejected, brave)
+        assert chain.search("a") == []
+        assert stopped_backends(chain) == ["TavilySearchProvider (HTTP 432)"]
+        (note,) = WebResearcher(search_provider=chain).search_notes()
+        assert "TavilySearchProvider (HTTP 432)" in note and "stopped" in note
+
     def test_no_search_provider_has_no_note(self) -> None:
         from scholar_lens.adapters.web.research import WebResearcher
 

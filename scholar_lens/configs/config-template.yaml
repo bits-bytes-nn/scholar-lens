@@ -108,12 +108,20 @@ tech_guide:
   writing_model_id: anthropic.claude-opus-5-5
   evaluation_model_id: anthropic.claude-opus-5-5
   thinking_effort: medium
-  # Derive web-search queries from the docs and reference material (needs
-  # TAVILY_API_KEY or BRAVE_API_KEY) across three intents (usage, internals
+  # Derive web-search queries from the docs and reference material (needs a
+  # web_search backend below) across three intents (usage, internals
   # and design, production integration), and fetch the top result pages into
   # the corpus, taken round-robin across the queries (12 = the top two results
   # of each query).
   auto_research: true
+  # Search backends in order; a query one fails goes to the next. agentcore
+  # (AgentCore Web Search, IAM-signed, 5,000 free queries a month per
+  # organization) needs no key; tavily and brave are skipped while
+  # TAVILY_API_KEY or BRAVE_API_KEY is unset.
+  web_search: [agentcore, tavily, brave]
+  # A region with AgentCore Web Search (us-east-1, us-east-2, us-west-2,
+  # ap-southeast-2, ap-northeast-1, eu-west-1 as of 2026-11).
+  web_search_region: ap-northeast-1
   max_research_queries: 6
   fetch_top_results: 12
   # Search results are ranked by source authority (official docs, the
@@ -153,8 +161,8 @@ tech_guide:
       - "*.libhunt.com"
       - stackshare.io
       - alternativeto.net
-  # Domains the search backends leave out entirely (Tavily exclude_domains,
-  # Brave -site:), e.g. [pinterest.com].
+  # Domains the search backends leave out entirely (AgentCore and Tavily
+  # filters, Brave -site:), e.g. [pinterest.com].
   excluded_domains: []
   # The gathered corpus (queries, results, pages and their source records) is
   # saved under a hash of the inputs (local work dir and S3 guides/sources/)

@@ -99,6 +99,29 @@ class TestStackWiring:
         }
         assert "SCHOLAR_LENS_CODE_INTERPRETER_ID" in env
 
+    def test_guide_web_search_is_the_managed_tool_in_its_region(
+        self, template: dict[str, Any]
+    ) -> None:
+        from scholar_lens.configs import Config
+
+        (statement,) = self._statements(template, "GuideWebSearch")
+        assert statement["Action"] == "bedrock-agentcore:InvokeWebSearch"
+        region = Config().tech_guide.web_search_region
+        prefix, _partition, rest = statement["Resource"]["Fn::Join"][1]
+        assert (prefix, rest) == (
+            "arn:",
+            f":bedrock-agentcore:{region}:aws:tool/web-search.v1",
+        )
+
+    def test_no_web_search_grant_without_agentcore(self) -> None:
+        from scholar_lens.configs import Config
+        from scripts.deploy_infra import web_search_region
+
+        config = Config()
+        config.tech_guide.web_search = ["tavily", "brave"]
+        assert web_search_region(config) is None
+        assert web_search_region(Config()) == "ap-northeast-1"
+
     def test_bedrock_invoke_is_limited_to_the_app_vendors(
         self, template: dict[str, Any]
     ) -> None:

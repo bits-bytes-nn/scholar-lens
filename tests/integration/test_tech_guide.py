@@ -51,6 +51,7 @@ def _make_generator(*, auto_research: bool = False) -> TechGuideGenerator:
     researcher.add_official_reference = MagicMock(return_value=[])
     # Searches that failed (the real backends count them).
     researcher.search_provider.failed_searches = 0
+    researcher.search_provider.exhausted = False
     gen = TechGuideGenerator(
         LanguageModelId.CLAUDE_V4_5_HAIKU,
         boto3.Session(region_name="us-east-1"),
@@ -102,7 +103,8 @@ class TestParseQueries:
 
 
 class TestBuildSearchProvider:
-    """build_search_provider prefers Tavily > Brave > Null."""
+    """build_search_provider chains the configured backends (default Tavily >
+    Brave), skipping one without its key; none: Null."""
 
     def _provider(self, monkeypatch, *, tavily=None, brave=None):  # type: ignore[no-untyped-def]
         from scholar_lens import bootstrap as tg
@@ -113,7 +115,7 @@ class TestBuildSearchProvider:
             monkeypatch.setenv("TAVILY_API_KEY", tavily)
         if brave:
             monkeypatch.setenv("BRAVE_API_KEY", brave)
-        return tg.build_search_provider()
+        return tg.build_search_provider(["tavily", "brave"])
 
     def test_prefers_tavily(self, monkeypatch: pytest.MonkeyPatch) -> None:
         from scholar_lens.adapters.web.research import TavilySearchProvider
@@ -145,6 +147,45 @@ class TestBuildSearchProvider:
         from scholar_lens.adapters.web.research import NullSearchProvider
 
         p = self._provider(monkeypatch)
+        assert isinstance(p, NullSearchProvider)
+
+    def test_agentcore_first_then_the_keyed_backends(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scholar_lens import bootstrap as tg
+        from scholar_lens.adapters.agentcore.web_search import (
+            AgentCoreSearchProvider,
+        )
+        from scholar_lens.adapters.web.research import (
+            BraveSearchProvider,
+            FallbackSearchProvider,
+            search_chain,
+        )
+
+        for var in ("TAVILY_API_KEY", "BRAVE_API_KEY"):
+            monkeypatch.delenv(var, raising=False)
+        monkeypatch.setenv("BRAVE_API_KEY", "brave-k")
+        session = tg.aws_session(region_name="ap-northeast-2")
+        p = tg.build_search_provider(
+            ["agentcore", "tavily", "brave"],
+            session=session,
+            web_search_region="ap-northeast-1",
+        )
+        assert isinstance(p, FallbackSearchProvider)
+        assert isinstance(p.primary, AgentCoreSearchProvider)
+        assert p.primary.region_name == "ap-northeast-1"
+        assert isinstance(p.secondary, BraveSearchProvider)
+        assert (
+            search_chain(p) == "Fallback(AgentCoreSearchProvider,BraveSearchProvider)"
+        )
+
+    def test_agentcore_needs_a_session(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from scholar_lens import bootstrap as tg
+        from scholar_lens.adapters.web.research import NullSearchProvider
+
+        for var in ("TAVILY_API_KEY", "BRAVE_API_KEY"):
+            monkeypatch.delenv(var, raising=False)
+        p = tg.build_search_provider(["agentcore"], web_search_region="ap-northeast-1")
         assert isinstance(p, NullSearchProvider)
 
 

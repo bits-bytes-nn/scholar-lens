@@ -52,7 +52,8 @@
 - Python 3.12 이상과 [Poetry](https://python-poetry.org/)
 - 설정한 Claude 모델에 Bedrock 접근 권한이 있는 AWS 프로필
 - PDF 파싱용 `UPSTAGE_API_KEY`
-- 선택: `TAVILY_API_KEY` 또는 `BRAVE_API_KEY`(가이드 웹 조사), `GITHUB_TOKEN`(블로그 PR), `CROSSREF_MAILTO`, `OPENALEX_API_KEY`, `SEMANTIC_SCHOLAR_API_KEY`(인용 조회)
+- 가이드 웹 조사는 AgentCore Web Search(실행 중인 AWS 자격 증명, `tech_guide.web_search_region`)로 검색하고, `TAVILY_API_KEY`나 `BRAVE_API_KEY`가 있으면 실패한 검색을 Tavily나 Brave로 넘깁니다(`tech_guide.web_search`).
+- 선택: `GITHUB_TOKEN`(블로그 PR), `CROSSREF_MAILTO`, `OPENALEX_API_KEY`, `SEMANTIC_SCHOLAR_API_KEY`(인용 조회)
 
 ```bash
 git clone https://github.com/bits-bytes-nn/scholar-lens.git && cd scholar-lens
