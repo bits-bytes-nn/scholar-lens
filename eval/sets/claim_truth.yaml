@@ -1,0 +1,120 @@
+# Ground truth for the claim checks (the review body and summary checks of
+# the sections engine): sentences of published posts that a human corrected
+# because the paper does not say them, and posts the blind judge rated clean.
+# Run with `python -m eval.claim_replay` (see its docstring).
+#
+# post: the generated text as the run wrote it, before any hand fix:
+#   "s3:<key>" under the configured bucket and prefix, or a repo path.
+# kind: summary | review (decides the check's text name and number-source cap,
+#   as the engine runs it).
+# truth: one entry per hand-fixed sentence. `anchor` is a verbatim piece of
+#   the wrong sentence (markup aside) that a check line must quote to count
+#   as finding it; `source` is the blog commit that fixed it
+#   (bits-bytes-nn/bits-bytes-nn.github.io). `check: final` marks a sentence
+#   of a review's TL;DR or closing, which the final check reads, not the body
+#   check: it is listed but not scored. `clean: true` marks a baseline the
+#   blind judge rated clean: every flag on it is a false-alarm candidate.
+# Hand fixes of markup, tags or list rendering are not claims and are left out.
+version: 1
+
+cases:
+  rewoo:
+    arxiv: "2305.18323"
+    post: s3:posts/2026-11-17-rewoo-decoupling-reasoning-from-observations-for-efficient-augmented-language-summary.md
+    kind: summary
+    truth:
+      - id: sotuqa-order
+        anchor: "ReAct보다 정확도가 높았고(64.8 대 70.2)"
+        category: number_swap
+        source: a04991e
+        note: Table 2 gives ReWOO 70.2 and ReAct 64.8.
+  codeact:
+    arxiv: "2402.01030"
+    post: s3:posts/2026-11-17-executable-code-actions-elicit-better-llm-agents-summary.md
+    kind: summary
+    truth: []
+    note: No hand fix of a claim; flags are scored as unconfirmed, not as false alarms.
+    clean: false
+  dspy:
+    arxiv: "2310.03714"
+    post: s3:posts/2026-11-17-dspy-compiling-declarative-language-model-calls-into-self-improving-pipelines.md
+    kind: review
+    truth:
+      - id: inspiration-attribution
+        anchor: "Theano·PyTorch 등 선행 프로그래밍 모델 연구에서 착안했습니다"
+        category: attribution
+        source: f080698
+        note: Section 2 cites Bergstra et al. (Theano, Hyperopt), Paszke et al. (PyTorch) and Wolf et al. (Transformers).
+      - id: ensemble-teacher-attribution
+        anchor: "앞서 본 합성 예시처럼"
+        category: attribution
+        source: f080698
+        note: The teacher example is the authors' (Section 4), not the post's compiled_rag example.
+      - id: psg-gain-cause
+        anchor: "검색 자체가 나아졌습니다"
+        category: unsupported_cause
+        source: f080698
+        note: The paper gives no mechanism for the multihop Psg gain.
+  mipro:
+    arxiv: "2406.11695"
+    post: s3:posts/2026-11-17-optimizing-instructions-and-demonstrations-for-multi-stage-language-model.md
+    kind: review
+    truth:
+      - id: lost-in-the-middle-critique
+        anchor: "그 결과가 지시문 이력에 그대로 들어맞는지는 따로 검증되지 않았습니다"
+        category: unlabelled_interpretation
+        source: 20acfa3
+        note: The writer's own critique read as the paper's; Section 4.5 only cites the study.
+      - id: walkthrough-scores
+        anchor: "평균 미니배치 점수 1위인 조합 A(예: 0.62)"
+        category: invented_example
+        source: 20acfa3
+        note: The paper gives no scores for the ExtractOptimizedSets walk-through (labelled illustrative in the post).
+      - id: proposer-lm-contradiction
+        anchor: "본문 서술과 어긋납니다"
+        category: unlabelled_interpretation
+        source: 20acfa3
+        note: Section 5 and Appendix B.4 describe different settings; the post called it a contradiction.
+  gepa:
+    arxiv: "2507.19457"
+    post: s3:posts/2026-11-17-gepa-reflective-prompt-evolution-can-outperform-reinforcement-learning.md
+    kind: review
+    truth:
+      - id: tldr-prompt-length-model
+        anchor: "프롬프트는 최대 9.2배 짧았습니다"
+        category: number_scope
+        source: 4d2be6a
+        check: final
+        note: 9.2x is Qwen3 8B PUPA (Fig. 18b); on GPT-4.1 Mini the maximum is 7.5x. The model is only in the figure.
+      - id: merge-rare
+        anchor: "계보 조건이 엄격해서 Merge는 드물게만 일어납니다"
+        category: unsupported_cause
+        source: 4d2be6a
+        note: App. E.4 caps Merge at 5 calls; it never says lineage conditions make it rare.
+      - id: grpo-margins-named
+        anchor: "다섯 과제에서의 우위를 각각 19.0%"
+        category: number_scope
+        source: 4d2be6a
+        note: The five margins are unnamed in the paper and are percentage points.
+      - id: ifbench-curve
+        anchor: "IFBench에서도 프롬프트 옵티마이저는 초반 몇백 롤아웃 안에 빠르게 오르고"
+        category: figure_reading
+        source: 4d2be6a
+        note: Read off the figure; the caption makes no such claim.
+      - id: aime-12-model
+        anchor: "AIME-2025에서는 저자들이 GEPA의 향상을 정확도 +12%포인트로 제시합니다"
+        category: number_scope
+        source: 4d2be6a
+        note: +12 matches the Qwen3 8B table (32.00 vs 20.00), not GPT-4.1 Mini (8 points).
+  lora:
+    arxiv: "2106.09685"
+    post: eval/baselines/2026-11-03/out/summary-lora.md
+    kind: summary
+    truth: []
+    clean: true
+  kimi:
+    arxiv: "2507.20534"
+    post: eval/baselines/2026-11-03/out/review-kimi.md
+    kind: review
+    truth: []
+    clean: true

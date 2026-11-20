@@ -163,6 +163,21 @@ class TestPaperSummarizer:
         assert "31337" in notes and "42.4242" in notes
         assert "description is plain text" in notes
 
+    async def test_a_withdrawn_claim_line_is_no_problem(
+        self, sample_paper: Paper
+    ) -> None:
+        summarizer = _make_summarizer_with_stub_chain(
+            {"subtitle": "", "description": "", "summary": "본문", "urls": ""}
+        )
+        summarizer.claim_chain = MagicMock()
+        summarizer.claim_chain.ainvoke = AsyncMock(
+            return_value={
+                "problems": "- 본문. || none\n- 다른 문장. || wrong: 표는 70.2"
+            }
+        )
+        problems = await summarizer._claim_problems("본문. 다른 문장.", "paper")
+        assert problems == ["다른 문장. || wrong: 표는 70.2"]
+
     async def test_description_no_longer_than_the_page_title_is_dropped(
         self, sample_paper: Paper
     ) -> None:

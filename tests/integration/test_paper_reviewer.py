@@ -1498,6 +1498,19 @@ async def test_a_body_fix_that_does_not_help_is_undone_and_noted() -> None:
     assert any("Review body claims to check" in n for n in review.notes)
 
 
+async def test_a_withdrawn_body_check_line_is_no_problem() -> None:
+    edits: list[Any] = []
+
+    def edit(payload: dict[str, Any]) -> str:
+        edits.append(payload)
+        return "<missing_coverage>none</missing_coverage>"
+
+    withdrawn = FakeChain({"problems": f"- {WRONG_BODY} || none"})
+    review = await _reviewer(editor=FakeChain(edit), body_checker=withdrawn).run()
+    assert WRONG_BODY in review.body
+    assert not any("Review body claims to check" in n for n in review.notes)
+
+
 async def test_a_failed_body_check_is_noted() -> None:
     def fail(_: dict[str, Any]) -> Any:
         raise RuntimeError("down")

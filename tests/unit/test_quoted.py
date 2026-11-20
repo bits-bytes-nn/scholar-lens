@@ -147,3 +147,37 @@ def test_an_underscored_wrong_label_counts() -> None:
     before = ["- A는 B입니다. || unsupported: x"]
     after = ["- C는 D입니다. || _wrong_: y"]
     assert not fix_kept(before, after, {"t": "A는 B입니다."}, {"t": "C는 D입니다."})
+
+
+def test_withdrawn_claim_lines_are_dropped() -> None:
+    from scholar_lens.domain.quoted import reported_claims
+
+    lines = [
+        "A sentence. || wrong: the table says 70.2",
+        "B sentence. || **Unsupported**: no source",
+        "C sentence. || none",
+        "D sentence. || fine: it matches Table 2",
+        "E sentence without a verdict",
+        # A || inside the copied sentence (a norm, code) does not decide.
+        "노름 ||W||가 1을 넘습니다. || wrong: the bound is 2",
+        "`a || b`를 씁니다. || unsupported: not in the paper",
+        "F sentence. || none || wrong: the second reading stands",
+        # A verdict word off the list is kept: only a withdrawal drops.
+        "G sentence. || overstated: the paper says may",
+        # Whole words only, and a report anywhere after the bar keeps it.
+        "Code `a || none_flag` is set. || overstated: x",
+        "X uses `p || fine_tune`.",
+        "H sentence. || fine-grained claim is wrong",
+        "I sentence. || none -- actually wrong: table 3",
+        "J sentence. || OK, but unsupported: no source",
+    ]
+    assert reported_claims(lines) == [
+        lines[0],
+        lines[1],
+        lines[4],
+        lines[5],
+        lines[6],
+        lines[7],
+        lines[8],
+        *lines[9:],
+    ]

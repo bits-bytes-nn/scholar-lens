@@ -32,7 +32,7 @@ from scholar_lens.domain.post_format import (
 )
 from scholar_lens.domain.prompt_safety import fenced, neutralize_prompt_tags
 from scholar_lens.domain.quality_gate import added_slips, publish_blockers
-from scholar_lens.domain.quoted import fix_kept, kept_problems
+from scholar_lens.domain.quoted import fix_kept, kept_problems, reported_claims
 from scholar_lens.domain.text import parse_lines
 from scholar_lens.domain.usage import TokenBudgetExceeded
 from scholar_lens.domain.usage_context import staged, usage_stage
@@ -358,7 +358,7 @@ class PaperSummarizer(RetryableBase, TokenBudgetGuard):
         if not str(result.get("problems") or "").strip():
             logger.warning("Summary claim check gave no verdict.")
             return None
-        return parse_lines(result.get("problems"))
+        return reported_claims(parse_lines(result.get("problems")))
 
     async def _checked_claims(self, summary: str, paper: str) -> str:
         """``summary`` with its claims checked against the paper: what the

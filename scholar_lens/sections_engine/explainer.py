@@ -49,7 +49,12 @@ from scholar_lens.domain.post_format import same_as_title
 from scholar_lens.domain.post_spec import sentence_title_problems
 from scholar_lens.domain.prompt_safety import fenced, neutralize_prompt_tags
 from scholar_lens.domain.quality_gate import publish_blockers
-from scholar_lens.domain.quoted import finding_fixed, fix_kept, kept_problems
+from scholar_lens.domain.quoted import (
+    finding_fixed,
+    fix_kept,
+    kept_problems,
+    reported_claims,
+)
 from scholar_lens.domain.review_plan import (
     RANGE_PADDING,
     PlanError,
@@ -892,7 +897,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
         if not str(result.get("problems") or "").strip():
             logger.warning("Review body claim check gave no verdict.")
             return None
-        return parse_lines(result.get("problems"))
+        return reported_claims(parse_lines(result.get("problems")))
 
     @staged("body_check")
     async def _checked_body(
@@ -1119,7 +1124,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
             logger.warning("TL;DR and closing claim check gave no verdict.")
             self._check_failure = "the check gave no verdict"
             return None
-        return parse_lines(result.get("problems"))
+        return reported_claims(parse_lines(result.get("problems")))
 
     async def _checked_claims(
         self, payload: dict[str, Any], final: dict[str, str]
