@@ -10,8 +10,10 @@
 # truth: one entry per hand-fixed sentence. `anchor` is a verbatim piece of
 #   the wrong sentence (markup aside) that a check line must quote to count
 #   as finding it; `source` is the blog commit that fixed it
-#   (bits-bytes-nn/bits-bytes-nn.github.io). An empty list marks a clean
-#   baseline: every flag on it is counted as a false alarm candidate.
+#   (bits-bytes-nn/bits-bytes-nn.github.io). `check: final` marks a sentence
+#   of a review's TL;DR or closing, which the final check reads, not the body
+#   check: it is listed but not scored. `clean: true` marks a baseline the
+#   blind judge rated clean: every flag on it is a false-alarm candidate.
 # Hand fixes of markup, tags or list rendering are not claims and are left out.
 version: 1
 
@@ -82,6 +84,7 @@ cases:
         anchor: "프롬프트는 최대 9.2배 짧았습니다"
         category: number_scope
         source: 4d2be6a
+        check: final
         note: 9.2x is Qwen3 8B PUPA (Fig. 18b); on GPT-4.1 Mini the maximum is 7.5x. The model is only in the figure.
       - id: merge-rare
         anchor: "계보 조건이 엄격해서 Merge는 드물게만 일어납니다"

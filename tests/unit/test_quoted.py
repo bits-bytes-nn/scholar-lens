@@ -147,3 +147,16 @@ def test_an_underscored_wrong_label_counts() -> None:
     before = ["- A는 B입니다. || unsupported: x"]
     after = ["- C는 D입니다. || _wrong_: y"]
     assert not fix_kept(before, after, {"t": "A는 B입니다."}, {"t": "C는 D입니다."})
+
+
+def test_withdrawn_claim_lines_are_dropped() -> None:
+    from scholar_lens.domain.quoted import reported_claims
+
+    lines = [
+        "A sentence. || wrong: the table says 70.2",
+        "B sentence. || **Unsupported**: no source",
+        "C sentence. || none",
+        "D sentence. || fine: it matches Table 2",
+        "E sentence without a verdict",
+    ]
+    assert reported_claims(lines) == [lines[0], lines[1], lines[4]]

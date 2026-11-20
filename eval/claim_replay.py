@@ -9,23 +9,32 @@ against the hand-fixed sentences of ``eval/sets/claim_truth.yaml``.
 
 ``run`` builds the check as the engine does (``PaperTextCheckPrompt``, the
 configured evaluation model and thinking effort, number sources capped at
-32k characters for a review and 16k for a summary) and reads the paper from
-arXiv HTML, not the run's parsed PDF, so a figure reading the run had is
-missing here. Posts and papers are cached in WORK_DIR, which should be a
-private scratch directory (``mktemp -d "$HOME/.cache/claim-replay.XXXX"``).
+32k characters for a review and 16k for a summary) on the text the engine
+checks: a review's article without its TL;DR and closing (those have their
+own check), a summary without its reference list. Two differences remain:
+the paper is the current arXiv HTML (no version pinned), not the run's
+parsed PDF, so a figure reading the run had is missing; and the post is the
+published one, after the run's own fixes. Posts and papers are cached in
+WORK_DIR, a private scratch directory
+(``mktemp -d "$HOME/.cache/claim-replay.XXXX"``). Each replay records the
+commit and a hash of the check prompt.
 
 A check line counts as finding a hand-fixed sentence when the sentence it
-copies (before ``||``) holds the entry's anchor, whitespace and markup aside.
-Flags on a clean baseline are false-alarm candidates; flags elsewhere that
-match no entry are unconfirmed (the hand fixes are not exhaustive).
+copies (before ``||``) holds the entry's anchor, whitespace, markup and the
+line's ellipses aside (as ``domain/quoted.py`` compares). The match is by
+sentence, not by reason: a line may dispute the sentence for another
+defect than the one fixed. Flags on a clean baseline are false-alarm
+candidates; flags elsewhere that match no entry are unconfirmed (the hand
+fixes are not exhaustive).
 """
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
-import re
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,6 +54,7 @@ from scholar_lens.adapters.documents.html import extract_text_from_html
 from scholar_lens.configs import Config
 from scholar_lens.domain.markdown.front_matter import split_front_matter
 from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
+from scholar_lens.domain.quoted import disputed, reported_claims, squash
 from scholar_lens.domain.text import parse_lines
 from scholar_lens.domain.validation import number_sources
 from scholar_lens.sections_engine.prompts.review import PaperTextCheckPrompt
@@ -55,19 +65,27 @@ REPO = Path(__file__).parent.parent
 SOURCE_CAPS = {"review": 32_000, "summary": 16_000}
 TEXT_NAMES = {"review": "review body", "summary": "summary"}
 
-_LINK = re.compile(r"\[([^\]\n]*)\]\([^)\n]*\)")
-_MARKS = re.compile(r"[*_`$]")
+
+def checked_text(kind: str, body: str) -> str:
+    """The part of a published post's body the engine's check reads: for a
+    review, the article between the TL;DR's rule and the closing assessment
+    (the last ``##``; the TL;DR and closing have their own check); for a
+    summary, everything before the reference list's rule."""
+    lines = body.splitlines()
+    rules = [i for i, line in enumerate(lines) if line.strip() == "- - -"]
+    if kind == "review":
+        start = rules[0] + 1 if rules else 0
+        headings = [i for i, line in enumerate(lines) if line.startswith("## ")]
+        end = headings[-1] if headings and headings[-1] > start else len(lines)
+        return "\n".join(lines[start:end]).strip()
+    end = rules[-1] if rules else len(lines)
+    return "\n".join(lines[:end]).strip()
 
 
-def squash(text: str) -> str:
-    """``text``'s words: whitespace folded, emphasis/code/math marks and link
-    targets dropped."""
-    return " ".join(_MARKS.sub("", _LINK.sub(r"\1", text)).split())
-
-
-def disputed(line: str) -> str:
-    """The sentence a check line copies (before ``||``)."""
-    return squash(line.split("||", 1)[0].strip().removeprefix("-").strip(' "“”'))
+def found_by(line: str, anchor: str) -> bool:
+    """Whether a check line copies a sentence holding ``anchor`` (markup,
+    whitespace and the line's ellipses aside, as the engine compares)."""
+    return squash(anchor) in " ".join(disputed(line))
 
 
 @dataclass
@@ -82,12 +100,12 @@ class CaseScore:
 
 def score_case(name: str, case: dict[str, Any], problems: list[str]) -> CaseScore:
     """Which truth entries of ``case`` the check ``problems`` found."""
-    truth = case.get("truth") or []
+    # Entries in the TL;DR or closing are the final check's (``check: final``).
+    truth = [e for e in case.get("truth") or [] if e.get("check") != "final"]
     score = CaseScore(name, len(problems), clean=bool(case.get("clean")))
     matched: set[int] = set()
     for entry in truth:
-        anchor = squash(entry["anchor"])
-        hits = [i for i, p in enumerate(problems) if anchor in disputed(p)]
+        hits = [i for i, p in enumerate(problems) if found_by(p, entry["anchor"])]
         (score.found if hits else score.missed).append(entry["id"])
         matched.update(hits)
     score.other = [p for i, p in enumerate(problems) if i not in matched]
@@ -148,6 +166,24 @@ def _paper_text(work: Path, arxiv_id: str) -> str:
     return text
 
 
+def _meta() -> dict[str, str]:
+    """What produced a replay: the commit (with "+dirty" for uncommitted
+    changes) and a hash of the check prompt."""
+
+    def git(*args: str) -> str:
+        return subprocess.run(
+            ["git", *args], cwd=REPO, capture_output=True, text=True, check=False
+        ).stdout.strip()
+
+    prompt = PaperTextCheckPrompt.human_prompt_template
+    prompt += PaperTextCheckPrompt.system_prompt_template
+    return {
+        "commit": git("rev-parse", "--short", "HEAD")
+        + ("+dirty" if git("status", "--porcelain", "--untracked-files=no") else ""),
+        "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest()[:12],
+    }
+
+
 async def _run(work: Path, cases: dict[str, dict[str, Any]]) -> dict[str, Any]:
     cfg = Config.load()
     session = boto3.Session(
@@ -163,7 +199,7 @@ async def _run(work: Path, cases: dict[str, dict[str, Any]]) -> dict[str, Any]:
         ),
         "summary": (cfg.summary.summary_model_id, cfg.summary.thinking_effort),
     }
-    out: dict[str, Any] = {"problems": {}, "models": {}}
+    out: dict[str, Any] = {"meta": _meta(), "problems": {}, "models": {}}
     for name, case in cases.items():
         kind = case["kind"]
         model_id, effort = models[kind]
@@ -182,7 +218,7 @@ async def _run(work: Path, cases: dict[str, dict[str, Any]]) -> dict[str, Any]:
             | HTMLTagOutputParser(tag_names=PaperTextCheckPrompt.output_variables)
         )
         paper = neutralize_prompt_tags(_paper_text(work, case["arxiv"]))
-        body = _body(_post_text(work, case["post"]))
+        body = checked_text(kind, _body(_post_text(work, case["post"])))
         result = await chain.ainvoke(
             {
                 "paper_text": paper,
@@ -195,8 +231,8 @@ async def _run(work: Path, cases: dict[str, dict[str, Any]]) -> dict[str, Any]:
                 "language": "Korean",
             }
         )
-        out["problems"][name] = parse_lines(result.get("problems"))
-        out["models"][name] = str(model_id)
+        out["problems"][name] = reported_claims(parse_lines(result.get("problems")))
+        out["models"][name] = model_id.value
         print(f"{name}: {len(out['problems'][name])} problems", flush=True)
     out["cost_usd"] = round(tracker.cost_usd, 2)
     return out
@@ -208,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     run = sub.add_parser("run", help="replay the check (paid Bedrock calls)")
     run.add_argument("work", type=Path)
     run.add_argument("--only", nargs="*", default=None)
+    run.add_argument("--out", default="replay.json", help="file name in WORK_DIR")
     score = sub.add_parser("score", help="score a saved replay")
     score.add_argument("replay", type=Path)
     anchors = sub.add_parser("anchors", help="check every anchor is in its post")
@@ -221,20 +258,30 @@ def main(argv: list[str] | None = None) -> int:
             for name, case in cases.items()
             for entry in case.get("truth") or []
             if squash(entry["anchor"])
-            not in squash(_body(_post_text(args.work, case["post"])))
+            not in squash(
+                _body(_post_text(args.work, case["post"]))
+                if entry.get("check") == "final"
+                else checked_text(
+                    case["kind"], _body(_post_text(args.work, case["post"]))
+                )
+            )
         ]
         print("\n".join(missing) or "every anchor is in its post")
         return 1 if missing else 0
     if args.command == "run":
+        if unknown := set(args.only or ()) - set(cases):
+            raise SystemExit(f"unknown cases: {sorted(unknown)}")
         chosen = {k: v for k, v in cases.items() if not args.only or k in args.only}
         replay = asyncio.run(_run(args.work, chosen))
-        path = args.work / "replay.json"
+        path = args.work / args.out
+        if path.exists():
+            raise SystemExit(f"{path} exists: pass another --out")
         path.write_text(json.dumps(replay, ensure_ascii=False, indent=1), "utf-8")
         print(f"cost_usd={replay['cost_usd']} -> {path}")
         args.replay = path
     replay = json.loads(args.replay.read_text(encoding="utf-8"))
     scores = [
-        score_case(name, cases[name], problems)
+        score_case(name, cases[name], reported_claims(problems))
         for name, problems in replay["problems"].items()
         if name in cases
     ]

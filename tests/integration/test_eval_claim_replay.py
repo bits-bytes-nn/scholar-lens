@@ -42,3 +42,35 @@ def test_the_truth_set_loads_with_an_anchor_per_entry() -> None:
     assert all(e["anchor"].strip() and e["source"] for e in entries)
     assert {c["kind"] for c in cases.values()} == {"review", "summary"}
     assert any(c.get("clean") for c in cases.values())
+
+
+def test_a_review_is_checked_without_its_tldr_and_closing() -> None:
+    from eval.claim_replay import checked_text
+
+    body = (
+        "## TL;DR\n- headline\n\n- - -\n\n## 방법\n본문 문장.\n\n"
+        "## 결과\n결과 문장.\n\n## 한계와 시사점\n마무리 문장.\n\n- - -\n### References\n* r"
+    )
+    review = checked_text("review", body)
+    assert review.startswith("## 방법") and "결과 문장." in review
+    assert "headline" not in review and "마무리 문장." not in review
+    summary = checked_text("summary", body)
+    assert "headline" in summary and "마무리 문장." in summary
+    assert "References" not in summary
+
+
+def test_a_final_check_entry_is_listed_but_not_scored() -> None:
+    case = {
+        "truth": [
+            {"id": "tldr", "anchor": "최대 9.2배", "check": "final"},
+            {"id": "body", "anchor": "검색 자체가 나아졌습니다"},
+        ]
+    }
+    # The TL;DR entry is not scored even when a line quotes it.
+    score = score_case(
+        "gepa", case, ["- 프롬프트는 최대 9.2배 짧았습니다. || wrong: x"]
+    )
+    assert score.missed == ["body"] and score.found == []
+    # A line split at an ellipsis still finds the sentence.
+    split = ["- 부트스트래핑으로 검색 자체가 ... 나아졌습니다. || unsupported: x"]
+    assert score_case("gepa", case, split).found == ["body"]
