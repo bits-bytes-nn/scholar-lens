@@ -611,26 +611,52 @@ class TestValidator:
     ) -> None:
         data = plan_dict()
         data["time_range"] = {"since": 2017, "until": None}
-        data["sources"] = [
-            "OpenAlex: 18 requests (0 failed)",
-            "arXiv: 11 requests (0 failed)",
-            "Semantic Scholar citation data for 270 candidates",
-        ]
+        data["sources"] = ["DataCite: 3 requests (0 failed)"]
         data["excluded"] = [
             {"id": f"2401.{i:05d}", "title": f"Paper_{i} *x*", "year": 2024}
             for i in range(12)
+        ] + [
+            # Moved into the plan's papers by hand: no longer left out.
+            {"id": "2305.18290", "title": "Direct Preference Optimization"}
         ]
         method = survey_method(SurveyPlan.model_validate(data), "Korean")
-        assert method.startswith("\n### 조사 방법\n- 2026년 10월 1일에 OpenAlex, arXiv")
-        assert "논문 3편(계보 2개)" in method
-        assert "- 대상 기간: 2017년 이후" in method
-        assert "이유를 적어 제외한 후보 12편: Paper&#95;0 &#42;x&#42; (2024)" in method
-        assert method.rstrip().endswith("외 2편")
+        assert method.startswith(
+            "\n### 조사 방법\n- 계획 작성일: 2026년 10월 1일\n"
+            "- 대상 기간: 2017년 이후\n- 다룬 논문: 3편(계보 2개)\n"
+            "- 선정 단계에서 제외한 주요 후보:\n  - Paper&#95;0 &#42;x&#42; (2024)\n"
+        )
+        # No index is claimed; the cap counts the rest; a paper is not both.
+        assert "DataCite" not in method
+        assert method.rstrip().endswith("  - 외 2편")
+        assert "Direct Preference Optimization" not in method
         body = GOOD_BODY + further_reading([("A post", ARTICLE)], "Korean") + method
         assert [r for r in rules(survey_post(body)) if r.startswith("error")] == []
-        english = survey_method(plan(), "English")
-        assert "- Years: any year" in english and "Left out" not in english
-        assert "searched on 2026-10-01; 3 papers in 2 lineages" in english
+
+    @pytest.mark.parametrize(
+        ("since", "until", "korean", "english"),
+        [
+            (None, None, "제한 없음", "any year"),
+            (2020, 2024, "2020~2024년", "2020-2024"),
+            (None, 2023, "2023년까지", "up to 2023"),
+            (2023, 2023, "2023년", "2023"),
+        ],
+    )
+    def test_the_method_block_in_english_and_its_year_ranges(
+        self, since: int | None, until: int | None, korean: str, english: str
+    ) -> None:
+        data = plan_dict()
+        data["time_range"] = {"since": since, "until": until}
+        data["excluded"] = [{"id": "2401.00001", "title": "Left Paper"}]
+        built = SurveyPlan.model_validate(data)
+        assert f"- 대상 기간: {korean}\n" in survey_method(built, "Korean")
+        text = survey_method(built, "English")
+        assert text.startswith(
+            "\n### How the papers were chosen\n- Plan date: 2026-10-01"
+        )
+        assert f"- Years: {english}\n- Papers: 3; lineages: 2\n" in text
+        assert text.endswith(
+            "- Notable candidates the selection left out:\n  - Left Paper\n"
+        )
 
     def test_a_paper_linked_only_by_the_timeline_is_flagged(self) -> None:
         # The code-built timeline links every plan paper; the prose skipping
@@ -966,7 +992,7 @@ class TestStage:
         # The reference list, then the plan's search method.
         refs, method = post.split("\n\n### 조사 방법\n")
         assert refs.endswith("(https://arxiv.org/abs/2305.18290). arXiv.")
-        assert method.startswith("- 2026년 10월 1일에 후보를 찾아 논문 3편(계보 2개)")
+        assert method.startswith("- 계획 작성일: 2026년 10월 1일\n")
         # The engine got the plan, the guideline and the survey's settings.
         engine = stage["engine"]
         [call] = engine.calls
