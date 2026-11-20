@@ -56,6 +56,7 @@ from scholar_lens.domain.survey.post import (
     plan_link_sources,
     reference_list,
     render_citations,
+    survey_method,
 )
 from scholar_lens.domain.validation import validate_post
 from tests.integration.fakes import FakeLLMFactory
@@ -605,6 +606,32 @@ class TestValidator:
             "\n### Further reading\n"
         )
 
+    def test_the_method_block_reports_the_plan_and_passes_the_validator(
+        self,
+    ) -> None:
+        data = plan_dict()
+        data["time_range"] = {"since": 2017, "until": None}
+        data["sources"] = [
+            "OpenAlex: 18 requests (0 failed)",
+            "arXiv: 11 requests (0 failed)",
+            "Semantic Scholar citation data for 270 candidates",
+        ]
+        data["excluded"] = [
+            {"id": f"2401.{i:05d}", "title": f"Paper_{i} *x*", "year": 2024}
+            for i in range(12)
+        ]
+        method = survey_method(SurveyPlan.model_validate(data), "Korean")
+        assert method.startswith("\n### 조사 방법\n- 2026년 10월 1일에 OpenAlex, arXiv")
+        assert "논문 3편(계보 2개)" in method
+        assert "- 대상 기간: 2017년 이후" in method
+        assert "이유를 적어 제외한 후보 12편: Paper&#95;0 &#42;x&#42; (2024)" in method
+        assert method.rstrip().endswith("외 2편")
+        body = GOOD_BODY + further_reading([("A post", ARTICLE)], "Korean") + method
+        assert [r for r in rules(survey_post(body)) if r.startswith("error")] == []
+        english = survey_method(plan(), "English")
+        assert "- Years: any year" in english and "Left out" not in english
+        assert "searched on 2026-10-01; 3 papers in 2 lineages" in english
+
     def test_a_paper_linked_only_by_the_timeline_is_flagged(self) -> None:
         # The code-built timeline links every plan paper; the prose skipping
         # one is flagged for the reviewer without blocking the post.
@@ -936,7 +963,10 @@ class TestStage:
         assert LOSS in post and "use_math: true" in post
         # Dated by the plan, so a rerun replaces the same post.
         assert "\ndate: 2026-10-01 09:30:00\n" in post
-        assert post.rstrip().endswith("(https://arxiv.org/abs/2305.18290). arXiv.")
+        # The reference list, then the plan's search method.
+        refs, method = post.split("\n\n### 조사 방법\n")
+        assert refs.endswith("(https://arxiv.org/abs/2305.18290). arXiv.")
+        assert method.startswith("- 2026년 10월 1일에 후보를 찾아 논문 3편(계보 2개)")
         # The engine got the plan, the guideline and the survey's settings.
         engine = stage["engine"]
         [call] = engine.calls
@@ -1043,8 +1073,9 @@ class TestReferenceArticles:
         Path(stage["request"].plan).write_text(json.dumps(data))
         outcome = run_stage(stage)
         post = outcome.markdown_path.read_text()
-        assert post.endswith(
-            "arXiv.\n\n### 참고 자료\n* [Lilian Weng: RLHF]" f"({ARTICLE})\n"
+        assert (
+            "arXiv.\n\n### 참고 자료\n* [Lilian Weng: RLHF]"
+            f"({ARTICLE})\n\n### 조사 방법\n" in post
         )
         errors = [
             v

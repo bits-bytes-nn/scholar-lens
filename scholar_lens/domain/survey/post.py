@@ -301,3 +301,78 @@ def further_reading(links: Sequence[tuple[str, str]], language: str) -> str:
         return ""
     heading = FURTHER_READING_HEADINGS.get(language, FURTHER_READING_HEADINGS[""])
     return f"\n{heading}\n{link_list(links)}\n"
+
+
+# The plan's request tallies ("OpenAlex: 18 requests (0 failed)",
+# adapters/scholarly/candidates.py): the indexes the candidates came from.
+_SOURCE_TALLY = re.compile(r"^([A-Za-z][\w .-]*?): \d+ requests\b")
+METHOD_HEADINGS = {"Korean": "### 조사 방법", "": "### How the papers were chosen"}
+# Excluded candidates named in full; the rest are counted.
+MAX_NAMED_EXCLUSIONS = 10
+
+
+def _period(plan: SurveyPlan, korean: bool) -> str:
+    since, until = plan.time_range.since, plan.time_range.until
+    if korean:
+        if since and until:
+            return f"{since}~{until}년"
+        if since:
+            return f"{since}년 이후"
+        return f"{until}년까지" if until else "제한 없음"
+    if since and until:
+        return f"{since}-{until}"
+    if since:
+        return f"{since} onwards"
+    return f"up to {until}" if until else "any year"
+
+
+def survey_method(plan: SurveyPlan, language: str) -> str:
+    """``### 조사 방법`` (Korean) or "### How the papers were chosen": when
+    the plan searched, in which indexes, the year range, how many papers in
+    how many lineages, and the candidates left out by name, all from the
+    plan (no model call); for after the reference lists. The plan's
+    reasons for leaving a candidate out stay in the plan (they are in
+    English)."""
+    korean = language == "Korean"
+    indexes = list(
+        dict.fromkeys(
+            m.group(1).strip()
+            for entry in plan.sources
+            if (m := _SOURCE_TALLY.match(entry.strip()))
+        )
+    )
+    day = plan.created_at.date()
+    papers, lineages = len(plan.papers), len(plan.lineages)
+    if korean:
+        where = f"{', '.join(indexes)}에서 " if indexes else ""
+        lines = [
+            f"- {day.year}년 {day.month}월 {day.day}일에 {where}후보를 찾아 "
+            f"논문 {papers}편(계보 {lineages}개)을 골랐습니다.",
+            f"- 대상 기간: {_period(plan, korean)}",
+        ]
+    else:
+        where = f" in {', '.join(indexes)}" if indexes else ""
+        lines = [
+            f"- Candidates were searched{where} on {day.isoformat()}; "
+            f"{papers} papers in {lineages} lineages were chosen.",
+            f"- Years: {_period(plan, korean)}",
+        ]
+    if excluded := plan.excluded:
+        named = ", ".join(
+            _plain(e.title) + (f" ({e.year})" if e.year else "")
+            for e in excluded[:MAX_NAMED_EXCLUSIONS]
+        )
+        rest = len(excluded) - MAX_NAMED_EXCLUSIONS
+        if korean:
+            more = f" 외 {rest}편" if rest > 0 else ""
+            lines.append(
+                f"- 선정 단계에서 이유를 적어 제외한 후보 {len(excluded)}편: {named}{more}"
+            )
+        else:
+            more = f" and {rest} more" if rest > 0 else ""
+            lines.append(
+                f"- Candidates the selection left out with a reason ({len(excluded)}): "
+                f"{named}{more}"
+            )
+    heading = METHOD_HEADINGS.get(language, METHOD_HEADINGS[""])
+    return f"\n{heading}\n" + "\n".join(lines) + "\n"
