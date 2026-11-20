@@ -330,8 +330,9 @@ def _period(plan: SurveyPlan, korean: bool) -> str:
 def survey_method(plan: SurveyPlan, language: str) -> str:
     """``### 조사 방법`` (Korean) or "### How the papers were chosen": the
     plan's date, the year range, how many papers in how many lineages, and
-    the notable candidates the selection left out (by title, one per line;
-    a candidate the plan's papers hold again is not one), all from the plan
+    the notable candidates the selection left out (one quoted title per
+    line; one the plan's papers hold again, an untitled one and a repeat are
+    not listed), all from the plan
     (no model call); for after the reference lists. The selection lists at
     most ``MAX_EXCLUDED`` of the candidates it passed over, so the list is
     no count of every candidate left out; their reasons stay in the plan
@@ -339,16 +340,22 @@ def survey_method(plan: SurveyPlan, language: str) -> str:
     korean = language == "Korean"
     day = plan.created_at.astimezone(UTC).date()
     papers, lineages = len(plan.papers), len(plan.lineages)
-    # A hand-edited entry may name no paper id (then it is listed) or the
-    # plan's paper under another id (then its title matches).
+    # A hand-edited entry may name the plan's paper by another id form, or
+    # name no paper id at all (then only a near-identical title says it is
+    # the plan's paper); an entry without a title or seen before is skipped.
     chosen = {p.id for p in plan.papers}
-    excluded = [
-        e
-        for e in plan.excluded
-        if e.title.strip()
-        and paper_id_of(e.id) not in chosen
-        and not any(titles_match(e.title, p.title) for p in plan.papers)
-    ]
+    excluded, seen = [], set()
+    for e in plan.excluded:
+        pid = paper_id_of(e.id)
+        key = pid or e.title.strip().lower()
+        if not e.title.strip() or key in seen:
+            continue
+        seen.add(key)
+        if pid in chosen or (
+            pid is None and any(titles_match(e.title, p.title) for p in plan.papers)
+        ):
+            continue
+        excluded.append(e)
     if korean:
         lines = [
             f"- 계획 작성일: {day.year}년 {day.month}월 {day.day}일",
@@ -366,9 +373,10 @@ def survey_method(plan: SurveyPlan, language: str) -> str:
     if excluded:
         lines.append(lead)
         lines += [
-            # Quoted: a title is never read as markup at the item's start
-            # ("1. ", "# ") nor as prose by the blog's style lint.
-            f'  - "{_plain(e.title)}"' + (f" ({e.year})" if e.year else "")
+            # In curly quotes: a title is never read as markup at the item's
+            # start ("1. ", "# "), nor as prose by the blog's style lint, and
+            # kramdown leaves the quotes as they are.
+            f"  - “{_plain(e.title)}”" + (f" ({e.year})" if e.year else "")
             for e in excluded[:MAX_EXCLUDED]
         ]
         if (rest := len(excluded) - MAX_EXCLUDED) > 0:
