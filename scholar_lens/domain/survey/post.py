@@ -31,8 +31,10 @@ from scholar_lens.domain.survey.plan import (
     SurveyInputError,
     SurveyPlan,
     merge_records,
+    paper_id_of,
     parse_paper_id,
 )
+from scholar_lens.domain.titles import titles_match
 from scholar_lens.domain.validation import FURTHER_READING_HEADINGS, REFERENCES_HEADING
 from scholar_lens.domain.venues import reference_venue
 
@@ -337,8 +339,16 @@ def survey_method(plan: SurveyPlan, language: str) -> str:
     korean = language == "Korean"
     day = plan.created_at.astimezone(UTC).date()
     papers, lineages = len(plan.papers), len(plan.lineages)
+    # A hand-edited entry may name no paper id (then it is listed) or the
+    # plan's paper under another id (then its title matches).
     chosen = {p.id for p in plan.papers}
-    excluded = [e for e in plan.excluded if parse_paper_id(e.id) not in chosen]
+    excluded = [
+        e
+        for e in plan.excluded
+        if e.title.strip()
+        and paper_id_of(e.id) not in chosen
+        and not any(titles_match(e.title, p.title) for p in plan.papers)
+    ]
     if korean:
         lines = [
             f"- 계획 작성일: {day.year}년 {day.month}월 {day.day}일",
@@ -356,7 +366,9 @@ def survey_method(plan: SurveyPlan, language: str) -> str:
     if excluded:
         lines.append(lead)
         lines += [
-            f"  - {_plain(e.title)}" + (f" ({e.year})" if e.year else "")
+            # Quoted: a title is never read as markup at the item's start
+            # ("1. ", "# ") nor as prose by the blog's style lint.
+            f'  - "{_plain(e.title)}"' + (f" ({e.year})" if e.year else "")
             for e in excluded[:MAX_EXCLUDED]
         ]
         if (rest := len(excluded) - MAX_EXCLUDED) > 0:

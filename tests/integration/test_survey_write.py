@@ -623,7 +623,7 @@ class TestValidator:
         assert method.startswith(
             "\n### 조사 방법\n- 계획 작성일: 2026년 10월 1일\n"
             "- 대상 기간: 2017년 이후\n- 다룬 논문: 3편(계보 2개)\n"
-            "- 선정 단계에서 제외한 주요 후보:\n  - Paper&#95;0 &#42;x&#42; (2024)\n"
+            '- 선정 단계에서 제외한 주요 후보:\n  - "Paper&#95;0 &#42;x&#42;" (2024)\n'
         )
         # No index is claimed; the cap counts the rest; a paper is not both.
         assert "DataCite" not in method
@@ -631,6 +631,29 @@ class TestValidator:
         assert "Direct Preference Optimization" not in method
         body = GOOD_BODY + further_reading([("A post", ARTICLE)], "Korean") + method
         assert [r for r in rules(survey_post(body)) if r.startswith("error")] == []
+
+    def test_hand_edited_exclusions_never_stop_the_post(self) -> None:
+        data = plan_dict()
+        data["excluded"] = [
+            # Not a paper id (an OpenAlex work, nothing): listed, no error.
+            {"id": "W2741809807", "title": "1. Numbered Title"},
+            {"id": "", "title": "# Hash Title"},
+            # The plan's paper under its versioned id, or by title alone.
+            {"id": "arXiv:2305.18290v2", "title": "Another DPO name"},
+            {"id": "10.1000/venue", "title": "Proximal Policy Optimization Algorithms"},
+            {"id": "2401.00009", "title": "  "},
+        ]
+        text = survey_method(SurveyPlan.model_validate(data), "English")
+        assert text.endswith(
+            "- Notable candidates the selection left out:\n"
+            '  - "1. Numbered Title"\n  - "# Hash Title"\n'
+        )
+        data["excluded"] = [
+            {"id": f"2401.{i:05d}", "title": f"P{i}"} for i in range(11)
+        ]
+        assert survey_method(SurveyPlan.model_validate(data), "English").endswith(
+            "  - and 1 more\n"
+        )
 
     @pytest.mark.parametrize(
         ("since", "until", "korean", "english"),
@@ -655,7 +678,7 @@ class TestValidator:
         )
         assert f"- Years: {english}\n- Papers: 3; lineages: 2\n" in text
         assert text.endswith(
-            "- Notable candidates the selection left out:\n  - Left Paper\n"
+            '- Notable candidates the selection left out:\n  - "Left Paper"\n'
         )
 
     def test_a_paper_linked_only_by_the_timeline_is_flagged(self) -> None:
