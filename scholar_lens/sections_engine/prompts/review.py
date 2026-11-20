@@ -826,7 +826,19 @@ class PaperTextCheckPrompt(BasePrompt):
       table, scope stated wider than the paper's experiments, and a hedge the
       paper uses ("can", "may", "suggests") dropped;
     - a cause or mechanism the paper does not state, presented as the
-      paper's.
+      paper's (a gain "because" something improved, a behaviour "rare"
+      because of a rule), including a cause stated plainly where the paper
+      gives none;
+    - attributions: who proposed, said or showed something and where (the
+      authors, a cited work, an earlier part of the {text_name}). An idea
+      credited to other sources than the paper credits, or to an example
+      the paper does not give, is wrong;
+    - the writer's judgment written as fact: a critique, limitation, an
+      inconsistency in the paper or something "not verified", with no word
+      marking it as the writer's view, is unsupported unless the paper says
+      it;
+    - numbers mapped to items the paper does not name for them (a list of
+      unnamed margins given per task);
     - figure readings: text inside "(Figure analysis, approximate: …)" in
       paper_text, and passages marked "figure reading", are a vision model's
       reading of a figure, not the paper's words: a claim or value that only
