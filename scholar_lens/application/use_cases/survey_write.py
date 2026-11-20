@@ -65,6 +65,7 @@ from scholar_lens.domain.survey.post import (
     plan_link_sources,
     reference_list,
     render_citations,
+    survey_method,
     validate_plan,
 )
 from scholar_lens.domain.survey.references import reference_excerpts
@@ -391,6 +392,7 @@ async def run_survey_write(
     document = (
         f"{front_matter}{body}\n\n{reference_list(survey.plan.papers)}"
         + further_reading(survey.reading, writer.language)
+        + survey_method(survey.plan, writer.language)
     )
     work_dir = papers_dir / slug
     await asyncio.to_thread(context.files.make_dir, str(work_dir))

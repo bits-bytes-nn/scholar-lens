@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import re
 from collections.abc import Iterable, Mapping, Sequence
+from datetime import UTC
 from typing import Any
 
 from pydantic import ValidationError
@@ -24,13 +25,16 @@ from scholar_lens.domain.markdown.links import (
 )
 from scholar_lens.domain.markdown.math import segments
 from scholar_lens.domain.survey.plan import (
+    MAX_EXCLUDED,
     PlanPaper,
     SourceRecord,
     SurveyInputError,
     SurveyPlan,
     merge_records,
+    paper_id_of,
     parse_paper_id,
 )
+from scholar_lens.domain.titles import titles_match
 from scholar_lens.domain.validation import FURTHER_READING_HEADINGS, REFERENCES_HEADING
 from scholar_lens.domain.venues import reference_venue
 
@@ -301,3 +305,81 @@ def further_reading(links: Sequence[tuple[str, str]], language: str) -> str:
         return ""
     heading = FURTHER_READING_HEADINGS.get(language, FURTHER_READING_HEADINGS[""])
     return f"\n{heading}\n{link_list(links)}\n"
+
+
+METHOD_HEADINGS = {"Korean": "### 조사 방법", "": "### How the papers were chosen"}
+
+
+def _period(plan: SurveyPlan, korean: bool) -> str:
+    since, until = plan.time_range.since, plan.time_range.until
+    if since and since == until:
+        return f"{since}년" if korean else str(since)
+    if korean:
+        if since and until:
+            return f"{since}~{until}년"
+        if since:
+            return f"{since}년 이후"
+        return f"{until}년까지" if until else "제한 없음"
+    if since and until:
+        return f"{since}-{until}"
+    if since:
+        return f"{since} onwards"
+    return f"up to {until}" if until else "any year"
+
+
+def survey_method(plan: SurveyPlan, language: str) -> str:
+    """``### 조사 방법`` (Korean) or "### How the papers were chosen": the
+    plan's date, the year range, how many papers in how many lineages, and
+    the notable candidates the selection left out (one quoted title per
+    line; one the plan's papers hold again, an untitled one and a repeat are
+    not listed), all from the plan
+    (no model call); for after the reference lists. The selection lists at
+    most ``MAX_EXCLUDED`` of the candidates it passed over, so the list is
+    no count of every candidate left out; their reasons stay in the plan
+    (they are in English)."""
+    korean = language == "Korean"
+    day = plan.created_at.astimezone(UTC).date()
+    papers, lineages = len(plan.papers), len(plan.lineages)
+    # A hand-edited entry may name the plan's paper by another id form, or
+    # name no paper id at all (then only a near-identical title says it is
+    # the plan's paper); an entry without a title or seen before is skipped.
+    chosen = {p.id for p in plan.papers}
+    excluded, seen = [], set()
+    for e in plan.excluded:
+        pid = paper_id_of(e.id)
+        key = pid or e.title.strip().lower()
+        if not e.title.strip() or key in seen:
+            continue
+        seen.add(key)
+        if pid in chosen or (
+            pid is None and any(titles_match(e.title, p.title) for p in plan.papers)
+        ):
+            continue
+        excluded.append(e)
+    if korean:
+        lines = [
+            f"- 계획 작성일: {day.year}년 {day.month}월 {day.day}일",
+            f"- 대상 기간: {_period(plan, korean)}",
+            f"- 다룬 논문: {papers}편(계보 {lineages}개)",
+        ]
+        lead = "- 선정 단계에서 제외한 주요 후보:"
+    else:
+        lines = [
+            f"- Plan date: {day.isoformat()}",
+            f"- Years: {_period(plan, korean)}",
+            f"- Papers: {papers}; lineages: {lineages}",
+        ]
+        lead = "- Notable candidates the selection left out:"
+    if excluded:
+        lines.append(lead)
+        lines += [
+            # In curly quotes: a title is never read as markup at the item's
+            # start ("1. ", "# "), nor as prose by the blog's style lint, and
+            # kramdown leaves the quotes as they are.
+            f"  - “{_plain(e.title)}”" + (f" ({e.year})" if e.year else "")
+            for e in excluded[:MAX_EXCLUDED]
+        ]
+        if (rest := len(excluded) - MAX_EXCLUDED) > 0:
+            lines.append(f"  - 외 {rest}편" if korean else f"  - and {rest} more")
+    heading = METHOD_HEADINGS.get(language, METHOD_HEADINGS[""])
+    return f"\n{heading}\n" + "\n".join(lines) + "\n"

@@ -56,6 +56,7 @@ from scholar_lens.domain.survey.post import (
     plan_link_sources,
     reference_list,
     render_citations,
+    survey_method,
 )
 from scholar_lens.domain.validation import validate_post
 from tests.integration.fakes import FakeLLMFactory
@@ -605,6 +606,86 @@ class TestValidator:
             "\n### Further reading\n"
         )
 
+    def test_the_method_block_reports_the_plan_and_passes_the_validator(
+        self,
+    ) -> None:
+        data = plan_dict()
+        data["time_range"] = {"since": 2017, "until": None}
+        data["sources"] = ["DataCite: 3 requests (0 failed)"]
+        data["excluded"] = [
+            {"id": f"2401.{i:05d}", "title": f"Paper_{i} *x*", "year": 2024}
+            for i in range(12)
+        ] + [
+            # Moved into the plan's papers by hand: no longer left out.
+            {"id": "2305.18290", "title": "Direct Preference Optimization"}
+        ]
+        method = survey_method(SurveyPlan.model_validate(data), "Korean")
+        assert method.startswith(
+            "\n### 조사 방법\n- 계획 작성일: 2026년 10월 1일\n"
+            "- 대상 기간: 2017년 이후\n- 다룬 논문: 3편(계보 2개)\n"
+            "- 선정 단계에서 제외한 주요 후보:\n  - “Paper&#95;0 &#42;x&#42;” (2024)\n"
+        )
+        # No index is claimed; the cap counts the rest; a paper is not both.
+        assert "DataCite" not in method
+        assert method.rstrip().endswith("  - 외 2편")
+        assert "Direct Preference Optimization" not in method
+        body = GOOD_BODY + further_reading([("A post", ARTICLE)], "Korean") + method
+        assert [r for r in rules(survey_post(body)) if r.startswith("error")] == []
+
+    def test_hand_edited_exclusions_never_stop_the_post(self) -> None:
+        data = plan_dict()
+        data["excluded"] = [
+            # Not a paper id (an OpenAlex work, nothing): listed, no error.
+            {"id": "W2741809807", "title": "1. Numbered Title"},
+            {"id": "", "title": "# Hash Title"},
+            # The plan's paper under its versioned id, or by title alone.
+            {"id": "arXiv:2305.18290v2", "title": "Another DPO name"},
+            {"id": "openalex:W1", "title": "Proximal Policy Optimization Algorithms"},
+            # A paper id the plan lacks is listed even under a plan title.
+            {"id": "10.1000/venue", "title": "Direct Preference Optimization"},
+            {"id": "2401.00009", "title": "  "},
+            # A repeat is listed once.
+            {"id": "W2741809807", "title": "1. Numbered Title"},
+        ]
+        text = survey_method(SurveyPlan.model_validate(data), "English")
+        assert text.endswith(
+            "- Notable candidates the selection left out:\n"
+            "  - “1. Numbered Title”\n  - “# Hash Title”\n"
+            "  - “Direct Preference Optimization”\n"
+        )
+        data["excluded"] = [
+            {"id": f"2401.{i:05d}", "title": f"P{i}"} for i in range(11)
+        ]
+        assert survey_method(SurveyPlan.model_validate(data), "English").endswith(
+            "  - and 1 more\n"
+        )
+
+    @pytest.mark.parametrize(
+        ("since", "until", "korean", "english"),
+        [
+            (None, None, "제한 없음", "any year"),
+            (2020, 2024, "2020~2024년", "2020-2024"),
+            (None, 2023, "2023년까지", "up to 2023"),
+            (2023, 2023, "2023년", "2023"),
+        ],
+    )
+    def test_the_method_block_in_english_and_its_year_ranges(
+        self, since: int | None, until: int | None, korean: str, english: str
+    ) -> None:
+        data = plan_dict()
+        data["time_range"] = {"since": since, "until": until}
+        data["excluded"] = [{"id": "2401.00001", "title": "Left Paper"}]
+        built = SurveyPlan.model_validate(data)
+        assert f"- 대상 기간: {korean}\n" in survey_method(built, "Korean")
+        text = survey_method(built, "English")
+        assert text.startswith(
+            "\n### How the papers were chosen\n- Plan date: 2026-10-01"
+        )
+        assert f"- Years: {english}\n- Papers: 3; lineages: 2\n" in text
+        assert text.endswith(
+            "- Notable candidates the selection left out:\n  - “Left Paper”\n"
+        )
+
     def test_a_paper_linked_only_by_the_timeline_is_flagged(self) -> None:
         # The code-built timeline links every plan paper; the prose skipping
         # one is flagged for the reviewer without blocking the post.
@@ -936,7 +1017,10 @@ class TestStage:
         assert LOSS in post and "use_math: true" in post
         # Dated by the plan, so a rerun replaces the same post.
         assert "\ndate: 2026-10-01 09:30:00\n" in post
-        assert post.rstrip().endswith("(https://arxiv.org/abs/2305.18290). arXiv.")
+        # The reference list, then the plan's search method.
+        refs, method = post.split("\n\n### 조사 방법\n")
+        assert refs.endswith("(https://arxiv.org/abs/2305.18290). arXiv.")
+        assert method.startswith("- 계획 작성일: 2026년 10월 1일\n")
         # The engine got the plan, the guideline and the survey's settings.
         engine = stage["engine"]
         [call] = engine.calls
@@ -1043,8 +1127,9 @@ class TestReferenceArticles:
         Path(stage["request"].plan).write_text(json.dumps(data))
         outcome = run_stage(stage)
         post = outcome.markdown_path.read_text()
-        assert post.endswith(
-            "arXiv.\n\n### 참고 자료\n* [Lilian Weng: RLHF]" f"({ARTICLE})\n"
+        assert (
+            "arXiv.\n\n### 참고 자료\n* [Lilian Weng: RLHF]"
+            f"({ARTICLE})\n\n### 조사 방법\n" in post
         )
         errors = [
             v
