@@ -156,7 +156,8 @@ class TokenBudgetGuard:
     run's :class:`TokenUsageTracker` in their callback list and abort once
     cumulative spend passes ``max_total_tokens``; the survey plan's
     ``SurveyCalls`` aborts only past the hard ceiling below. Subclasses call :meth:`_init_token_budget` from
-    ``__init__`` and :meth:`_enforce_token_budget` before each model call.
+    ``__init__``; the paper writers call :meth:`_enforce_token_budget` before
+    each model call.
     The survey plan and the review's late claim checks also use the soft
     limit (:meth:`_over_soft_token_budget`: past it they skip the optional
     checks); the survey plan aborts past the hard ceiling

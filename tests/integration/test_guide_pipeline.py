@@ -81,12 +81,12 @@ LONG = (
         (
             LONG,
             "x" * 71,
-            "vLLM: Installation, Offline and Online Serving, PagedAttention and",
+            "vLLM: Installation, Offline and Online Serving, PagedAttention",
         ),
         (
             LONG,
             "",
-            "vLLM: Installation, Offline and Online Serving, PagedAttention and",
+            "vLLM: Installation, Offline and Online Serving, PagedAttention",
         ),
     ],
 )

@@ -731,10 +731,17 @@ def test_a_thin_seo_title_falls_back_to_the_title_cut_at_a_word() -> None:
     from scholar_lens.domain.post_format import shorten_title
 
     title = "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning"
-    # The bare name "GEPA" says too little: the claim after the colon, whole.
+    # The bare name "GEPA" says too little: the title cut at a word, name first.
     assert shorten_title(title, 70) == (
-        "Reflective Prompt Evolution Can Outperform Reinforcement Learning"
+        "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement"
     )
+    # A cut never ends on a function word.
+    assert (
+        shorten_title("X: " + "Reasoning via " * 10, 30) == "X: Reasoning via Reasoning"
+    )
+    # A head of exactly a third of the limit is used; one shorter is not.
+    assert shorten_title("H" * 23 + ": " + "word " * 20, 70) == "H" * 23
+    assert shorten_title("H" * 22 + ": " + "word " * 20, 70) != "H" * 22
     # A substantial name before the colon is still used.
     long_head = "Direct Preference Optimization Explained: " + "x " * 40
     assert shorten_title(long_head, 70) == "Direct Preference Optimization Explained"
@@ -780,9 +787,12 @@ def test_a_thin_model_seo_title_is_replaced_but_a_short_korean_one_kept() -> Non
             spec=SPEC,
         ).seo_title
 
-    assert seo("GEPA") == (
-        "Reflective Prompt Evolution Can Outperform Reinforcement Learning"
+    assert (
+        seo("GEPA") == "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement"
     )
+    # The model's candidate needs 12 characters.
+    assert seo("A" * 12) == "A" * 12
+    assert seo("A" * 11) != "A" * 11
     assert (
         seo("반성적 프롬프트 진화로 강화학습 넘기")
         == "반성적 프롬프트 진화로 강화학습 넘기"

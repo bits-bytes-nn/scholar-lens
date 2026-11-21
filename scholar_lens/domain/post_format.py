@@ -187,12 +187,22 @@ def resolve_topic(raw: str, spec: PostConventions) -> str | None:
     return None
 
 
+# Words a cut title should not end on ("… Reasoning via").
+_TRAILING_FUNCTION_WORDS = frozenset(
+    "a an and as at by for from in into of on or the to via vs with".split()
+)
+
+
 def cut_title(title: str, limit: int) -> str:
-    """``title`` (whitespace collapsed) cut to ``limit`` at a word boundary."""
-    title = " ".join(title.split())
+    """``title`` (whitespace collapsed) cut to ``limit`` at a word boundary,
+    without a trailing function word or punctuation."""
+    title = " ".join(title.split()).strip(" :")
     if len(title) <= limit:
         return title
-    cut = title[: limit + 1].rsplit(" ", 1)[0].rstrip(" :,-–—")
+    words = title[: limit + 1].rsplit(" ", 1)[0].rstrip(" :,-–—").split(" ")
+    while len(words) > 1 and words[-1].lower() in _TRAILING_FUNCTION_WORDS:
+        words.pop()
+    cut = " ".join(words).rstrip(" :,-–—")
     return cut or title[:limit]
 
 
@@ -202,24 +212,22 @@ SEO_TITLE_MIN_CHARS = 12
 
 
 def seo_title_too_thin(seo_title: str) -> bool:
-    """Whether a ``seo_title`` is too short to describe the post."""
+    """Whether a model's ``seo_title`` is too short to describe the post."""
     return len(seo_title.strip()) < SEO_TITLE_MIN_CHARS
 
 
 def shorten_title(title: str, limit: int) -> str | None:
     """A paper's ``seo_title`` for a title over ``limit``: the part before
-    the colon (the paper's name) when it is usable and not too thin
-    (:func:`seo_title_too_thin`), else the part after the colon when it fits
-    whole, else the title cut at a word boundary (:func:`cut_title`)."""
+    the colon when it is at least a third of ``limit`` (a name with its
+    claim, not a bare "GEPA"), else the title cut at a word boundary
+    (:func:`cut_title`), which keeps the name first as the extraction prompt
+    asks."""
     title = " ".join(title.split())
     if len(title) <= limit:
         return None
-    head, _, tail = (part.strip() for part in title.partition(":"))
-    if tail and len(head) <= limit and not seo_title_too_thin(head):
+    head, colon, _ = (part.strip() for part in title.partition(":"))
+    if colon and limit // 3 <= len(head) <= limit:
         return head
-    if tail and len(tail) <= limit and not seo_title_too_thin(tail):
-        # A bare name before the colon: the claim after it, whole.
-        return tail
     return cut_title(title, limit)
 
 

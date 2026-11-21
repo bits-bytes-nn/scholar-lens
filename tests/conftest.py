@@ -90,7 +90,14 @@ def _block_network(
             "Mock it with `responses` or `moto`."
         )
 
+    real_connect_ex = socket.socket.connect_ex
+
     def guarded_connect_ex(self, address):  # type: ignore[no-untyped-def]
+        host = address[0] if isinstance(address, tuple) else address
+        port = address[1] if isinstance(address, tuple) and len(address) > 1 else None
+        if host in ("127.0.0.1", "::1", "localhost") and port != FENCE[1]:
+            # A local port probe gets its errno, as the real call returns it.
+            return real_connect_ex(self, address)
         guarded_connect(self, address)
         return 0
 

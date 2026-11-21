@@ -61,3 +61,12 @@ def test_clip_cuts_notes_at_a_sentence_or_word_boundary() -> None:
     assert len(out) <= 100 and out.endswith("다. …")
     words = "word " * 80
     assert clip(words, 50).endswith("word…") and len(clip(words, 50)) <= 50
+
+
+def test_clip_never_exceeds_its_limit_at_a_late_sentence_end() -> None:
+    from scholar_lens.domain.text import clip
+
+    # A sentence end right before the limit must not push the result past it.
+    out = clip("x" * 98 + ". yyyy", 100)
+    assert len(out) <= 100
+    assert len(clip("y" * 299 + ". zzzz")) <= 300
