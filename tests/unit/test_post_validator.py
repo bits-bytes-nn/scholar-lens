@@ -797,3 +797,29 @@ def test_a_thin_model_seo_title_is_replaced_but_a_short_korean_one_kept() -> Non
         seo("반성적 프롬프트 진화로 강화학습 넘기")
         == "반성적 프롬프트 진화로 강화학습 넘기"
     )
+
+
+def test_cut_titles_stay_within_the_limit_and_keep_acronyms() -> None:
+    from scholar_lens.domain.post_format import cut_title
+
+    assert cut_title("A" * 80, 70) == "A" * 70  # one long word: a hard cut
+    assert cut_title(": " * 40, 70)  # never empty
+    # A trailing acronym or label letter is no function word...
+    assert cut_title("Planning Models " * 4 + "in OR and More Words", 70).endswith(
+        " OR"
+    )
+    assert cut_title(
+        "Ranking Approaches " * 3 + "With Model A vs. Others Today", 70
+    ).endswith("Model A")
+    # ... but "vs." and "&" are.
+    assert not cut_title(
+        "Ranking Approaches " * 3 + "Long Name vs. Others", 70
+    ).endswith("vs.")
+    assert cut_title("Taskss " * 9 + "Tas & More Words Here", 70).endswith(" Tas")
+
+
+def test_a_colon_inside_a_word_is_no_subtitle() -> None:
+    from scholar_lens.domain.post_format import shorten_title
+
+    title = "Deep Dive Into Amazon Bedrock Agents and Guardrails at AWS re:Invent 2026 Las Vegas"
+    assert not shorten_title(title, 70).endswith(" re")  # type: ignore[union-attr]
