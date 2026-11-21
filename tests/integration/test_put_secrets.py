@@ -37,7 +37,7 @@ def test_named_parameters_limit_what_is_written(
     monkeypatch.setenv("BRAVE_API_KEY", "brave")
     session = boto3.Session(region_name="us-east-1")
     with (
-        mock.patch.object(Config, "load", return_value=Config()),
+        mock.patch.object(put_secrets, "deploy_config", return_value=Config()),
         mock.patch.object(put_secrets, "deploy_session", return_value=session),
     ):
         put_secrets.main(["github-token"])
@@ -58,7 +58,7 @@ def test_named_parameter_that_is_unset_is_a_usage_error(
 ) -> None:
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
     with (
-        mock.patch.object(Config, "load", return_value=Config()),
+        mock.patch.object(put_secrets, "deploy_config", return_value=Config()),
         pytest.raises(SystemExit) as exit_info,
     ):
         put_secrets.main(["github-token"])

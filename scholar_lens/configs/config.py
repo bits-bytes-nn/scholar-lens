@@ -194,7 +194,7 @@ class Explanation(_Section):
     )
     # The writing engine: "sections" (plan, sections scored and revised,
     # edit, finalize) or "evidence" (reading agents record checked evidence
-    # that the outline gives to sections; docs/redesign.md). The evidence
+    # that the outline gives to sections; docs/design.md 4.4–4.5). The evidence
     # engine reads with reader_model_id, plans with the planning model,
     # writes with the synthesis model and checks with the evaluation model.
     engine: Literal["sections", "evidence"] = Field(default="sections")
@@ -246,7 +246,7 @@ class Explanation(_Section):
 
 class Summary(_Section):
     summary_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_OPUS)
-    # "sections" (one summary call) or "evidence" (docs/redesign.md).
+    # "sections" (one summary call) or "evidence" (docs/design.md 4.4–4.5).
     engine: Literal["sections", "evidence"] = Field(default="sections")
     reader_model_id: LanguageModelId = Field(default=LanguageModelId.CLAUDE_V5_5_SONNET)
     # Evidence engine: the summary's prose characters (Korean; five minutes).
@@ -294,7 +294,7 @@ DEMOTED_DOMAINS: dict[str, tuple[str, ...]] = {
 
 
 class TechGuide(_Section):
-    # The guide is written by the evidence engine (docs/redesign.md): the
+    # The guide is written by the evidence engine (docs/design.md 4.4–4.5): the
     # relevance model gates the sources, plans the searches and files the
     # guide; reading agents use the synopsis model, the outline and sections
     # the writing model and the checks the evaluation model.
@@ -423,7 +423,7 @@ class Survey(_Section):
     # is skipped; past 1.5x the run aborts. A plan uses ~50k tokens.
     max_total_tokens: int | None = Field(default=300_000, gt=0)
 
-    # Write stage (`survey write`, the evidence engine; docs/redesign.md):
+    # Write stage (`survey write`, the evidence engine; docs/design.md 4.4–4.5):
     # reading agents use card_model_id, the outline (and the finalization
     # call) outline_model_id, the sections writing_model_id and the checks
     # evaluation_model_id.

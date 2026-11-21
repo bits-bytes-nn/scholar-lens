@@ -1,5 +1,5 @@
 """Deterministic checks and edits of an evidence-cited section draft
-(docs/redesign.md, 3.3), shared by every artifact the evidence engine writes.
+(docs/design.md, 4.5), shared by every artifact the evidence engine writes.
 
 A draft is Markdown whose sentences cite their evidence as ``[[E12]]``; the
 checks quote the sentence they object to, so their messages can go back to

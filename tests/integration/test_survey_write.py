@@ -974,6 +974,9 @@ def stage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
         publisher_factory=publisher,
     )
     context.conventions, context.blog_posts, context.blog_tags = spec, [], {}
+    # Publishing re-reads the blog's conventions; the real BlogSource would
+    # call GitHub.
+    context.blog = _UnchangedBlog(spec)  # type: ignore[assignment]
     return {
         "writer": writer,
         "researcher": researcher,
@@ -1446,3 +1449,13 @@ def test_a_figure_that_cannot_be_downloaded_is_gone_before_reading() -> None:
         "https://arxiv.org/html/x/a.png"
     ]
     assert "b.png" in servable.notes()[0]
+
+
+class _UnchangedBlog:
+    """A blog whose conventions are the ones the run started with."""
+
+    def __init__(self, conventions: object) -> None:
+        self._conventions = conventions
+
+    def conventions(self, *, fallback: bool = True) -> object:
+        return self._conventions

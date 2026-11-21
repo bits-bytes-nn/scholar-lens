@@ -1,4 +1,4 @@
-"""The evidence-based survey writer (docs/redesign.md, 3.2): the survey's
+"""The evidence-based survey writer (docs/design.md, 4.3 and 4.5): the survey's
 spec and hooks bound to the post engine.
 
 Read (a bounded agent per paper, records checked against the paper) →

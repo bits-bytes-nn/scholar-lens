@@ -23,7 +23,7 @@ Inputs:
 
 Score each criterion A–F of `eval/ARTIFACT_RUBRIC.md` from 0 to 10, using its anchors. Every deduction quotes the post with a line number.
 
-Also check the writing principles of `docs/redesign.md` §5.1 and record each as met, partly met or not met, with evidence:
+Also check the writing principles of `docs/writing-principles.md` and record each as met, partly met or not met, with evidence:
 - claim headings;
 - a running example;
 - mechanism → design choice and reason → formula or code → worked example;

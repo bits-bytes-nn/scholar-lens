@@ -11,7 +11,8 @@ permissions:
 
 concurrency:
   group: workflow-validation-${{ github.ref }}
-  cancel-in-progress: true
+  # A superseded PR run is cancelled; every push to main keeps its result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   actionlint:

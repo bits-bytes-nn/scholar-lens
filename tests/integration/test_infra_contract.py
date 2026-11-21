@@ -354,3 +354,55 @@ def test_the_cost_alarm_follows_the_run_ceilings() -> None:
     config = Config()
     config.tech_guide.max_cost_usd = 90.0
     assert cost_alarm_usd(config) == 180.0
+
+
+class TestSourceRevision:
+    @staticmethod
+    def _repo(tmp_path: Path) -> Path:
+        import subprocess
+
+        def git(*args: str) -> None:
+            subprocess.run(
+                ["git", *args], cwd=tmp_path, check=True, capture_output=True
+            )
+
+        git("init", "-q", "-b", "main")
+        git("config", "user.email", "t@example.com")
+        git("config", "user.name", "t")
+        (tmp_path / "scholar_lens").mkdir()
+        (tmp_path / "scholar_lens" / "a.py").write_text("x = 1\n")
+        (tmp_path / "notes.txt").write_text("not shipped\n")
+        git("add", "scholar_lens")
+        git("commit", "-q", "-m", "init")
+        return tmp_path
+
+    def test_a_clean_checkout_gives_its_commit(self, tmp_path: Path) -> None:
+        from scripts.deploy_infra import source_revision
+
+        repo = self._repo(tmp_path)
+        # An untracked file outside the image sources does not count.
+        revision = source_revision(repo, "dev")
+        assert len(revision) == 12 and "+" not in revision
+
+    @pytest.mark.parametrize("change", ["edit", "new_file"])
+    def test_uncommitted_image_sources_are_refused(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+    ) -> None:
+        from scripts.deploy_infra import ALLOW_DIRTY_ENV, source_revision
+
+        repo = self._repo(tmp_path)
+        target = repo / "scholar_lens" / ("a.py" if change == "edit" else "b.py")
+        target.write_text("x = 2\n")
+        monkeypatch.delenv(ALLOW_DIRTY_ENV, raising=False)
+        with pytest.raises(SystemExit, match="Uncommitted changes"):
+            source_revision(repo, "dev")
+        monkeypatch.setenv(ALLOW_DIRTY_ENV, "1")
+        assert source_revision(repo, "dev").endswith("+dirty")
+        # Never for prod, even when allowed.
+        with pytest.raises(SystemExit):
+            source_revision(repo, "prod")
+
+    def test_the_image_carries_the_revision(self, template: dict[str, Any]) -> None:
+        dockerfile = (Path(__file__).parents[2] / "Dockerfile").read_text()
+        assert "ARG SOURCE_REVISION" in dockerfile
+        assert "SCHOLAR_LENS_REVISION=${SOURCE_REVISION}" in dockerfile

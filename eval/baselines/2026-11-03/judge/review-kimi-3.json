@@ -1,6 +1,6 @@
 {
   "item": "review-kimi",
-  "post": "/Users/youngmki/Projects/scholar-lens/eval/baselines/2026-11-03/out/review-kimi.md",
+  "post": "eval/baselines/2026-11-03/out/review-kimi.md",
   "source": "arXiv 2507.20534 (HTML full text, incl. appendices and Tables 3, 4, 6)",
   "judge_run": 3,
   "sampling": "prose paragraphs (headings, images, math, tables, code excluded), paragraph 3 then every third paragraph",

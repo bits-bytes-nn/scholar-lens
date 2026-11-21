@@ -16,6 +16,10 @@ COPY pyproject.toml poetry.lock README.md ./
 RUN /opt/venv-poetry/bin/poetry install --only main --no-root --no-interaction
 
 FROM ${PYTHON_IMAGE}
+# The commit the deploy built this image from (scripts/deploy_infra.py): job
+# results and logs carry it.
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
 # git: repository cloning for code-grounded reviews. tzdata: post timestamps.
 # fonts-dejavu-core: text in SVG figures rasterized for the blog.
 RUN apt-get update \
@@ -26,6 +30,7 @@ ENV TZ=Asia/Seoul \
     NLTK_DATA=/opt/nltk_data \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
+    SCHOLAR_LENS_REVISION=${SOURCE_REVISION} \
     VIRTUAL_ENV=/opt/venv \
     PATH=/opt/venv/bin:$PATH
 COPY --from=builder /opt/venv /opt/venv

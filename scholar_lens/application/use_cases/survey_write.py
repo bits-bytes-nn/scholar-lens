@@ -186,7 +186,7 @@ async def write_survey_with_evidence(
     title_max_length: int,
 ) -> Survey:
     """The evidence engine: reading agents, an evidence-assigning outline,
-    verified sections (docs/redesign.md)."""
+    verified sections (docs/design.md, 4.5)."""
     writing = tools.writing
     model = tools.models.language_model(writing.roles, tracker, writing.max_cost_usd)
     records = await asyncio.to_thread(index.records, [p.id for p in plan.papers])

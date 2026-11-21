@@ -8,7 +8,8 @@ on:
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # A superseded PR run is cancelled; every push to main keeps its result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -40,16 +41,8 @@ jobs:
           key: venv-${{ runner.os }}-py${{ steps.setup-python.outputs.python-version }}-poetry${{ env.POETRY_VERSION }}-${{ hashFiles('poetry.lock') }}
       - name: Install dependencies (locked dev tools)
         run: poetry install --no-interaction --with dev
-      - name: Ruff (lint)
-        run: poetry run ruff check scholar_lens scripts tests eval
-      - name: Black (format check)
-        run: poetry run black --check scholar_lens scripts tests eval
-      - name: Mypy (type check)
-        run: poetry run mypy scholar_lens scripts
-      - name: Mypy strict (domain and application)
-        run: poetry run mypy --strict scholar_lens/domain scholar_lens/application
-      - name: Layer import contracts (import-linter)
-        run: poetry run lint-imports
+      - name: Ruff, black, mypy (strict for domain and application), import contracts
+        run: scripts/check.sh lint
 
   test:
     name: Test (py${{ matrix.python-version }})
@@ -79,14 +72,7 @@ jobs:
       - name: Install dependencies (with dev group)
         run: poetry install --no-interaction --with dev
       - name: Run pytest with coverage
-        run: >-
-          poetry run pytest tests/
-          -p no:cacheprovider
-          --cov=scholar_lens
-          --cov=scripts
-          --cov-report=term-missing
-          --cov-report=xml
-          --cov-fail-under=93
+        run: scripts/check.sh test
       - name: Upload coverage artifact
         if: matrix.python-version == '3.12'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

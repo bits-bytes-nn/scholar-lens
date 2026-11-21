@@ -14,6 +14,8 @@ class EnvVars(str, Enum):
     BRAVE_API_KEY = "BRAVE_API_KEY"
     # The stack's code interpreter (set on the Batch job definition).
     CODE_INTERPRETER_ID = "SCHOLAR_LENS_CODE_INTERPRETER_ID"
+    # The commit the Batch image was built from (baked in by the deploy).
+    REVISION = "SCHOLAR_LENS_REVISION"
     # Optional: Crossref's "polite pool" (a contact address), an OpenAlex key
     # and a Semantic Scholar key, all for higher limits on reference lookups.
     CROSSREF_MAILTO = "CROSSREF_MAILTO"

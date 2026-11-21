@@ -1,4 +1,4 @@
-"""The evidence engine's shared core (docs/redesign.md, 3.2-3.3).
+"""The evidence engine's shared core (docs/design.md, 4.5).
 
 Whatever the artifact (a survey, a guide), a source is read by a bounded
 agent whose records are checked against the source before they enter the

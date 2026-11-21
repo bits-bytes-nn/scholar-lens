@@ -47,7 +47,7 @@ Spend words where the difficulty is, not evenly.
 
 # Number slips found in published paper posts (blog PRs #88, #89); writers
 # avoid them, checkers list them as must-fix. The TL;DR and the description
-# are also matched against the paper in code (post_validator.unsourced_numbers).
+# are also matched against the paper in code (validation.unsourced_numbers).
 NUMBER_RULES: str = """
 - Copy numbers verbatim with the model, variant (base or chat, pre-trained or
   fine-tuned, size), cell and setup (not an ablation's) they belong to.

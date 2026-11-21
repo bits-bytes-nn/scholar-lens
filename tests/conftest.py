@@ -9,17 +9,27 @@ from __future__ import annotations
 import logging
 import os
 import socket
+from collections.abc import Iterator
 from pathlib import Path
 
 import boto3
 import pytest
 
-# Ensure AWS SDK never picks up real credentials/region during tests.
-os.environ.setdefault("AWS_ACCESS_KEY_ID", "testing")
-os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "testing")
-os.environ.setdefault("AWS_SECURITY_TOKEN", "testing")
-os.environ.setdefault("AWS_SESSION_TOKEN", "testing")
-os.environ.setdefault("AWS_DEFAULT_REGION", "us-east-1")
+# The AWS SDK never sees the developer's credentials, profile or region:
+# fake keys win over anything exported, and no profile or config file is read.
+for _name in (
+    "AWS_PROFILE",
+    "AWS_DEFAULT_PROFILE",
+    "AWS_REGION",
+    "AWS_CONFIG_FILE",
+    "AWS_SHARED_CREDENTIALS_FILE",
+):
+    os.environ.pop(_name, None)
+os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+os.environ["AWS_SECURITY_TOKEN"] = "testing"
+os.environ["AWS_SESSION_TOKEN"] = "testing"
+os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
 # Test output must not land in the repository's logs/ directory. The app's file
 # handler opens its file lazily, so dropping it here leaves no file behind.
@@ -45,21 +55,27 @@ MINIMAL_PDF = (
 
 
 @pytest.fixture(autouse=True)
-def _block_network(monkeypatch: pytest.MonkeyPatch) -> None:
+def _block_network(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> Iterator[None]:
     """Fail loudly on any real outbound socket connection.
 
     Defense-in-depth: ``responses``/``moto`` patch at the HTTP/boto layer, so
     legitimately-mocked calls never reach here. Any UNmocked network attempt
     (a leak) raises instead of silently hitting the internet, keeping the suite
-    deterministic and free.
+    deterministic and free. The test also fails when the code under test
+    swallowed that error (a broad ``except`` turning it into a fallback),
+    unless it is marked ``blocked_network`` because it exercises that path.
     """
     real_connect = socket.socket.connect
+    blocked: list[object] = []
 
     def guarded_connect(self, address):  # type: ignore[no-untyped-def]
         host = address[0] if isinstance(address, tuple) else address
         # Allow loopback (moto's local endpoints / responses internals).
         if host in ("127.0.0.1", "::1", "localhost"):
             return real_connect(self, address)
+        blocked.append(address)
         raise RuntimeError(
             f"Blocked unexpected network connection to {address!r} during tests. "
             "Mock it with `responses` or `moto`."
@@ -85,6 +101,13 @@ def _block_network(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
     monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    yield
+    if blocked and request.node.get_closest_marker("blocked_network") is None:
+        pytest.fail(
+            f"The test tried the network ({blocked!r}) and the code under test "
+            "swallowed the guard's error: give it a fake, or mark the test "
+            "`blocked_network` when that failure is what it checks."
+        )
 
 
 @pytest.fixture

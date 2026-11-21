@@ -1,4 +1,4 @@
-# Frozen evaluation set (docs/redesign.md, section 7; ADR 0002). Inputs only;
+# Frozen evaluation set (ADR 0002, eval/JUDGE.md). Inputs only;
 # the human-fix checklist per item is human_fixes.yaml. Survey items run from
 # fixed plan files so paper selection does not vary between runs.
 #

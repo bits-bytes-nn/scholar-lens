@@ -43,7 +43,7 @@ Reviews and summaries can also use the sections engine (the default), which plan
 
 ![AWS architecture](./docs/diagrams/aws-architecture.png)
 
-[docs/design.md](./docs/design.md) (Korean) describes every stage and rule; [docs/engine.md](./docs/engine.md) the engine.
+[docs/design.md](./docs/design.md) (Korean) describes every stage and rule; [docs/engine.md](./docs/engine.md) the engine; [docs/writing-principles.md](./docs/writing-principles.md) the writing principles every post follows; [docs/usage.md](./docs/usage.md) every CLI option.
 
 ## Quick start
 
@@ -84,7 +84,7 @@ poetry run python -m scholar_lens publish papers/<dir>/<post>.rejected.md   # af
 
 [docs/usage.md](./docs/usage.md) lists every option, the survey plan format, resuming and republishing, exit codes and configuration keys.
 
-Agents (OpenClaw, Claude Code, Codex) call the same CLI through the skill in `~/Projects/agent-config/skills/scholar-lens/SKILL.md`.
+Agents (OpenClaw, Claude Code, Codex) can call the same CLI through a skill; the maintainer's is kept in a separate, private configuration repository.
 
 ## Configuration
 
@@ -106,19 +106,17 @@ cdk deploy --all --profile <profile_name>
 poetry run python scripts/put_secrets.py     # .env secrets to SSM
 ```
 
-Batch jobs use the `config.yaml` baked into the image at the last deploy; redeploy after editing it. See [docs/usage.md](./docs/usage.md#deploy-to-aws) for tracing, alarms and the stack.
+Batch jobs use the `config.yaml` baked into the image at the last deploy; redeploy after editing it. A deploy refuses uncommitted changes to what the image ships (code, lock, Dockerfile) and stamps the commit on the image; job results carry it as `revision`. See [docs/usage.md](./docs/usage.md#deploy-to-aws) for tracing, alarms and the stack.
 
 ## Development
 
 ```bash
-poetry run pytest tests/          # no AWS or network
-poetry run ruff check scholar_lens scripts tests
-poetry run black --check scholar_lens scripts tests
-poetry run mypy scholar_lens scripts
-poetry run lint-imports           # layer contracts
+scripts/check.sh                  # what CI runs: lint, types, layer contracts, tests (no AWS or network)
+scripts/check.sh lint             # ruff, black, mypy (strict for domain and application), lint-imports
+scripts/check.sh test -x          # pytest with the coverage gate; extra arguments go to pytest
 ```
 
-CI runs these plus coverage, pip-audit, a CDK synth check and a Docker build. Changes are listed in [CHANGELOG.md](./CHANGELOG.md).
+CI runs the same script, plus pip-audit, a CDK synth check and a Docker build. Changes are listed in [CHANGELOG.md](./CHANGELOG.md).
 
 ## License
 

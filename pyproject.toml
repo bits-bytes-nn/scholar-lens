@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "scholar-lens"
 version = "0.1.0"
-description = "Generates AI/ML paper reviews, summaries and technical guides"
+description = "Generates AI/ML paper reviews, summaries, technical guides and paper surveys"
 authors = ["Jonas Kim <youngmki@amazon.com>"]
 readme = "README.md"
 
@@ -60,7 +60,13 @@ asyncio_default_fixture_loop_scope = "function"
 addopts = "-ra --strict-markers"
 # A deprecation our own code triggers fails the suite; third-party ones
 # (SWIG types of PyMuPDF at import) do not.
-filterwarnings = ["error::DeprecationWarning:scholar_lens.*"]
+filterwarnings = [
+    "error::DeprecationWarning:scholar_lens.*",
+    "ignore:builtin type .* has no __module__ attribute:DeprecationWarning",
+]
+markers = [
+    "blocked_network: the test checks how the code handles a connection the network guard blocks",
+]
 
 [tool.coverage.run]
 source = ["scholar_lens"]
@@ -87,8 +93,6 @@ ignore = ["E501", "UP042", "UP046"]
 "**/__init__.py" = ["F401"]
 # Tests deliberately assert on broad exceptions for Pydantic/argparse validation.
 "tests/**" = ["B017"]
-# Prompt templates contain semantically-significant trailing whitespace.
-"**/prompts/prompts.py" = ["W291", "W293"]
 
 [tool.black]
 line-length = 88
@@ -101,7 +105,7 @@ no_implicit_optional = true
 warn_redundant_casts = true
 explicit_package_bases = true
 namespace_packages = true
-files = ["scholar_lens", "scripts"]
+files = ["scholar_lens", "scripts", "eval"]
 exclude = "(cdk\\.out|logs|papers)"
 # Suppress framework-typing noise so mypy can be a real (blocking) signal:
 # - call-overload: boto3-stubs Session.client() only matches literal service
@@ -247,6 +251,13 @@ forbidden_modules = [
     "langchain_aws",
     "langchain_text_splitters",
     "github",
+    "pymupdf",
+    "arxiv",
+    "bs4",
+    "nltk",
+    "PIL",
+    "resvg_py",
+    "tenacity",
 ]
 # The entrypoints and the composition root build adapters, which import them.
 allow_indirect_imports = true

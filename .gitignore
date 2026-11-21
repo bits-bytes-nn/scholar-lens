@@ -226,5 +226,8 @@ tokenizers/
 eval/baselines/*/out/
 eval/baselines/*/*.result.json
 
-# Generated posts of an evaluation run stay out of the repo (judge results are kept).
+# Generated posts and run manifests of an evaluation run stay out of the repo
+# (manifests name the deployment's bucket and local paths; judge results,
+# blind mappings and replays are kept).
 eval/runs/*/posts/
+eval/runs/*/*.result.json

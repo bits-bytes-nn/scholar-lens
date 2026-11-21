@@ -10,13 +10,10 @@
             "**/.DS_Store",
             "**/.ipynb_checkpoints",
             ".idea",
-            ".virtual_documents",
             "cdk*.json",
             "LICENSE",
             "README.md",
-            "requirements*.txt",
             "assets",
-            "ipynb",
             "logs",
             "papers"
         ]

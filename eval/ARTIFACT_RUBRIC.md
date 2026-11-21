@@ -1,7 +1,7 @@
 # Scholar-Lens Artifact-Quality Rubric
 
 Rubric for judging the **content quality of generated artifacts** — paper
-**reviews**, paper **summaries**, and **technical guides/blog posts** — as
+**reviews**, paper **summaries**, **technical guides** and **paper surveys** — as
 opposed to code quality. Used by an LLM-judge subagent.
 
 Every deduction MUST cite concrete evidence from the artifact (a quoted phrase

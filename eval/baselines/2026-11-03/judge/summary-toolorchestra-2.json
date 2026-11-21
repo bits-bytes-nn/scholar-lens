@@ -1,6 +1,6 @@
 {
   "item": "summary-toolorchestra",
-  "post": "/Users/youngmki/Projects/scholar-lens/eval/baselines/2026-11-03/out/summary-toolorchestra.md",
+  "post": "eval/baselines/2026-11-03/out/summary-toolorchestra.md",
   "source": "arXiv 2511.21689 (HTML, fetched 2026-11-06)",
   "sample": "Body blocks counted from L17 (TL;DR paragraph = 1); paragraphs 2,5,8,11,14,17,20,23,26,29 = L21, L27, L35, L43, L51, L59, L67, L85, L91, L99",
   "scores": {"A": 7, "B": 7, "C": 8, "D": 7, "E": 8, "F": 8, "G": 8, "U1": 9, "U2": 8, "X1": 6},

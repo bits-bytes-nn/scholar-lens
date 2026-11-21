@@ -1191,7 +1191,7 @@ def writing_issues(markdown: str) -> list[str]:
     written as a Korean sentence and single-``$`` math. Code and math are ignored; image alt text and callouts
     are fixed in post-processing instead. The blog's prose rules
     (:func:`style_hits`) are publish-blocking body errors
-    (:func:`post_validator.body_errors`), so they are not repeated here.
+    (:func:`~scholar_lens.domain.validation.body_errors`), so they are not repeated here.
     """
     # Link and image targets are copied verbatim (a file named "Figure1.png"
     # is not a reference the writer can reword).

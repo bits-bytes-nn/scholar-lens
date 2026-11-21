@@ -14,7 +14,8 @@ on:
 
 concurrency:
   group: post-conventions-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+  # A superseded PR run is cancelled; every push to main keeps its result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

@@ -1,7 +1,7 @@
 # 0002. 평가 절차: 가린 판정, 독립 세션, 고정 말뭉치, 생성 쌍
 
 - 상태: 채택
-- 관련: `docs/engine.md` 1장(평가), 7장, `docs/redesign.md` 7장(합격 기준), `eval/RESULTS.md`(결과)
+- 관련: `docs/engine.md` 1장(평가), 7장, `eval/JUDGE.md`(판정 절차), `docs/writing-principles.md`(판정이 확인하는 원칙), `eval/RESULTS.md`(결과)
 
 ## 배경
 

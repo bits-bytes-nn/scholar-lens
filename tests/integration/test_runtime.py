@@ -193,6 +193,26 @@ class TestRunJob:
         assert result.warnings == ["w"]
         assert finished == [result]
 
+    def test_the_result_carries_the_image_revision(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+    ) -> None:  # type: ignore[no-untyped-def]
+        from scholar_lens.domain.jobs import JobRequest
+
+        async def pipeline(context, request, tracker):  # type: ignore[no-untyped-def]
+            return runtime.PipelineOutcome(
+                title="LoRA", markdown_path=tmp_path / "p.md"
+            )
+
+        self._patch(monkeypatch, pipeline)
+        monkeypatch.setenv("SCHOLAR_LENS_REVISION", "abc123def456")
+        result = runtime.run_job(JobRequest(kind="review", source="2106.09685"))
+        assert result.revision == "abc123def456"
+        monkeypatch.delenv("SCHOLAR_LENS_REVISION")
+        assert (
+            runtime.run_job(JobRequest(kind="review", source="2106.09685")).revision
+            is None
+        )
+
     @pytest.mark.parametrize("fresh", [False, True])
     def test_the_run_context_carries_fresh(
         self, monkeypatch: pytest.MonkeyPatch, fresh: bool

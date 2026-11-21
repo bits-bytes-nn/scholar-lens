@@ -58,7 +58,7 @@ citations:
 
 explanation:
   # Writing engine: sections (plan, scored sections, edit, finalize) or
-  # evidence (reading agents record checked evidence; docs/redesign.md).
+  # evidence (reading agents record checked evidence; docs/design.md 4.4–4.5).
   engine: sections
   reader_model_id: anthropic.claude-sonnet-5-5   # evidence engine: reading
   min_total_chars: 25000                         # evidence engine: prose length
@@ -82,7 +82,7 @@ explanation:
   # sections engine: hard total-token ceiling for one run (null = no limit); a LoRA-length
   # paper uses ~1.4M.
   max_total_tokens: 8000000
-  max_cost_usd: 40               # evidence engine: hard ceiling (USD, null = none)
+  max_cost_usd: 40               # both engines: hard ceiling (USD, null = none)
   chars_per_reader: 15000        # evidence engine: paper characters per reading agent
 
 summary:
@@ -95,11 +95,11 @@ summary:
   check_claims: true               # sections engine: check the summary against the paper
   thinking_effort: medium
   max_total_tokens: 1000000        # sections engine: hard ceiling (null = no limit)
-  max_cost_usd: 12                 # evidence engine: hard ceiling (USD)
+  max_cost_usd: 12                 # both engines: hard ceiling (USD, null = none)
   chars_per_reader: 40000          # evidence engine: paper characters per reading agent
 
 tech_guide:
-  # The evidence engine writes the guide (docs/redesign.md): the relevance
+  # The evidence engine writes the guide (docs/design.md 4.4–4.5): the relevance
   # model gates the sources, plans the searches and files the guide; reading
   # agents use synopsis_model_id, the outline and sections writing_model_id,
   # the checks evaluation_model_id.
