@@ -731,10 +731,10 @@ def test_a_thin_seo_title_falls_back_to_the_title_cut_at_a_word() -> None:
     from scholar_lens.domain.post_format import shorten_title
 
     title = "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning"
-    seo = shorten_title(title, 70)
-    # The bare name "GEPA" says too little in a search result.
-    assert seo is not None and seo.startswith("GEPA: Reflective Prompt Evolution")
-    assert len(seo) <= 70 and not seo.endswith(" ")
+    # The bare name "GEPA" says too little: the claim after the colon, whole.
+    assert shorten_title(title, 70) == (
+        "Reflective Prompt Evolution Can Outperform Reinforcement Learning"
+    )
     # A substantial name before the colon is still used.
     long_head = "Direct Preference Optimization Explained: " + "x " * 40
     assert shorten_title(long_head, 70) == "Direct Preference Optimization Explained"
@@ -761,4 +761,29 @@ def test_a_translated_post_needs_its_translation_id() -> None:
     assert "translation" in rules(make_post(front={"lang": lang}))
     assert "translation" not in rules(
         make_post(front={"lang": lang, "translation_id": "dsv3"})
+    )
+
+
+def test_a_thin_model_seo_title_is_replaced_but_a_short_korean_one_kept() -> None:
+    from scholar_lens.domain.post_format import build_post_meta
+
+    title = "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning"
+
+    def seo(proposed: str) -> str | None:
+        return build_post_meta(
+            title=title,
+            category_type="Paper Reviews",
+            proposed_topic="Language-Models",
+            specific_tags=[],
+            controlled_tags=[],
+            proposed_seo_title=proposed,
+            spec=SPEC,
+        ).seo_title
+
+    assert seo("GEPA") == (
+        "Reflective Prompt Evolution Can Outperform Reinforcement Learning"
+    )
+    assert (
+        seo("반성적 프롬프트 진화로 강화학습 넘기")
+        == "반성적 프롬프트 진화로 강화학습 넘기"
     )

@@ -978,3 +978,15 @@ def test_every_kind_has_a_label_and_a_raw_kind() -> None:
     for kind in get_args(ArtifactKind):
         assert kind in runtime._KIND_LABELS
         assert cli._raw_kind(f'{{"kind": "{kind}"}}') == kind
+
+
+def test_an_image_built_without_a_revision_reports_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The Dockerfile's default build argument ("unknown") is no revision.
+    from scholar_lens.entrypoints.revision import image_revision
+
+    monkeypatch.setenv("SCHOLAR_LENS_REVISION", "unknown")
+    assert image_revision() is None
+    monkeypatch.setenv("SCHOLAR_LENS_REVISION", " abc123def456 ")
+    assert image_revision() == "abc123def456"

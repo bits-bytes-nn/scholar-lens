@@ -31,8 +31,11 @@ os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 # below: git may use only local repositories, and HTTP from a child goes to a
 # closed local port instead of the network.
 os.environ["GIT_ALLOW_PROTOCOL"] = "file"
+# Port 9 ("discard") on loopback: the guard below treats a connection to it
+# as blocked network, so an in-process call that follows the proxy is caught.
+FENCE = ("127.0.0.1", 9)
 for _name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy"):
-    os.environ[_name] = "http://127.0.0.1:9"
+    os.environ[_name] = f"http://{FENCE[0]}:{FENCE[1]}"
 os.environ["NO_PROXY"] = os.environ["no_proxy"] = "127.0.0.1,localhost,::1"
 
 # Test output must not land in the repository's logs/ directory. The app's file
@@ -76,8 +79,10 @@ def _block_network(
 
     def guarded_connect(self, address):  # type: ignore[no-untyped-def]
         host = address[0] if isinstance(address, tuple) else address
-        # Allow loopback (moto's local endpoints / responses internals).
-        if host in ("127.0.0.1", "::1", "localhost"):
+        port = address[1] if isinstance(address, tuple) and len(address) > 1 else None
+        # Allow loopback (moto's local endpoints / responses internals), but
+        # not the proxy fence: that is a real call that followed the proxy.
+        if host in ("127.0.0.1", "::1", "localhost") and port != FENCE[1]:
             return real_connect(self, address)
         blocked.append(address)
         raise RuntimeError(
@@ -105,6 +110,8 @@ def _block_network(
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
     monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    # The guard's own test reads (and clears) what was blocked.
+    request.node.blocked_network = blocked
     yield
     if blocked and request.node.get_closest_marker("blocked_network") is None:
         pytest.fail(

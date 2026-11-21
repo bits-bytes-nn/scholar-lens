@@ -377,12 +377,17 @@ class TestSourceRevision:
 
         repo = self._repo(tmp_path / "work")
         remote = tmp_path / "origin.git"
-        subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+        env = self._git_env()
+        subprocess.run(
+            ["git", "init", "-q", "--bare", str(remote)], check=True, env=env
+        )
         for args in (
             ["remote", "add", "origin", str(remote)],
             ["push", "-q", "origin", "main"],
         ):
-            subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+            subprocess.run(
+                ["git", *args], cwd=repo, check=True, capture_output=True, env=env
+            )
         return repo
 
     @staticmethod
@@ -455,7 +460,12 @@ class TestSourceRevision:
 
         from scripts.deploy_infra import source_revision
 
-        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
+        subprocess.run(
+            ["git", "init", "-q", "-b", "main"],
+            cwd=tmp_path,
+            check=True,
+            env=self._git_env(),
+        )
         (tmp_path / "notes.txt").write_text("docs only\n")
         for args in (["add", "notes.txt"], ["commit", "-q", "-m", "docs"]):
             subprocess.run(

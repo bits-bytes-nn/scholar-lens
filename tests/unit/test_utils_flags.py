@@ -58,6 +58,6 @@ def test_clip_cuts_notes_at_a_sentence_or_word_boundary() -> None:
     assert clip("short  note") == "short note"
     long = "첫 문장은 충분히 깁니다. " * 20 + "끝"
     out = clip(long, 100)
-    assert len(out) <= 102 and out.endswith("다. …")
+    assert len(out) <= 100 and out.endswith("다. …")
     words = "word " * 80
     assert clip(words, 50).endswith("word…") and len(clip(words, 50)) <= 50

@@ -196,23 +196,30 @@ def cut_title(title: str, limit: int) -> str:
     return cut or title[:limit]
 
 
-def seo_title_too_thin(seo_title: str, limit: int) -> bool:
-    """Whether a ``seo_title`` says too little for a search result: shorter
-    than a third of ``limit`` (a bare paper name, "GEPA")."""
-    return len(seo_title.strip()) < limit // 3
+# A seo_title shorter than this says too little in a search result (a bare
+# paper name, "GEPA", "ReWOO"); a short Korean title is still longer.
+SEO_TITLE_MIN_CHARS = 12
+
+
+def seo_title_too_thin(seo_title: str) -> bool:
+    """Whether a ``seo_title`` is too short to describe the post."""
+    return len(seo_title.strip()) < SEO_TITLE_MIN_CHARS
 
 
 def shorten_title(title: str, limit: int) -> str | None:
     """A paper's ``seo_title`` for a title over ``limit``: the part before
-    the colon (the paper's name and its claim) when it is usable and not too
-    thin (:func:`seo_title_too_thin`), else the title cut at a word boundary
-    (:func:`cut_title`)."""
+    the colon (the paper's name) when it is usable and not too thin
+    (:func:`seo_title_too_thin`), else the part after the colon when it fits
+    whole, else the title cut at a word boundary (:func:`cut_title`)."""
     title = " ".join(title.split())
     if len(title) <= limit:
         return None
-    head = title.split(":", 1)[0].strip()
-    if ":" in title and len(head) <= limit and not seo_title_too_thin(head, limit):
+    head, _, tail = (part.strip() for part in title.partition(":"))
+    if tail and len(head) <= limit and not seo_title_too_thin(head):
         return head
+    if tail and len(tail) <= limit and not seo_title_too_thin(tail):
+        # A bare name before the colon: the claim after it, whole.
+        return tail
     return cut_title(title, limit)
 
 
@@ -245,7 +252,7 @@ def build_post_meta(
     seo = (proposed_seo_title or "").strip() or None
     if len(title) <= limit:
         seo = None
-    elif not seo or len(seo) > limit or seo_title_too_thin(seo, limit):
+    elif not seo or len(seo) > limit or seo_title_too_thin(seo):
         seo = shorten_title(title, limit)
     return PostMeta(
         topic=topic,

@@ -39,7 +39,8 @@ What the local credentials (`resources.profile_name`) need for the commands that
 | `status` | `batch:DescribeJobs`, `s3:GetObject` on the prefix (the result manifest and progress file) |
 | `cancel` | `batch:DescribeJobs`, `batch:TerminateJob` |
 | `costs` | `s3:ListBucket` and `s3:GetObject` on the prefix; with `--billed`, `ce:GetCostAndUsage` |
-| local runs | Bedrock invoke on the configured models and inference profiles; S3 read and write on the prefix when `s3_bucket_name` is set |
+| local runs | Bedrock invoke on the configured models and inference profiles, and `bedrock:ListInferenceProfiles` (a denied listing stops the run); S3 read and write on the prefix when `s3_bucket_name` is set |
+| local guides | `bedrock-agentcore:InvokeWebSearch` in `tech_guide.web_search_region` (denied: the guide searches with Tavily or Brave, or not at all, and says so); with `run_examples`, `bedrock-agentcore:StartCodeInterpreterSession`, `InvokeCodeInterpreter` and `StopCodeInterpreterSession` (denied: the run stops) |
 
 ## Resume and publish
 

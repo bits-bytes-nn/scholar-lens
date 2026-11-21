@@ -185,3 +185,15 @@ def test_refused_credentials_end_the_run_instead_of_skipping_the_examples(
     with pytest.raises(type(error)):
         asyncio.run(_runner(client).run("p", requirements=[], timeout_s=30))
     assert client.calls[-1][0] == "stop"
+
+
+def test_a_refused_session_start_ends_the_run() -> None:
+    class _Refusing(_Client):
+        def start_code_interpreter_session(self, **kw: Any) -> dict[str, Any]:
+            raise ClientError(
+                {"Error": {"Code": "AccessDeniedException", "Message": "no"}},
+                "StartCodeInterpreterSession",
+            )
+
+    with pytest.raises(ClientError):
+        asyncio.run(_runner(_Refusing([])).run("p", requirements=[], timeout_s=30))
