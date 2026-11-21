@@ -106,7 +106,7 @@ cdk deploy --all --profile <profile_name>
 poetry run python scripts/put_secrets.py     # .env 비밀값을 SSM에 저장
 ```
 
-Batch 작업은 마지막 배포 때 이미지에 넣은 `config.yaml`을 씁니다. 설정을 바꾸면 다시 배포합니다. 배포는 이미지에 들어갈 코드·잠금 파일·Dockerfile에 커밋하지 않은 변경이 있으면 멈추고, 이미지에 커밋을 남깁니다(작업 결과의 `revision`). 추적, 경보, 스택은 [docs/usage.md](./docs/usage.md#deploy-to-aws)를 봅니다.
+Batch 작업은 마지막 배포 때 이미지에 넣은 `config.yaml`을 씁니다. 설정을 바꾸면 다시 배포합니다. 배포는 이미지에 들어갈 코드·잠금 파일·Dockerfile에 커밋하지 않은 변경이 있으면 멈추고, 이미지에 들어가는 파일을 마지막으로 바꾼 커밋을 이미지에 남깁니다(작업 결과의 `revision`). 추적, 경보, 스택은 [docs/usage.md](./docs/usage.md#deploy-to-aws)를 봅니다.
 
 ## 개발
 

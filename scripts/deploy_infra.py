@@ -876,27 +876,44 @@ IMAGE_SOURCES = (
 ALLOW_DIRTY_ENV = "SCHOLAR_LENS_ALLOW_DIRTY_DEPLOY"
 
 
-def _git(repo: Path, *args: str) -> str:
-    done = subprocess.run(
-        ["git", *args], cwd=repo, capture_output=True, text=True, check=False
-    )
+def _git(repo: Path, *args: str, timeout: float = 30) -> str:
+    try:
+        done = subprocess.run(
+            ["git", *args],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+            # Never wait at a credential or passphrase prompt.
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+    except subprocess.TimeoutExpired as e:
+        raise SystemExit(f"git {' '.join(args)} timed out after {timeout:g} s") from e
     if done.returncode != 0:
         raise SystemExit(f"git {' '.join(args)} failed: {done.stderr.strip()}")
     return done.stdout.strip()
 
 
 def source_revision(repo: Path, stage: str) -> str:
-    """The last commit that changed the image sources (a commit that touches
-    only docs keeps the image, so no rebuild and no new job definition). A
+    """The last commit that changed the image sources (a commit outside them
+    keeps the image, so no rebuild and no new job definition; README.md is
+    one of them). A shallow clone is refused (its boundary commit would be
+    the label). A
     checkout whose image sources differ from HEAD (tracked changes or new
     files; the gitignored config.yaml is not one) is refused unless
     ``ALLOW_DIRTY_ENV`` is set, and then the revision ends in "+dirty". Every
     cdk command runs this, ``cdk diff`` included. A prod deploy also needs
     HEAD to be the remote's main (read with ``git ls-remote``, not a local
     ref that may lag)."""
+    if _git(repo, "rev-parse", "--is-shallow-repository") == "true":
+        # The shallow boundary looks like it added every file: a wrong label.
+        raise SystemExit("Deploy from a full clone (`git fetch --unshallow`).")
     revision = _git(
         repo, "log", "-1", "--format=%h", "--abbrev=12", "--", *IMAGE_SOURCES
     )
+    if not revision:
+        raise SystemExit("No commit holds the image sources; commit them first.")
     changed = _git(repo, "status", "--porcelain", "--", *IMAGE_SOURCES)
     if changed:
         if os.getenv(ALLOW_DIRTY_ENV) != "1":
@@ -909,12 +926,15 @@ def source_revision(repo: Path, stage: str) -> str:
         revision += "+dirty"
     if stage == "prod":
         head = _git(repo, "rev-parse", "HEAD")
+        # Needs network access to origin: a local ref may lag the remote.
         main_line = _git(repo, "ls-remote", "origin", "refs/heads/main")
         main_head = main_line.split()[0] if main_line else ""
-        if head != main_head or revision.endswith("+dirty"):
+        dirty = revision.endswith("+dirty")
+        if head != main_head or dirty:
+            state = " with uncommitted changes" if dirty else ""
             raise SystemExit(
-                f"A prod deploy ships the remote's main ({main_head[:12] or 'none'}); "
-                f"HEAD is {head[:12]}{' with uncommitted changes' if revision.endswith('+dirty') else ''}."
+                "A prod deploy ships the remote's main "
+                f"({main_head[:12] or 'none'}); HEAD is {head[:12]}{state}."
             )
     return revision
 

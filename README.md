@@ -106,7 +106,7 @@ cdk deploy --all --profile <profile_name>
 poetry run python scripts/put_secrets.py     # .env secrets to SSM
 ```
 
-Batch jobs use the `config.yaml` baked into the image at the last deploy; redeploy after editing it. A deploy refuses uncommitted changes to what the image ships (code, lock, Dockerfile) and stamps the commit on the image; job results carry it as `revision`. See [docs/usage.md](./docs/usage.md#deploy-to-aws) for tracing, alarms and the stack.
+Batch jobs use the `config.yaml` baked into the image at the last deploy; redeploy after editing it. A deploy refuses uncommitted changes to what the image ships (code, lock, Dockerfile) and stamps the last commit that changed what the image ships; job results carry it as `revision`. See [docs/usage.md](./docs/usage.md#deploy-to-aws) for tracing, alarms and the stack.
 
 ## Development
 

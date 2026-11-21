@@ -423,6 +423,25 @@ class TestSourceRevision:
         # No image source changed: the same image, no new job definition.
         assert source_revision(repo, "dev") == before
 
+    def test_a_shallow_clone_is_refused(self, tmp_path: Path) -> None:
+        import subprocess
+
+        from scripts.deploy_infra import source_revision
+
+        repo = self._repo(tmp_path / "full")
+        (repo / "scholar_lens" / "a.py").write_text("x = 4\n")
+        subprocess.run(
+            ["git", "commit", "-qam", "two"], cwd=repo, check=True, capture_output=True
+        )
+        shallow = tmp_path / "shallow"
+        subprocess.run(
+            ["git", "clone", "-q", "--depth", "1", f"file://{repo}", str(shallow)],
+            check=True,
+            capture_output=True,
+        )
+        with pytest.raises(SystemExit, match="full clone"):
+            source_revision(shallow, "dev")
+
     def test_prod_ships_only_the_remotes_main(self, tmp_path: Path) -> None:
         import subprocess
 
@@ -466,5 +485,10 @@ class TestSourceRevision:
         dockerfile = (Path(__file__).parents[2] / "Dockerfile").read_text()
         # After every RUN: a new revision rebuilds no layer.
         last_run = dockerfile.rindex("\nRUN ")
-        assert dockerfile.index("ARG SOURCE_REVISION") > last_run
+        for line in (
+            "ARG SOURCE_REVISION",
+            "LABEL org.opencontainers",
+            "ENV SCHOLAR_LENS_REVISION",
+        ):
+            assert dockerfile.index(line) > last_run, line
         assert "ENV SCHOLAR_LENS_REVISION=${SOURCE_REVISION}" in dockerfile

@@ -10,3 +10,6 @@
 scholar_lens/**/__pycache__
 scholar_lens/**/*.py[cod]
 scholar_lens/**/.DS_Store
+# Never ship a stray secret or log file that sits in the package.
+scholar_lens/**/.env
+scholar_lens/**/*.log
