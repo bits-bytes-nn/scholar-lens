@@ -365,3 +365,58 @@ class TestCodeIndex:
         client.inputs.clear()
         await index.search_similar_code("x" * 500, k=1)
         assert client.inputs == ["x" * 50]
+
+
+class TestCloneGuardOnTheClonePath:
+    """``download_repositories`` checks every URL before git sees it (the
+    guard is tested alone above; this pins that the clone path calls it)."""
+
+    @staticmethod
+    def _fake_git(tmp_path, monkeypatch: pytest.MonkeyPatch):  # type: ignore[no-untyped-def]
+        import os
+
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        log = tmp_path / "git.log"
+        # Record the arguments, then "clone" into the last one.
+        (bin_dir / "git").write_text(
+            f'#!/bin/sh\necho "$@" >> {log}\n'
+            'for last; do :; done\nmkdir -p "$last"\n'
+        )
+        (bin_dir / "git").chmod(0o755)
+        monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+        return log
+
+    @staticmethod
+    def _retriever(tmp_path):  # type: ignore[no-untyped-def]
+        import scholar_lens.adapters.code.retriever as cr
+
+        retriever = object.__new__(cr.CodeRetriever)
+        retriever.repo_cache_dir = tmp_path / "repos"
+        retriever.repo_paths = []
+        return retriever
+
+    async def test_unsafe_urls_never_reach_git_and_a_safe_one_is_kept(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:  # type: ignore[no-untyped-def]
+        log = self._fake_git(tmp_path, monkeypatch)
+        unsafe = ["file:///etc/passwd", "http://169.254.169.254/r", "ssh://h/r"]
+        paths = await self._retriever(tmp_path).download_repositories(
+            [*unsafe, "https://github.com/o/r"]
+        )
+        calls = log.read_text()
+        assert "github.com/o/r" in calls
+        assert not any(url in calls for url in unsafe)
+        assert len(paths) == 1 and paths[0].exists()
+
+    async def test_nothing_cloned_is_an_error(
+        self, tmp_path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:  # type: ignore[no-untyped-def]
+        import scholar_lens.adapters.code.retriever as cr
+
+        log = self._fake_git(tmp_path, monkeypatch)
+        with pytest.raises(cr.NoPythonFilesError):
+            await self._retriever(tmp_path).download_repositories(
+                ["file:///etc/passwd"]
+            )
+        assert not log.exists()

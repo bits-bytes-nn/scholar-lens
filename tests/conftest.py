@@ -27,6 +27,13 @@ os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
 os.environ["AWS_SECURITY_TOKEN"] = "testing"
 os.environ["AWS_SESSION_TOKEN"] = "testing"
 os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+# Child processes (git, sandboxed programs) do not inherit the socket guard
+# below: git may use only local repositories, and HTTP from a child goes to a
+# closed local port instead of the network.
+os.environ["GIT_ALLOW_PROTOCOL"] = "file"
+for _name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy"):
+    os.environ[_name] = "http://127.0.0.1:9"
+os.environ["NO_PROXY"] = os.environ["no_proxy"] = "127.0.0.1,localhost,::1"
 
 # Test output must not land in the repository's logs/ directory. The app's file
 # handler opens its file lazily, so dropping it here leaves no file behind.
@@ -135,7 +142,15 @@ def _no_arxiv_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     that touches the arXiv client wait in real time."""
     from scholar_lens.adapters.scholarly import arxiv as arxiv_handler
 
+    from scholar_lens.adapters.http.rate_limit import (
+        ARXIV_ASSET_LIMITER,
+        ARXIV_RATE_LIMITER,
+    )
+
     monkeypatch.setattr(arxiv_handler._ARXIV_RATE_LIMITER, "acquire", lambda: None)
+    # A penalty one test sets (a 429's Retry-After) never carries into the next.
+    for limiter in (ARXIV_RATE_LIMITER, ARXIV_ASSET_LIMITER):
+        monkeypatch.setattr(limiter, "_blocked_until", 0.0)
 
 
 @pytest.fixture(autouse=True)

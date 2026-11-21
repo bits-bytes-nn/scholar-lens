@@ -1690,3 +1690,16 @@ def test_official_docs_on_a_shared_host_cover_only_the_projects_space() -> None:
     docs = OfficialDocs.from_urls(["https://docs.x.dev/en/latest/start.html"])
     assert docs.covers("https://docs.x.dev/en/latest/serving/api.html")
     assert docs_version("https://papers.x.org/papers/2106.09685") is None
+
+
+def test_the_default_client_pins_every_connection() -> None:
+    # Fetched pages and their redirects connect to the validated IP only
+    # (DNS rebinding); a client built without one must use the pinned transport.
+    from scholar_lens.adapters.http.pinned_transport import PinnedHTTPTransport
+    from scholar_lens.adapters.web.research import WebResearcher
+
+    researcher = WebResearcher()
+    try:
+        assert isinstance(researcher.client._transport, PinnedHTTPTransport)
+    finally:
+        researcher.close()

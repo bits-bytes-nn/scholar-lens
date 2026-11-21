@@ -358,12 +358,44 @@ def test_the_cost_alarm_follows_the_run_ceilings() -> None:
 
 class TestSourceRevision:
     @staticmethod
+    def _git_env() -> dict[str, str]:
+        import os
+
+        # Never the developer's git config (signing, hooks).
+        return {
+            **os.environ,
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_AUTHOR_NAME": "t",
+            "GIT_AUTHOR_EMAIL": "t@example.com",
+            "GIT_COMMITTER_NAME": "t",
+            "GIT_COMMITTER_EMAIL": "t@example.com",
+        }
+
+    def _with_origin(self, tmp_path: Path) -> Path:
+        import subprocess
+
+        repo = self._repo(tmp_path / "work")
+        remote = tmp_path / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+        for args in (
+            ["remote", "add", "origin", str(remote)],
+            ["push", "-q", "origin", "main"],
+        ):
+            subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+        return repo
+
+    @staticmethod
     def _repo(tmp_path: Path) -> Path:
         import subprocess
 
         def git(*args: str) -> None:
             subprocess.run(
-                ["git", *args], cwd=tmp_path, check=True, capture_output=True
+                ["git", *args],
+                cwd=tmp_path,
+                check=True,
+                capture_output=True,
+                env=TestSourceRevision._git_env(),
             )
 
         tmp_path.mkdir(parents=True, exist_ok=True)
@@ -399,9 +431,61 @@ class TestSourceRevision:
             source_revision(repo, "dev")
         monkeypatch.setenv(ALLOW_DIRTY_ENV, "1")
         assert source_revision(repo, "dev").endswith("+dirty")
-        # Never for prod, even when allowed.
-        with pytest.raises(SystemExit):
+        # "0" or anything but "1" does not allow.
+        monkeypatch.setenv(ALLOW_DIRTY_ENV, "0")
+        with pytest.raises(SystemExit, match="Uncommitted changes"):
+            source_revision(repo, "dev")
+
+    def test_prod_refuses_uncommitted_changes_even_when_allowed(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from scripts.deploy_infra import ALLOW_DIRTY_ENV, source_revision
+
+        repo = self._with_origin(tmp_path)
+        (repo / "scholar_lens" / "a.py").write_text("x = 9\n")
+        monkeypatch.setenv(ALLOW_DIRTY_ENV, "1")
+        # HEAD is the remote's main: only the dirty tree refuses it.
+        with pytest.raises(SystemExit, match="uncommitted changes"):
             source_revision(repo, "prod")
+
+    def test_a_repo_whose_image_sources_were_never_committed_is_refused(
+        self, tmp_path: Path
+    ) -> None:
+        import subprocess
+
+        from scripts.deploy_infra import source_revision
+
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=tmp_path, check=True)
+        (tmp_path / "notes.txt").write_text("docs only\n")
+        for args in (["add", "notes.txt"], ["commit", "-q", "-m", "docs"]):
+            subprocess.run(
+                ["git", *args],
+                cwd=tmp_path,
+                check=True,
+                capture_output=True,
+                env=self._git_env(),
+            )
+        with pytest.raises(SystemExit, match="No commit holds the image sources"):
+            source_revision(tmp_path, "dev")
+
+    def test_git_never_waits_at_a_prompt_and_times_out(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import subprocess
+
+        import scripts.deploy_infra as deploy
+
+        seen: dict[str, object] = {}
+
+        def hang(*args: object, **kwargs: object) -> object:
+            seen.update(kwargs)
+            raise subprocess.TimeoutExpired(cmd="git", timeout=30)
+
+        monkeypatch.setattr(deploy.subprocess, "run", hang)
+        with pytest.raises(SystemExit, match="timed out"):
+            deploy._git(tmp_path, "ls-remote", "origin")
+        assert seen["timeout"] == 30
+        assert seen["env"]["GIT_TERMINAL_PROMPT"] == "0"  # type: ignore[index]
 
     def test_a_commit_outside_the_image_keeps_the_revision(
         self, tmp_path: Path

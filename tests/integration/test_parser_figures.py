@@ -796,3 +796,15 @@ async def test_figure_analyses_run_a_few_at_a_time() -> None:
     results = await parser._bounded([analyse(i) for i in range(20)])  # type: ignore[arg-type]
     assert peak == parser.FIGURE_ANALYSIS_CONCURRENCY
     assert isinstance(results[3], ValueError) and results[4] == 4
+
+
+@pytest.mark.parametrize(
+    "url", ["http://169.254.169.254/latest/meta-data/x.png", "http://10.0.0.5/a.png"]
+)
+async def test_a_figure_url_to_an_internal_address_is_refused(url: str) -> None:
+    # Figure URLs come from untrusted page HTML: the pinned transport must
+    # refuse them before any connection (the SSRF guard on this path).
+    from scholar_lens.adapters.documents.parser import FigureParseError, FigureReader
+
+    with pytest.raises(FigureParseError, match="Unsafe image URL"):
+        await FigureReader._get_image_data(url)

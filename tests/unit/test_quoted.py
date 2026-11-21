@@ -181,3 +181,32 @@ def test_withdrawn_claim_lines_are_dropped() -> None:
         lines[8],
         *lines[9:],
     ]
+
+
+def test_a_fix_whose_recheck_finds_more_problems_is_not_kept() -> None:
+    # The disputed sentence is gone, but the recheck reports more (none of
+    # them wrong): no better than the draft.
+    from scholar_lens.domain.quoted import fix_kept
+
+    before = ["- A는 B입니다. || unsupported: x"]
+    after = [f"- {s}는 새 주장입니다. || unsupported: y" for s in ("C", "D", "E")]
+    old = {"t": "A는 B입니다."}
+    new = {"t": "C는 새 주장입니다. D는 새 주장입니다. E는 새 주장입니다."}
+    assert not fix_kept(before, after, old, new)
+
+
+def test_a_short_quote_never_settles_a_finding() -> None:
+    from scholar_lens.domain.quoted import finding_fixed
+
+    # "그" and "a" match anywhere by chance: they are no evidence of a fix.
+    assert not finding_fixed('"그" is vague', "그 방법은 빠릅니다.", "새 문장입니다.")
+    assert not finding_fixed('"a" is vague', "a method", "other text")
+
+
+def test_a_word_starting_with_wrong_is_not_a_wrong_verdict() -> None:
+    from scholar_lens.domain.quoted import fix_kept
+
+    before = ["- A는 B입니다. || unsupported: x"]
+    after = ["- C는 D입니다. || wrongly attributed? no: unsupported, y"]
+    # Not a new "wrong": one problem for one, the old sentence gone, so kept.
+    assert fix_kept(before, after, {"t": "A는 B입니다."}, {"t": "C는 D입니다."})

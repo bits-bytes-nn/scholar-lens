@@ -738,3 +738,27 @@ def test_a_thin_seo_title_falls_back_to_the_title_cut_at_a_word() -> None:
     # A substantial name before the colon is still used.
     long_head = "Direct Preference Optimization Explained: " + "x " * 40
     assert shorten_title(long_head, 70) == "Direct Preference Optimization Explained"
+
+
+@pytest.mark.parametrize("extra", [0, 1])
+def test_seo_title_limit_is_exact(extra: int) -> None:
+    limit = SPEC.seo_title_max_length
+    seo = "S" * (limit + extra)
+    found = rules(make_post(front={"seo_title": f'"{seo}"'}))
+    assert ("seo-title" in found) == bool(extra)
+
+
+@pytest.mark.parametrize("extra", [0, 1])
+def test_specific_tag_count_is_exact(extra: int) -> None:
+    count = SPEC.tags.max_specific + extra
+    tags = ", ".join(f'"Specific-Tag-{i}"' for i in range(count))
+    found = rules(make_post(front={"tags": f"[{tags}]"}))
+    assert ("tags" in found) == bool(extra)
+
+
+def test_a_translated_post_needs_its_translation_id() -> None:
+    lang = SPEC.languages[0]
+    assert "translation" in rules(make_post(front={"lang": lang}))
+    assert "translation" not in rules(
+        make_post(front={"lang": lang, "translation_id": "dsv3"})
+    )
