@@ -38,7 +38,8 @@ def test_flags_on_a_clean_baseline_are_counted_apart() -> None:
 def test_the_truth_set_loads_with_an_anchor_per_entry() -> None:
     cases = load_truth()
     entries = [e for c in cases.values() for e in c.get("truth") or []]
-    assert len(entries) == 12
+    assert len(entries) == 11
+    assert sum(e.get("status") == "partial" for e in entries) == 2
     assert all(e["anchor"].strip() and e["source"] for e in entries)
     assert {c["kind"] for c in cases.values()} == {"review", "summary"}
     assert any(c.get("clean") for c in cases.values())

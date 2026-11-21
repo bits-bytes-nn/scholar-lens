@@ -725,3 +725,16 @@ def test_a_tag_in_the_papers_title_is_found_before_writing() -> None:
         "## TL;DR"
     )[0]
     assert any("has a tag" in e for e in paper_metadata_errors(front, SPEC, "review"))
+
+
+def test_a_thin_seo_title_falls_back_to_the_title_cut_at_a_word() -> None:
+    from scholar_lens.domain.post_format import shorten_title
+
+    title = "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning"
+    seo = shorten_title(title, 70)
+    # The bare name "GEPA" says too little in a search result.
+    assert seo is not None and seo.startswith("GEPA: Reflective Prompt Evolution")
+    assert len(seo) <= 70 and not seo.endswith(" ")
+    # A substantial name before the colon is still used.
+    long_head = "Direct Preference Optimization Explained: " + "x " * 40
+    assert shorten_title(long_head, 70) == "Direct Preference Optimization Explained"

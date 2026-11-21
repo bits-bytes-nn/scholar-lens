@@ -774,3 +774,25 @@ def test_a_figure_reading_without_a_caption_is_still_labelled() -> None:
         figure_id="1", path="f.png", caption=None, analysis="loss falls to 0.42"
     )
     assert _figure_description(figure).startswith("(Figure analysis, approximate:")
+
+
+async def test_figure_analyses_run_a_few_at_a_time() -> None:
+    import asyncio
+
+    from scholar_lens.adapters.documents import parser
+
+    running = peak = 0
+
+    async def analyse(i: int) -> int:
+        nonlocal running, peak
+        running += 1
+        peak = max(peak, running)
+        await asyncio.sleep(0)
+        running -= 1
+        if i == 3:
+            raise ValueError("one figure fails")
+        return i
+
+    results = await parser._bounded([analyse(i) for i in range(20)])  # type: ignore[arg-type]
+    assert peak == parser.FIGURE_ANALYSIS_CONCURRENCY
+    assert isinstance(results[3], ValueError) and results[4] == 4

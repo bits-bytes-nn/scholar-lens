@@ -15,6 +15,8 @@
 #   check: it is listed but not scored. `clean: true` marks a baseline the
 #   blind judge rated clean: every flag on it is a false-alarm candidate.
 # Hand fixes of markup, tags or list rendering are not claims and are left out.
+# `status: partial` marks a sentence only partly wrong (one word, or a detail
+# read off a figure): scored apart from the firm entries.
 version: 1
 
 cases:
@@ -86,21 +88,22 @@ cases:
         source: 4d2be6a
         check: final
         note: 9.2x is Qwen3 8B PUPA (Fig. 18b); on GPT-4.1 Mini the maximum is 7.5x. The model is only in the figure.
-      - id: merge-rare
-        anchor: "계보 조건이 엄격해서 Merge는 드물게만 일어납니다"
-        category: unsupported_cause
-        source: 4d2be6a
-        note: App. E.4 caps Merge at 5 calls; it never says lineage conditions make it rare.
+      # Not an entry: the hand fix 4d2be6a also removed "계보 조건이 엄격해서
+      # Merge는 드물게만 일어납니다", which Appendix D.1 states ("These strict
+      # lineage conditions mean merge occurs sparsely"); a check line that
+      # disputes it is a false alarm.
       - id: grpo-margins-named
         anchor: "다섯 과제에서의 우위를 각각 19.0%"
         category: number_scope
         source: 4d2be6a
         note: The five margins are unnamed in the paper and are percentage points.
+        status: partial  # the paper lists the same values; "each" is the only slip
       - id: ifbench-curve
         anchor: "IFBench에서도 프롬프트 옵티마이저는 초반 몇백 롤아웃 안에 빠르게 오르고"
         category: figure_reading
         source: 4d2be6a
-        note: Read off the figure; the caption makes no such claim.
+        note: The Fig. 1 caption says prompt optimizers learn much faster on both panels; only "초반 몇백 롤아웃" is read off the figure.
+        status: partial
       - id: aime-12-model
         anchor: "AIME-2025에서는 저자들이 GEPA의 향상을 정확도 +12%포인트로 제시합니다"
         category: number_scope

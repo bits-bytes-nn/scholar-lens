@@ -337,6 +337,18 @@ class TestWorker:
         assert record.call_args.args[0].kind is None
         capsys.readouterr()
 
+    def test_a_rejected_worker_request_names_the_image_revision(
+        self, capsys: pytest.CaptureFixture, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Version skew (an old image rejecting a new field) is when it matters.
+        monkeypatch.setenv("SCHOLAR_LENS_REVISION", "abc123def456")
+        with mock.patch(
+            "scholar_lens.entrypoints.runtime.record_unstarted_run", return_value=True
+        ) as record:
+            cli.main(["worker", "--request", "not json"])
+        assert record.call_args.args[0].revision == "abc123def456"
+        capsys.readouterr()
+
     def test_crash_outside_run_job_is_reported(
         self, capsys: pytest.CaptureFixture
     ) -> None:

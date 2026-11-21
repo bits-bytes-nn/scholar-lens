@@ -11,6 +11,7 @@ truncated output, programming errors).
 """
 
 import logging
+import random
 from collections.abc import Callable
 
 import httpx
@@ -221,15 +222,28 @@ def _should_stop(retry_state: tenacity.RetryCallState) -> bool:
     )
 
 
+def backoff_wait(
+    multiplier: float, cap: float, *, rng: random.Random | None = None
+) -> Callable[[tenacity.RetryCallState], float]:
+    """Exponential backoff with equal jitter: attempt ``n`` waits between half
+    and all of ``min(multiplier * 2**(n-1), cap)``, so concurrent calls that
+    were throttled together retry apart, also at the cap (tenacity's
+    ``wait_exponential_jitter`` adds its jitter before the cap, so every wait
+    at the cap is the same)."""
+    draw = rng or random.Random()
+
+    def wait(state: tenacity.RetryCallState) -> float:
+        base = min(multiplier * 2 ** (state.attempt_number - 1), cap)
+        return base * draw.uniform(0.5, 1.0)
+
+    return wait
+
+
 class RetryableBase:
     @staticmethod
     def _retry(operation_name: str) -> Callable:
         return tenacity.retry(
-            # Exponential backoff with jitter so concurrent retries against a
-            # rate-limited API don't stampede.
-            wait=tenacity.wait_exponential_jitter(
-                multiplier=RETRY_MULTIPLIER, max=RETRY_MAX_WAIT
-            ),
+            wait=backoff_wait(RETRY_MULTIPLIER, RETRY_MAX_WAIT),
             stop=_should_stop,
             retry=tenacity.retry_if_exception(is_transient_error),
             before_sleep=lambda retry_state: logger.warning(

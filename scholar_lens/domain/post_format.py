@@ -196,15 +196,22 @@ def cut_title(title: str, limit: int) -> str:
     return cut or title[:limit]
 
 
+def seo_title_too_thin(seo_title: str, limit: int) -> bool:
+    """Whether a ``seo_title`` says too little for a search result: shorter
+    than a third of ``limit`` (a bare paper name, "GEPA")."""
+    return len(seo_title.strip()) < limit // 3
+
+
 def shorten_title(title: str, limit: int) -> str | None:
     """A paper's ``seo_title`` for a title over ``limit``: the part before
-    the colon (the paper's name) when it is usable, else the title cut at a
-    word boundary (:func:`cut_title`)."""
+    the colon (the paper's name and its claim) when it is usable and not too
+    thin (:func:`seo_title_too_thin`), else the title cut at a word boundary
+    (:func:`cut_title`)."""
     title = " ".join(title.split())
     if len(title) <= limit:
         return None
     head = title.split(":", 1)[0].strip()
-    if ":" in title and 3 <= len(head) <= limit:
+    if ":" in title and len(head) <= limit and not seo_title_too_thin(head, limit):
         return head
     return cut_title(title, limit)
 
@@ -238,7 +245,7 @@ def build_post_meta(
     seo = (proposed_seo_title or "").strip() or None
     if len(title) <= limit:
         seo = None
-    elif not seo or len(seo) > limit:
+    elif not seo or len(seo) > limit or seo_title_too_thin(seo, limit):
         seo = shorten_title(title, limit)
     return PostMeta(
         topic=topic,

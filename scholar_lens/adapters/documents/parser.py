@@ -99,6 +99,23 @@ def failure_reason(error: BaseException) -> str:
     return reason
 
 
+# Vision calls in flight at once while a paper's figures are analysed: every
+# figure at once would meet Bedrock's throttle in a burst.
+FIGURE_ANALYSIS_CONCURRENCY = 5
+
+
+async def _bounded(tasks: Sequence[Coroutine[Any, Any, Figure]]) -> list[Any]:
+    """``asyncio.gather(..., return_exceptions=True)`` of ``tasks``, at most
+    ``FIGURE_ANALYSIS_CONCURRENCY`` running at a time."""
+    slots = asyncio.Semaphore(FIGURE_ANALYSIS_CONCURRENCY)
+
+    async def run(task: Coroutine[Any, Any, Figure]) -> Figure:
+        async with slots:
+            return await task
+
+    return await asyncio.gather(*(run(t) for t in tasks), return_exceptions=True)
+
+
 class FigureReader(RetryableBase):
     """Reads a figure's image and has the vision model describe it."""
 
@@ -517,9 +534,7 @@ class HTMLRichParser(RichParser, HTMLParser):
                     figure_caption(media),
                 )
             )
-        return _completed_figures(
-            await asyncio.gather(*figure_tasks, return_exceptions=True)
-        )
+        return _completed_figures(await _bounded(figure_tasks))
 
 
 def _completed_figures(results: Sequence[Figure | BaseException]) -> list[Figure]:
@@ -819,7 +834,7 @@ class PDFParser(RichParser):
         ]
 
         # Crop files are "<idx>.png", one per region: no duplicates to drop.
-        return _completed_figures(await asyncio.gather(*tasks, return_exceptions=True))
+        return _completed_figures(await _bounded(tasks))
 
     async def _parse_with_fallback(
         self,

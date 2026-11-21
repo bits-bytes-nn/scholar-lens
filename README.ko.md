@@ -79,7 +79,7 @@ poetry run python -m scholar_lens publish papers/<dir>/<post>.rejected.md   # �
 
 - 명령마다 결과 JSON 하나를 stdout에 출력하고, 로그는 stderr로 보냅니다.
 - `--no-pr`는 PR 없이 글만 저장하고, `--remote`는 AWS Batch에 실행을 맡깁니다.
-- 같은 입력으로 다시 실행하면 저장된 단계부터 이어서 진행합니다. `--fresh`는 모든 단계를 다시 계산합니다.
+- 근거 장부 엔진(가이드, 서베이, `engine: evidence`인 리뷰·요약)은 같은 입력으로 다시 실행하면 저장된 단계부터 이어서 진행하고, `--fresh`는 모든 단계를 다시 계산합니다. 리뷰·요약의 기본 sections 엔진은 단계를 저장하지 않으므로, 다시 실행하면(호스트 소실 뒤 Batch 재시도 포함) 처음부터 다시 돕니다.
 - URL은 따옴표로 감쌉니다. zsh에서는 따옴표 없는 `?`가 글롭으로 해석됩니다.
 
 옵션 전체, 서베이 계획 형식, 재개와 재게시, 종료 코드, 설정 키는 [docs/usage.md](./docs/usage.md)(영문)에 있습니다.

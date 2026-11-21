@@ -15,7 +15,7 @@ doc or deep-dive post the user wants the guide to build on),
 3. Settles flags and arguments only third-party pages give from the official
    reference pages.
 
-The evidence engine (:mod:`guide_writer`) writes the guide from the gathered
+The evidence engine (:mod:`scholar_lens.application.guide_engine`) writes the guide from the gathered
 corpus; :meth:`TechGuideGenerator.classify` files the finished guide into the
 blog's taxonomy.
 """

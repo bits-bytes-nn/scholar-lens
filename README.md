@@ -79,7 +79,7 @@ poetry run python -m scholar_lens publish papers/<dir>/<post>.rejected.md   # af
 
 - Each command prints one JSON result on stdout; logs go to stderr.
 - `--no-pr` saves the post without opening a PR; `--remote` submits the run to AWS Batch.
-- A rerun with the same inputs resumes from the stages it saved; `--fresh` recomputes everything.
+- With the evidence engines (guides, surveys, and reviews or summaries on `engine: evidence`), a rerun with the same inputs resumes from the stages it saved; `--fresh` recomputes everything. The default sections engine for reviews and summaries saves no stages, so a rerun (or a Batch retry after a lost host) repeats the whole run.
 - Quote URLs: in zsh an unquoted `?` is a glob.
 
 [docs/usage.md](./docs/usage.md) lists every option, the survey plan format, resuming and republishing, exit codes and configuration keys.

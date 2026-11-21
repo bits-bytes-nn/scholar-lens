@@ -110,7 +110,7 @@ class PageContent:
     # Explanatory material the user passed with the request (a paper, design
     # doc or deep-dive post): labelled reference material, never official.
     user_reference: bool = False
-    # The source record (:mod:`source_set`), decided once at gather time by
+    # The source record (:mod:`scholar_lens.domain.sources`), decided once at gather time by
     # :meth:`SourceSet.record`; "" until then. ``published`` is the page's
     # own date (its metadata, else the search backend's), ``YYYY-MM-DD``.
     authority: str = ""

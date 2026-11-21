@@ -9,6 +9,7 @@ import sys
 from typing import Any
 
 import pytest
+from botocore.exceptions import ClientError, SSOError
 
 from scholar_lens.adapters.agentcore.code_interpreter import (
     SYSTEM_INTERPRETER,
@@ -163,3 +164,24 @@ def test_the_system_interpreter_is_inexact_and_says_so() -> None:
     runner = _runner(client, SYSTEM_INTERPRETER)
     run = asyncio.run(runner.run("p", requirements=["pkg==1"], timeout_s=30))
     assert not run.exact and "not installed" in run.warning
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        ClientError(
+            {"Error": {"Code": "AccessDeniedException", "Message": "no"}},
+            "InvokeCodeInterpreter",
+        ),
+        SSOError(),
+    ],
+    ids=["access-denied", "sso-expired"],
+)
+def test_refused_credentials_end_the_run_instead_of_skipping_the_examples(
+    error: Exception,
+) -> None:
+    # The shared rule (retry.stops_the_run): no degraded "examples not run".
+    client = _Client(error)
+    with pytest.raises(type(error)):
+        asyncio.run(_runner(client).run("p", requirements=[], timeout_s=30))
+    assert client.calls[-1][0] == "stop"

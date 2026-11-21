@@ -48,6 +48,7 @@ from scholar_lens.domain.constants import (
 from scholar_lens.domain.jobs import JobRequest, JobResult, ssm_base
 from scholar_lens.domain.usage_context import cost_allocation
 from scholar_lens.domain.validation import PostValidationError
+from scholar_lens.entrypoints.revision import image_revision
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +214,7 @@ def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
         kind=request.kind,
         input=request.describe(),
         job_id=job_id,
-        revision=os.getenv(EnvVars.REVISION.value) or None,
+        revision=image_revision(),
     )
     if result.revision:
         logger.info("Running %s at revision %s.", request.kind, result.revision)
