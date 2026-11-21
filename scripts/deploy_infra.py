@@ -886,12 +886,17 @@ def _git(repo: Path, *args: str) -> str:
 
 
 def source_revision(repo: Path, stage: str) -> str:
-    """The commit the image is built from. A checkout whose image sources
-    differ from the commit (tracked changes or new files; the gitignored
-    config.yaml is not one) is refused unless ``ALLOW_DIRTY_ENV`` is set,
-    and then its revision ends in "+dirty"; a prod deploy also needs the
-    commit to be the fetched origin/main."""
-    revision = _git(repo, "rev-parse", "--short=12", "HEAD")
+    """The last commit that changed the image sources (a commit that touches
+    only docs keeps the image, so no rebuild and no new job definition). A
+    checkout whose image sources differ from HEAD (tracked changes or new
+    files; the gitignored config.yaml is not one) is refused unless
+    ``ALLOW_DIRTY_ENV`` is set, and then the revision ends in "+dirty". Every
+    cdk command runs this, ``cdk diff`` included. A prod deploy also needs
+    HEAD to be the remote's main (read with ``git ls-remote``, not a local
+    ref that may lag)."""
+    revision = _git(
+        repo, "log", "-1", "--format=%h", "--abbrev=12", "--", *IMAGE_SOURCES
+    )
     changed = _git(repo, "status", "--porcelain", "--", *IMAGE_SOURCES)
     if changed:
         if os.getenv(ALLOW_DIRTY_ENV) != "1":
@@ -903,10 +908,13 @@ def source_revision(repo: Path, stage: str) -> str:
         logger.warning("Deploying uncommitted image sources:\n%s", changed)
         revision += "+dirty"
     if stage == "prod":
-        main_head = _git(repo, "rev-parse", "--short=12", "origin/main")
-        if not revision.startswith(main_head) or revision.endswith("+dirty"):
+        head = _git(repo, "rev-parse", "HEAD")
+        main_line = _git(repo, "ls-remote", "origin", "refs/heads/main")
+        main_head = main_line.split()[0] if main_line else ""
+        if head != main_head or revision.endswith("+dirty"):
             raise SystemExit(
-                f"A prod deploy ships origin/main ({main_head}); HEAD is {revision}."
+                f"A prod deploy ships the remote's main ({main_head[:12] or 'none'}); "
+                f"HEAD is {head[:12]}{' with uncommitted changes' if revision.endswith('+dirty') else ''}."
             )
     return revision
 

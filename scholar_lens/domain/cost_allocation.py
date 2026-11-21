@@ -2,7 +2,7 @@
 
 Each artifact kind calls every model through its own application inference
 profile, tagged ``Kind=<kind>``, so Cost Explorer can split Bedrock spend by
-kind (docs/design.md, 8.3). The stack creates the profiles and the app finds
+kind (docs/design.md, 10). The stack creates the profiles and the app finds
 them by these names; both use this function.
 """
 

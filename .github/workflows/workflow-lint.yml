@@ -11,7 +11,8 @@ permissions:
 
 concurrency:
   group: workflow-validation-${{ github.ref }}
-  # A superseded PR run is cancelled; every push to main keeps its result.
+  # A superseded PR run is cancelled; a running main build never is (a
+  # queued one may still be replaced by a newer push).
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:

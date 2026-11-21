@@ -16,15 +16,12 @@ import boto3
 import pytest
 
 # The AWS SDK never sees the developer's credentials, profile or region:
-# fake keys win over anything exported, and no profile or config file is read.
-for _name in (
-    "AWS_PROFILE",
-    "AWS_DEFAULT_PROFILE",
-    "AWS_REGION",
-    "AWS_CONFIG_FILE",
-    "AWS_SHARED_CREDENTIALS_FILE",
-):
+# fake keys win over anything exported, and the config and credentials files
+# are empty (a session built with an explicit profile name then fails).
+for _name in ("AWS_PROFILE", "AWS_DEFAULT_PROFILE", "AWS_REGION"):
     os.environ.pop(_name, None)
+os.environ["AWS_CONFIG_FILE"] = os.devnull
+os.environ["AWS_SHARED_CREDENTIALS_FILE"] = os.devnull
 os.environ["AWS_ACCESS_KEY_ID"] = "testing"
 os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
 os.environ["AWS_SECURITY_TOKEN"] = "testing"

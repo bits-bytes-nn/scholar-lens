@@ -366,6 +366,7 @@ class TestSourceRevision:
                 ["git", *args], cwd=tmp_path, check=True, capture_output=True
             )
 
+        tmp_path.mkdir(parents=True, exist_ok=True)
         git("init", "-q", "-b", "main")
         git("config", "user.email", "t@example.com")
         git("config", "user.name", "t")
@@ -402,7 +403,68 @@ class TestSourceRevision:
         with pytest.raises(SystemExit):
             source_revision(repo, "prod")
 
-    def test_the_image_carries_the_revision(self, template: dict[str, Any]) -> None:
+    def test_a_commit_outside_the_image_keeps_the_revision(
+        self, tmp_path: Path
+    ) -> None:
+        import subprocess
+
+        from scripts.deploy_infra import source_revision
+
+        repo = self._repo(tmp_path)
+        before = source_revision(repo, "dev")
+        (repo / "notes.txt").write_text("docs only\n")
+        subprocess.run(["git", "add", "notes.txt"], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "docs"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+        # No image source changed: the same image, no new job definition.
+        assert source_revision(repo, "dev") == before
+
+    def test_prod_ships_only_the_remotes_main(self, tmp_path: Path) -> None:
+        import subprocess
+
+        from scripts.deploy_infra import source_revision
+
+        repo = self._repo(tmp_path / "work")
+        remote = tmp_path / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+        for args in (
+            ["remote", "add", "origin", str(remote)],
+            ["push", "-q", "origin", "main"],
+        ):
+            subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+        assert source_revision(repo, "prod")
+        # A local commit main does not have yet is refused.
+        (repo / "scholar_lens" / "a.py").write_text("x = 3\n")
+        subprocess.run(
+            ["git", "commit", "-qam", "ahead"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+        with pytest.raises(SystemExit, match="remote's main"):
+            source_revision(repo, "prod")
+
+    def test_the_guard_watches_everything_the_image_ships(self) -> None:
+        from scripts.deploy_infra import IMAGE_SOURCES
+
+        root = Path(__file__).parents[2]
+        shipped = [
+            line[1:].strip().strip("/")
+            for line in (root / ".dockerignore").read_text().splitlines()
+            if line.startswith("!")
+        ]
+        assert shipped and all(
+            any(path == src or path.startswith(src + "/") for src in IMAGE_SOURCES)
+            for path in shipped
+        ), shipped
+
+    def test_the_image_carries_the_revision_in_its_last_layers(self) -> None:
         dockerfile = (Path(__file__).parents[2] / "Dockerfile").read_text()
-        assert "ARG SOURCE_REVISION" in dockerfile
-        assert "SCHOLAR_LENS_REVISION=${SOURCE_REVISION}" in dockerfile
+        # After every RUN: a new revision rebuilds no layer.
+        last_run = dockerfile.rindex("\nRUN ")
+        assert dockerfile.index("ARG SOURCE_REVISION") > last_run
+        assert "ENV SCHOLAR_LENS_REVISION=${SOURCE_REVISION}" in dockerfile

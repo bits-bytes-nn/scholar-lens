@@ -1,5 +1,5 @@
-"""The evidence-based paper review and summary writer (docs/design.md, 4.4,
-5.2): the paper post's spec and hooks bound to the post engine.
+"""The evidence-based paper review and summary writer (docs/design.md 4.4,
+docs/writing-principles.md): the paper post's spec and hooks bound to the post engine.
 
 Read (bounded agents over groups of the paper's sections, records checked
 against the paper) → outline (each piece of evidence to one section, in the
