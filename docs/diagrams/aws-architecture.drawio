@@ -82,7 +82,7 @@
     <mxCell id="github" value="GitHub Pages blog (Jekyll)&#10;API commit &#8594; fixed-branch PR&#10;reads _data/post_conventions.yml" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#24292E;strokeColor=none;fontColor=#FFFFFF;fontSize=11;verticalAlign=middle;" vertex="1" parent="1">
       <mxGeometry x="560" y="1210" width="240" height="90" as="geometry"/>
     </mxCell>
-    <mxCell id="sources" value="Source &amp; metadata APIs&#10;arXiv · paper PDF URLs · Upstage&#10;Crossref · Semantic Scholar · docs · Tavily/Brave" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=middle;spacingLeft=10;fillColor=#FBEEEC;strokeColor=#C7361C;fontSize=11;fontColor=#232F3E;" vertex="1" parent="1">
+    <mxCell id="sources" value="Source &amp; metadata APIs&#10;arXiv · paper PDF URLs · Upstage · Crossref&#10;Semantic Scholar · OpenAlex · docs&#10;web search: AgentCore Web Search → Tavily/Brave" style="rounded=1;whiteSpace=wrap;html=1;align=left;verticalAlign=middle;spacingLeft=10;fillColor=#FBEEEC;strokeColor=#C7361C;fontSize=11;fontColor=#232F3E;" vertex="1" parent="1">
       <mxGeometry x="1440" y="1210" width="360" height="90" as="geometry"/>
     </mxCell>
 
