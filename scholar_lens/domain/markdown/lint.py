@@ -1,8 +1,8 @@
 r"""Lint + auto-fix a published Markdown post for the blog's kramdown/MathJax quirks.
 
-A companion to :mod:`markdown_math`. Where that module normalizes math
+A companion to :mod:`scholar_lens.domain.markdown.math`. Where that module normalizes math
 delimiters, this one catches the *other* recurring blog-rendering failures. It reuses the same
-validated code/math-span splitter (:func:`markdown_math.segments`) so it
+validated code/math-span splitter (:func:`scholar_lens.domain.markdown.math.segments`) so it
 never mistakes code for prose or math.
 
 Auto-fixes (deterministic, outside code):

@@ -725,3 +725,101 @@ def test_a_tag_in_the_papers_title_is_found_before_writing() -> None:
         "## TL;DR"
     )[0]
     assert any("has a tag" in e for e in paper_metadata_errors(front, SPEC, "review"))
+
+
+def test_a_thin_seo_title_falls_back_to_the_title_cut_at_a_word() -> None:
+    from scholar_lens.domain.post_format import shorten_title
+
+    title = "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning"
+    # The bare name "GEPA" says too little: the title cut at a word, name first.
+    assert shorten_title(title, 70) == (
+        "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement"
+    )
+    # A cut never ends on a function word.
+    assert (
+        shorten_title("X: " + "Reasoning via " * 10, 30) == "X: Reasoning via Reasoning"
+    )
+    # A head of exactly a third of the limit is used; one shorter is not.
+    assert shorten_title("H" * 23 + ": " + "word " * 20, 70) == "H" * 23
+    assert shorten_title("H" * 22 + ": " + "word " * 20, 70) != "H" * 22
+    # A substantial name before the colon is still used.
+    long_head = "Direct Preference Optimization Explained: " + "x " * 40
+    assert shorten_title(long_head, 70) == "Direct Preference Optimization Explained"
+
+
+@pytest.mark.parametrize("extra", [0, 1])
+def test_seo_title_limit_is_exact(extra: int) -> None:
+    limit = SPEC.seo_title_max_length
+    seo = "S" * (limit + extra)
+    found = rules(make_post(front={"seo_title": f'"{seo}"'}))
+    assert ("seo-title" in found) == bool(extra)
+
+
+@pytest.mark.parametrize("extra", [0, 1])
+def test_specific_tag_count_is_exact(extra: int) -> None:
+    count = SPEC.tags.max_specific + extra
+    tags = ", ".join(f'"Specific-Tag-{i}"' for i in range(count))
+    found = rules(make_post(front={"tags": f"[{tags}]"}))
+    assert ("tags" in found) == bool(extra)
+
+
+def test_a_translated_post_needs_its_translation_id() -> None:
+    lang = SPEC.languages[0]
+    assert "translation" in rules(make_post(front={"lang": lang}))
+    assert "translation" not in rules(
+        make_post(front={"lang": lang, "translation_id": "dsv3"})
+    )
+
+
+def test_a_thin_model_seo_title_is_replaced_but_a_short_korean_one_kept() -> None:
+    from scholar_lens.domain.post_format import build_post_meta
+
+    title = "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning"
+
+    def seo(proposed: str) -> str | None:
+        return build_post_meta(
+            title=title,
+            category_type="Paper Reviews",
+            proposed_topic="Language-Models",
+            specific_tags=[],
+            controlled_tags=[],
+            proposed_seo_title=proposed,
+            spec=SPEC,
+        ).seo_title
+
+    assert (
+        seo("GEPA") == "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement"
+    )
+    # The model's candidate needs 12 characters.
+    assert seo("A" * 12) == "A" * 12
+    assert seo("A" * 11) != "A" * 11
+    assert (
+        seo("반성적 프롬프트 진화로 강화학습 넘기")
+        == "반성적 프롬프트 진화로 강화학습 넘기"
+    )
+
+
+def test_cut_titles_stay_within_the_limit_and_keep_acronyms() -> None:
+    from scholar_lens.domain.post_format import cut_title
+
+    assert cut_title("A" * 80, 70) == "A" * 70  # one long word: a hard cut
+    assert cut_title(": " * 40, 70)  # never empty
+    # A trailing acronym or label letter is no function word...
+    assert cut_title("Planning Models " * 4 + "in OR and More Words", 70).endswith(
+        " OR"
+    )
+    assert cut_title(
+        "Ranking Approaches " * 3 + "With Model A vs. Others Today", 70
+    ).endswith("Model A")
+    # ... but "vs." and "&" are.
+    assert not cut_title(
+        "Ranking Approaches " * 3 + "Long Name vs. Others", 70
+    ).endswith("vs.")
+    assert cut_title("Taskss " * 9 + "Tas & More Words Here", 70).endswith(" Tas")
+
+
+def test_a_colon_inside_a_word_is_no_subtitle() -> None:
+    from scholar_lens.domain.post_format import shorten_title
+
+    title = "Deep Dive Into Amazon Bedrock Agents and Guardrails at AWS re:Invent 2026 Las Vegas"
+    assert not shorten_title(title, 70).endswith(" re")  # type: ignore[union-attr]

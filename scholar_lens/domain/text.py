@@ -106,3 +106,19 @@ def escape_yaml_double_quoted(value: str) -> str:
     value = value.replace("\\", "\\\\").replace('"', '\\"')
     value = value.replace("\n", "\\n").replace("\t", "\\t").replace("\r", "\\r")
     return value
+
+
+def clip(text: str, limit: int = 300) -> str:
+    """``text`` (whitespace folded) within ``limit`` characters for a note:
+    cut after the last sentence end, else the last space, inside the limit,
+    and marked with "…"; whole when it fits."""
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    head = text[: limit - 1]
+    ends = [head.rfind(mark) for mark in (". ", "; ", "? ", "! ")]
+    cut = max(ends)
+    if cut >= limit // 2:
+        return head[: cut + 1].rstrip() + " …"
+    space = head.rfind(" ")
+    return (head[:space] if space >= limit // 2 else head).rstrip() + "…"

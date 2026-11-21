@@ -38,7 +38,7 @@
 
 출처마다 아래 네 가지를 수집 단계에서 한 번 정합니다. 이후 단계는 이 값만 씁니다.
 
-- `authority`: official, official_repo, reference, third_party, forum 중 하나
+- `authority`: official, official_repo, reference, third_party, forum, older_docs, dev_docs 중 하나(`domain/evidence.py::SourceAuthority`)
 - `version`: 문서 URL 버전, 저장소 태그, 패키지 릴리스 중 하나
 - `published`: 발행 날짜
 - `language`: SDK 언어

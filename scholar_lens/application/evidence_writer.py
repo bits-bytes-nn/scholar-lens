@@ -67,6 +67,7 @@ from scholar_lens.domain.markdown.lint import drop_empty_headings
 from scholar_lens.domain.markdown.math import unglue_fences
 from scholar_lens.domain.post_spec import Limits
 from scholar_lens.domain.prompts.rules import FIX_ANSWER
+from scholar_lens.domain.text import clip
 from scholar_lens.domain.usage_context import usage_stage
 from scholar_lens.domain.verifiers import Problem, VerifierSet, messages
 
@@ -943,7 +944,7 @@ class EvidenceWriter:
         if wrong:
             self.notes.append(
                 "Evidence that misstates its quote was left out: "
-                + "; ".join(f"{i} ({r[:120]})" for i, r in wrong.items())
+                + "; ".join(f"{i} ({clip(r, 200)})" for i, r in wrong.items())
             )
         return wrong
 
@@ -1254,7 +1255,7 @@ class EvidenceWriter:
                 f"{len(units)} sentences (more than "
                 f"{self.limits.max_drop_share:.0%}); none was deleted. Check the "
                 "section against its evidence: "
-                + " | ".join(f"{s[:120]} ({v[:80]})" for s, v in deleted[:5])
+                + " | ".join(f"{clip(s, 200)} ({clip(v, 120)})" for s, v in deleted[:5])
             )
             return draft
         if deleted:
@@ -1270,19 +1271,23 @@ class EvidenceWriter:
                     f"Section '{title}': {len(removed)} sentence(s) removed that "
                     "contradict their evidence, talk about the post's sources or "
                     "that their evidence does not support: "
-                    + " | ".join(f"{s[:120]} ({v[:80]})" for s, v in removed[:5])
+                    + " | ".join(
+                        f"{clip(s, 200)} ({clip(v, 120)})" for s, v in removed[:5]
+                    )
                 )
             if kept := [(s, v) for s, v in deleted if s in left]:
                 self.notes.append(
                     f"Section '{title}': fix by hand, {len(kept)} sentence(s) "
                     "their evidence does not support could not be removed: "
-                    + " | ".join(f"{s[:120]} ({v[:80]})" for s, v in kept[:5])
+                    + " | ".join(
+                        f"{clip(s, 200)} ({clip(v, 120)})" for s, v in kept[:5]
+                    )
                 )
         if shown:
             self.notes.append(
                 f"Section '{title}': check {len(shown)} sentence(s) "
                 "the evidence may not support: "
-                + " | ".join(f"{s[:120]} ({v})" for s, v in shown[:5])
+                + " | ".join(f"{clip(s, 200)} ({v})" for s, v in shown[:5])
             )
         return draft
 

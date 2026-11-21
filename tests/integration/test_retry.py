@@ -220,3 +220,24 @@ def test_only_the_callers_own_refusal_stops_optional_work() -> None:
     assert not stops_the_run(error("ValidationException"))
     assert not stops_the_run(error("ThrottlingException"))
     assert not stops_the_run(ValueError("bad JSON"))
+
+
+def test_the_backoff_spreads_concurrent_retries_also_at_the_cap() -> None:
+    import random
+    from unittest import mock
+
+    from scholar_lens.adapters.retry import backoff_wait
+
+    wait = backoff_wait(30, 120, rng=random.Random(7))
+
+    def at(attempt: int) -> float:
+        state = mock.Mock(attempt_number=attempt)
+        return wait(state)
+
+    first = [at(1) for _ in range(50)]
+    capped = [at(5) for _ in range(50)]
+    assert all(15 <= w <= 30 for w in first)
+    assert all(60 <= w <= 120 for w in capped)
+    # Throttled together, they do not retry together.
+    assert len({round(w, 3) for w in capped}) > 40
+    assert backoff_wait(30, 0)(mock.Mock(attempt_number=3)) == 0

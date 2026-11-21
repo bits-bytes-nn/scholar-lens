@@ -99,7 +99,7 @@ summary:
   chars_per_reader: 40000          # evidence engine: paper characters per reading agent
 
 tech_guide:
-  # The evidence engine writes the guide (docs/design.md 4.4–4.5): the relevance
+  # The evidence engine writes the guide (docs/design.md 4.2 and 4.5): the relevance
   # model gates the sources, plans the searches and files the guide; reading
   # agents use synopsis_model_id, the outline and sections writing_model_id,
   # the checks evaluation_model_id.

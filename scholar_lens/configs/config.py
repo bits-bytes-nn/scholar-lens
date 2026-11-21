@@ -294,7 +294,7 @@ DEMOTED_DOMAINS: dict[str, tuple[str, ...]] = {
 
 
 class TechGuide(_Section):
-    # The guide is written by the evidence engine (docs/design.md 4.4–4.5): the
+    # The guide is written by the evidence engine (docs/design.md 4.2, 4.5): the
     # relevance model gates the sources, plans the searches and files the
     # guide; reading agents use the synopsis model, the outline and sections
     # the writing model and the checks the evaluation model.
@@ -423,7 +423,7 @@ class Survey(_Section):
     # is skipped; past 1.5x the run aborts. A plan uses ~50k tokens.
     max_total_tokens: int | None = Field(default=300_000, gt=0)
 
-    # Write stage (`survey write`, the evidence engine; docs/design.md 4.4–4.5):
+    # Write stage (`survey write`, the evidence engine; docs/design.md 4.3, 4.5):
     # reading agents use card_model_id, the outline (and the finalization
     # call) outline_model_id, the sections writing_model_id and the checks
     # evaluation_model_id.

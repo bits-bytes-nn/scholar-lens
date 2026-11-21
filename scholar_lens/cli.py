@@ -52,6 +52,7 @@ from scholar_lens.domain.jobs import (
 )
 from scholar_lens.domain.survey.plan import SurveyInputError
 from scholar_lens.entrypoints.logs import configure_logging
+from scholar_lens.entrypoints.revision import image_revision
 
 EXIT_OK, EXIT_FAILED, EXIT_REJECTED, EXIT_PENDING, EXIT_ERROR = 0, 1, 2, 3, 4
 EXIT_PR_FAILED = 5
@@ -661,6 +662,7 @@ def _work_request(raw: str) -> int:
                 status="rejected",
                 error=f"Invalid job request: {e}",
                 job_id=job_id,
+                revision=image_revision(),
             )
         )
     try:
@@ -672,6 +674,7 @@ def _work_request(raw: str) -> int:
                 input=request.describe(),
                 error=f"{type(e).__name__}: {e}",
                 job_id=job_id,
+                revision=image_revision(),
             )
         )
     return _worker_exit(result, reported=not result.notification_failed)

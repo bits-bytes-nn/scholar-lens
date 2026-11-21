@@ -83,6 +83,7 @@ from scholar_lens.domain.review_plan import (
     section_source,
 )
 from scholar_lens.domain.text import (
+    clip,
     is_affirmative,
     parse_lines,
     parse_quality_score,
@@ -773,7 +774,7 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                 f"Review section '{section.title}' still has {len(open_items)} "
                 f"open must-fix/missing item(s) {when} (score {section.score}"
                 f"{done}): check it. Open: "
-                + "; ".join(item[:120] for item in open_items[:3])
+                + "; ".join(clip(item) for item in open_items[:3])
             )
         return notes
 

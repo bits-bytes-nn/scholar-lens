@@ -27,6 +27,16 @@ os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
 os.environ["AWS_SECURITY_TOKEN"] = "testing"
 os.environ["AWS_SESSION_TOKEN"] = "testing"
 os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+# Child processes (git, sandboxed programs) do not inherit the socket guard
+# below: git may use only local repositories, and HTTP from a child goes to a
+# closed local port instead of the network.
+os.environ["GIT_ALLOW_PROTOCOL"] = "file"
+# Port 9 ("discard") on loopback: the guard below treats a connection to it
+# as blocked network, so an in-process call that follows the proxy is caught.
+FENCE = ("127.0.0.1", 9)
+for _name in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy"):
+    os.environ[_name] = f"http://{FENCE[0]}:{FENCE[1]}"
+os.environ["NO_PROXY"] = os.environ["no_proxy"] = "127.0.0.1,localhost,::1"
 
 # Test output must not land in the repository's logs/ directory. The app's file
 # handler opens its file lazily, so dropping it here leaves no file behind.
@@ -69,8 +79,10 @@ def _block_network(
 
     def guarded_connect(self, address):  # type: ignore[no-untyped-def]
         host = address[0] if isinstance(address, tuple) else address
-        # Allow loopback (moto's local endpoints / responses internals).
-        if host in ("127.0.0.1", "::1", "localhost"):
+        port = address[1] if isinstance(address, tuple) and len(address) > 1 else None
+        # Allow loopback (moto's local endpoints / responses internals), but
+        # not the proxy fence: that is a real call that followed the proxy.
+        if host in ("127.0.0.1", "::1", "localhost") and port != FENCE[1]:
             return real_connect(self, address)
         blocked.append(address)
         raise RuntimeError(
@@ -78,7 +90,14 @@ def _block_network(
             "Mock it with `responses` or `moto`."
         )
 
+    real_connect_ex = socket.socket.connect_ex
+
     def guarded_connect_ex(self, address):  # type: ignore[no-untyped-def]
+        host = address[0] if isinstance(address, tuple) else address
+        port = address[1] if isinstance(address, tuple) and len(address) > 1 else None
+        if host in ("127.0.0.1", "::1", "localhost") and port != FENCE[1]:
+            # A local port probe gets its errno, as the real call returns it.
+            return real_connect_ex(self, address)
         guarded_connect(self, address)
         return 0
 
@@ -98,6 +117,8 @@ def _block_network(
     monkeypatch.setattr(socket.socket, "connect", guarded_connect)
     monkeypatch.setattr(socket.socket, "connect_ex", guarded_connect_ex)
     monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+    # The guard's own test reads (and clears) what was blocked.
+    request.node.blocked_network = blocked
     yield
     if blocked and request.node.get_closest_marker("blocked_network") is None:
         pytest.fail(
@@ -133,9 +154,16 @@ def tmp_papers_dir(tmp_path: Path) -> Path:
 def _no_arxiv_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     """The process-wide arXiv limiter (1 request per 3 s) would make every test
     that touches the arXiv client wait in real time."""
+    from scholar_lens.adapters.http.rate_limit import (
+        ARXIV_ASSET_LIMITER,
+        ARXIV_RATE_LIMITER,
+    )
     from scholar_lens.adapters.scholarly import arxiv as arxiv_handler
 
     monkeypatch.setattr(arxiv_handler._ARXIV_RATE_LIMITER, "acquire", lambda: None)
+    # A penalty one test sets (a 429's Retry-After) never carries into the next.
+    for limiter in (ARXIV_RATE_LIMITER, ARXIV_ASSET_LIMITER):
+        monkeypatch.setattr(limiter, "_blocked_until", 0.0)
 
 
 @pytest.fixture(autouse=True)

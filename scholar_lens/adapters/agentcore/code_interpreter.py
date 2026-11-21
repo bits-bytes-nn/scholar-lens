@@ -23,12 +23,11 @@ from botocore.config import Config as BotoConfig
 from botocore.exceptions import (
     BotoCoreError,
     ClientError,
-    NoCredentialsError,
-    TokenRetrievalError,
 )
 from urllib3.exceptions import HTTPError
 
 from scholar_lens.adapters.aws.session import AwsSession
+from scholar_lens.adapters.retry import stops_the_run
 from scholar_lens.application.ports import SandboxRun, SandboxUnavailable
 from scholar_lens.domain.program_run import RESULT_MARK
 
@@ -195,9 +194,9 @@ class AgentCoreCodeRunner:
                 clientToken=uuid.uuid4().hex + uuid.uuid4().hex[:8],
                 sessionTimeoutSeconds=min(work_s + _SESSION_MARGIN_S, _MAX_SESSION_S),
             )["sessionId"]
-        except (NoCredentialsError, TokenRetrievalError):
-            raise
         except (ClientError, BotoCoreError) as e:
+            if stops_the_run(e):
+                raise  # refused or expired credentials end the run (retry.py)
             raise SandboxUnavailable(f"could not start a session: {e}") from e
         try:
             # Two invocations, each well inside the 15-minute limit of a
@@ -220,9 +219,9 @@ class AgentCoreCodeRunner:
                 if failed:
                     is_error = True
                     break
-        except (NoCredentialsError, TokenRetrievalError):
-            raise
         except (ClientError, BotoCoreError, HTTPError) as e:
+            if stops_the_run(e):
+                raise
             # HTTPError: the event stream reads urllib3 directly (a read
             # timeout or a dropped connection mid-stream).
             raise SandboxUnavailable(f"could not run the code: {e}") from e

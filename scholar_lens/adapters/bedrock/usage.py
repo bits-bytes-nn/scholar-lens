@@ -152,15 +152,17 @@ class TokenUsageTracker(BaseCallbackHandler):
 class TokenBudgetGuard:
     """Shared total-token budget wiring for the generation pipelines.
 
-    All three generators (``PaperReviewer``, ``PaperSummarizer``,
-    ``TechGuideGenerator``) locate the run's :class:`TokenUsageTracker` in their
-    callback list and abort once cumulative spend passes ``max_total_tokens``.
-    Subclasses call :meth:`_init_token_budget` from
-    ``__init__`` and :meth:`_enforce_token_budget` at each expensive step.
-    The guide and survey pipelines use the two-tier budget instead: past the
-    soft limit (:meth:`_over_soft_token_budget`) they skip the optional
-    checks, past the hard ceiling (:meth:`_enforce_hard_token_budget`) they
-    abort.
+    The sections engine's ``PaperReviewer`` and ``PaperSummarizer`` locate the
+    run's :class:`TokenUsageTracker` in their callback list and abort once
+    cumulative spend passes ``max_total_tokens``; the survey plan's
+    ``SurveyCalls`` aborts only past the hard ceiling below. Subclasses call :meth:`_init_token_budget` from
+    ``__init__``; the paper writers call :meth:`_enforce_token_budget` before
+    each model call.
+    The survey plan and the review's late claim checks also use the soft
+    limit (:meth:`_over_soft_token_budget`: past it they skip the optional
+    checks); the survey plan aborts past the hard ceiling
+    (:meth:`_enforce_hard_token_budget`). The evidence
+    engines check their ceiling on every recorded call instead.
     """
 
     _token_tracker: TokenUsageTracker | None

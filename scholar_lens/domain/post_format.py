@@ -187,24 +187,59 @@ def resolve_topic(raw: str, spec: PostConventions) -> str | None:
     return None
 
 
+# Words a cut title should not end on ("… Reasoning via").
+_TRAILING_FUNCTION_WORDS = frozenset(
+    "a an and as at by for from in into of on or the to via vs with &".split()
+)
+
+
+def _function_word(word: str) -> bool:
+    """A trailing word to drop: a function word as a title writes it ("and",
+    "And", "vs."), never an acronym or a label letter ("OR", "Model A")."""
+    bare = word.rstrip(".")
+    return bare.lower() in _TRAILING_FUNCTION_WORDS and not (
+        bare.isupper() and bare.isalpha()
+    )
+
+
 def cut_title(title: str, limit: int) -> str:
-    """``title`` (whitespace collapsed) cut to ``limit`` at a word boundary."""
-    title = " ".join(title.split())
+    """``title`` (whitespace collapsed) cut to ``limit`` at a word boundary,
+    without a trailing function word or punctuation."""
+    whole = " ".join(title.split())
+    title = whole.strip(" :") or whole
     if len(title) <= limit:
         return title
-    cut = title[: limit + 1].rsplit(" ", 1)[0].rstrip(" :,-–—")
-    return cut or title[:limit]
+    head = title[: limit + 1]
+    head = head.rsplit(" ", 1)[0] if " " in head else head[:limit]
+    words = head.rstrip(" :,-–—&").split(" ")
+    while len(words) > 1 and _function_word(words[-1]):
+        words.pop()
+    cut = " ".join(words).rstrip(" :,-–—&")
+    return (cut or title)[:limit]
+
+
+# A seo_title shorter than this says too little in a search result (a bare
+# paper name, "GEPA", "ReWOO"); a short Korean title is still longer.
+SEO_TITLE_MIN_CHARS = 12
+
+
+def seo_title_too_thin(seo_title: str) -> bool:
+    """Whether a model's ``seo_title`` is too short to describe the post."""
+    return len(seo_title.strip()) < SEO_TITLE_MIN_CHARS
 
 
 def shorten_title(title: str, limit: int) -> str | None:
     """A paper's ``seo_title`` for a title over ``limit``: the part before
-    the colon (the paper's name) when it is usable, else the title cut at a
-    word boundary (:func:`cut_title`)."""
+    the colon when it is at least a third of ``limit`` (a name with its
+    claim, not a bare "GEPA"), else the title cut at a word boundary
+    (:func:`cut_title`), which keeps the name first as the extraction prompt
+    asks."""
     title = " ".join(title.split())
     if len(title) <= limit:
         return None
-    head = title.split(":", 1)[0].strip()
-    if ":" in title and 3 <= len(head) <= limit:
+    # ": " only: a colon inside a word ("re:Invent", "10:30") is no subtitle.
+    head, colon, _ = (part.strip() for part in title.partition(": "))
+    if colon and limit // 3 <= len(head) <= limit:
         return head
     return cut_title(title, limit)
 
@@ -238,7 +273,7 @@ def build_post_meta(
     seo = (proposed_seo_title or "").strip() or None
     if len(title) <= limit:
         seo = None
-    elif not seo or len(seo) > limit:
+    elif not seo or len(seo) > limit or seo_title_too_thin(seo):
         seo = shorten_title(title, limit)
     return PostMeta(
         topic=topic,

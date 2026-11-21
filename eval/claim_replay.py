@@ -97,6 +97,9 @@ class CaseScore:
     flags: int
     found: list[str] = field(default_factory=list)
     missed: list[str] = field(default_factory=list)
+    # Entries marked ``status: partial`` (only partly wrong), found or not.
+    partial_found: list[str] = field(default_factory=list)
+    partial_missed: list[str] = field(default_factory=list)
     other: list[str] = field(default_factory=list)
     clean: bool = False
 
@@ -109,7 +112,10 @@ def score_case(name: str, case: dict[str, Any], problems: list[str]) -> CaseScor
     matched: set[int] = set()
     for entry in truth:
         hits = [i for i, p in enumerate(problems) if found_by(p, entry["anchor"])]
-        (score.found if hits else score.missed).append(entry["id"])
+        if entry.get("status") == "partial":
+            (score.partial_found if hits else score.partial_missed).append(entry["id"])
+        else:
+            (score.found if hits else score.missed).append(entry["id"])
         matched.update(hits)
     score.other = [p for i, p in enumerate(problems) if i not in matched]
     return score
@@ -125,8 +131,10 @@ def load_truth(path: Path = TRUTH) -> dict[str, dict[str, Any]]:
 def report(scores: list[CaseScore]) -> dict[str, Any]:
     truth = sum(len(s.found) + len(s.missed) for s in scores)
     found = sum(len(s.found) for s in scores)
+    partial = sum(len(s.partial_found) + len(s.partial_missed) for s in scores)
     return {
         "recall": f"{found}/{truth}",
+        "partial_found": f"{sum(len(s.partial_found) for s in scores)}/{partial}",
         "clean_flags": sum(s.flags for s in scores if s.clean),
         "unconfirmed_flags": sum(len(s.other) for s in scores if not s.clean),
         "cases": [s.__dict__ for s in scores],
