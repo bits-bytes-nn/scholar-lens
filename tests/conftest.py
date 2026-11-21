@@ -140,12 +140,11 @@ def tmp_papers_dir(tmp_path: Path) -> Path:
 def _no_arxiv_rate_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     """The process-wide arXiv limiter (1 request per 3 s) would make every test
     that touches the arXiv client wait in real time."""
-    from scholar_lens.adapters.scholarly import arxiv as arxiv_handler
-
     from scholar_lens.adapters.http.rate_limit import (
         ARXIV_ASSET_LIMITER,
         ARXIV_RATE_LIMITER,
     )
+    from scholar_lens.adapters.scholarly import arxiv as arxiv_handler
 
     monkeypatch.setattr(arxiv_handler._ARXIV_RATE_LIMITER, "acquire", lambda: None)
     # A penalty one test sets (a 429's Retry-After) never carries into the next.
