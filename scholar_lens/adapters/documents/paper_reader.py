@@ -2,7 +2,7 @@
 the PDF) parsed with its figures analysed, its attributes (and, for the
 sections engine, its citations) extracted, and the codebase summary of its
 repositories. The sections engine's code index and citation summarizer are
-built by the factories the composition root passes in."""
+built by the factory functions the composition root passes in."""
 
 from __future__ import annotations
 

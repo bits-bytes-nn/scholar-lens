@@ -1,7 +1,7 @@
 """Deterministic quality metrics for a generated post.
 
-Measures what the redesign's acceptance criteria compare (docs/redesign.md,
-section 7) so the same harness scores the current generator and the new one:
+Measures the deterministic metrics the evaluation compares before judge
+scores (ADR 0002) so the same harness scores the current generator and the new one:
 blog validation, numbers repeated across sections, meta sentences, visuals,
 style frequencies and structure. Run on finished Markdown files:
 

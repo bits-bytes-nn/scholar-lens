@@ -6,6 +6,7 @@ Every CLI option, the survey plan file, resuming and republishing, outputs and e
 
 | Option | Commands | Effect |
 | --- | --- | --- |
+| `--engine sections\|evidence` | review, summarize | This run's writing engine instead of `explanation.engine` / `summary.engine` |
 | `--repo-url URL` | review, summarize | Ground the text in the paper's code (repeatable) |
 | `--parse-pdf` | review, summarize | Parse the PDF even when arXiv HTML exists |
 | `--paper-author ORG` | review, summarize | The paper's organisation for `paper_author` when the paper names none (a run stops before writing when neither the paper nor OpenAlex gives one) |
@@ -18,8 +19,11 @@ Every CLI option, the survey plan file, resuming and republishing, outputs and e
 | `--since YEAR`, `--until YEAR` | survey plan | Only papers from these years (required papers excepted) |
 | `--plan PATH_OR_S3_URI` | survey write | The plan file: a local path or `s3://<bucket>/<key>` in the configured bucket; with `--remote` a local plan is uploaded to `<s3_prefix>/surveys/<slug>/plan-<first 16 hex digits of its sha256>.json` first |
 | `--no-pr` | review, summarize, guide, survey write, publish | Save (and upload) the post but open no PR |
+| `--max-cost-usd USD` | review, summarize, guide, survey write | This run's cost ceiling (list prices) instead of the configured `max_cost_usd`; a Batch job otherwise uses the config.yaml of the last deploy |
 | `--fresh` | review, summarize, guide, survey write | Compute every stage again: ignore the saved stage checkpoints and the evidence cache (both are still written), and for a guide gather the sources again (implies `--fresh-sources`) |
 | `--remote` | review, summarize, guide, survey plan, survey write | Submit to AWS Batch and return the job id. The local credentials need `batch:SubmitJob` and `batch:ListJobs` (to find a submit whose answer was lost; without it such a submit stops with "may have been submitted"), plus `batch:DescribeJobs` for `status` and `batch:TerminateJob` for `cancel` |
+| `--resolved` | publish | The run's blocking problems are fixed in the edited post: they no longer block the PR and stay in its checklist as items to check |
+| `JOB_ID` | cancel | Stop a remote job: cancelled before it starts, terminated after; needs `batch:TerminateJob` |
 | `--wait`, `--timeout S` | status | Poll until the job finishes or `S` seconds pass (default 14400, four hours) |
 | `--since D`, `--until D`, `--by kind\|stage\|model\|day`, `--billed` | costs | Group the Batch runs that finished in `[since, until)` (UTC days) by kind, stage, model or day from their result manifests, with what failed runs spent; `--billed` adds Cost Explorer's cost of resources tagged `ProjectName=<resources.project_name>` (the stack and the per-kind Bedrock inference profiles); activate `ProjectName` (and `Kind`) as cost allocation tags in Billing first |
 
@@ -58,7 +62,7 @@ poetry run python scripts/put_secrets.py         # write .env secrets to SSM Sec
 poetry run python scripts/put_secrets.py github-token   # after rotating one secret
 ```
 
-Batch jobs use the `config.yaml` baked into the image at the last deploy, so re-run `cdk deploy --all` after editing it ([stack details](./design.md#10-인프라)).
+Batch jobs use the `config.yaml` baked into the image at the last deploy, so re-run `cdk deploy --all` after editing it ([stack details](./design.md#10-인프라)). The deploy refuses uncommitted changes to the image's sources (`scholar_lens/`, `pyproject.toml`, `poetry.lock`, `Dockerfile`, `.dockerignore`, `README.md`, `assets/post_conventions.yml`; the gitignored `config.yaml` is not one). Every `cdk` command runs this check, `cdk diff` included; set `SCHOLAR_LENS_ALLOW_DIRTY_DEPLOY=1` to preview or deploy them anyway (the image's revision then ends in `+dirty`). A prod deploy needs HEAD to be the remote's `main` (`git ls-remote`). The revision is the last commit that changed the image's sources, so a commit outside them (README.md is one) rebuilds nothing; a shallow clone is refused; it is baked into the image (`SCHOLAR_LENS_REVISION`, the OCI revision label) and every job result records it as `revision`.
 
 Batch jobs do not trace to LangSmith, even when tracing is on in the shell that deploys. To trace them, set `SCHOLAR_LENS_BATCH_TRACING=true` when running `cdk deploy --all`; the jobs then get `LANGCHAIN_TRACING_V2=true` and their prompts, which hold paper and blog text, go to LangSmith.
 

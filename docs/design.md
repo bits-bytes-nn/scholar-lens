@@ -1,6 +1,6 @@
 # Scholar-Lens 설계 문서
 
-현재 코드의 동작을 설명하는 기술 참조 문서입니다. 설치와 CLI 사용법은 [README](../README.ko.md)에 있고, 이 문서는 그 뒤에서 무엇이 어떻게 돌아가는지를 다룹니다. 코드 위치는 `파일::심볼` 형식으로 적습니다.
+현재 코드의 동작을 설명하는 기술 참조 문서입니다. 설치는 [README](../README.ko.md), CLI 옵션 전체는 [usage.md](./usage.md), 글쓰기 원칙은 [writing-principles.md](./writing-principles.md)에 있고, 이 문서는 그 뒤에서 무엇이 어떻게 돌아가는지를 다룹니다. 코드 위치는 `파일::심볼` 형식으로 적습니다.
 
 ## 목차
 
@@ -55,7 +55,7 @@ entrypoints (cli.py, entrypoints/, bootstrap.py)   인자 해석, Batch 워커, 
 application (use_cases/, run.py, 엔진, ports.py)   sections_engine/ (sections 엔진, bootstrap만 import)
       │                                   │
       ▼                                   ▼
-adapters (aws, bedrock, code, documents, github, http, packages, scholarly, web)
+adapters (agentcore, aws, bedrock, code, documents, github, http, packages, scholarly, web)
       │       어댑터는 domain과 application.ports만 import
       ▼
 domain (순수 코드: 모델, 규칙, 검증, Markdown, 프롬프트 본문)
@@ -88,7 +88,9 @@ domain (순수 코드: 모델, 규칙, 검증, Markdown, 프롬프트 본문)
 | `adapters/scholarly/` | arXiv, PDF, 논문 소스(`paper_source.py`), 서지 색인(`index.py`, `metadata.py`), 서베이 후보 단계(`candidates.py`), 계획 논문 색인(`plan_index.py`), 서베이 논문 원문과 근거 캐시(`survey_documents.py`) |
 | `adapters/web/` | 웹 조사(`research.py`), 수집 자료 저장본(`snapshot.py`), 가이드 자료 수집·분류(`guide_research.py`) |
 | `adapters/github/` | 발행기(`publisher.py`), 블로그 브랜치·PR 동기화(`blog_sync.py`), 블로그 규칙·글 조회(`conventions.py`) |
+| `adapters/agentcore/` | AgentCore Code Interpreter 샌드박스(`code_interpreter.py`), AgentCore Web Search(`web_search.py`) |
 | `adapters/code/`, `adapters/packages/`, `adapters/http/`, `adapters/retry.py` | 저장소 복제와 코드 요약, PyPI, SSRF 방지·IP 고정 전송·속도 제한, 재시도 정책 |
+| `adapters/files.py`, `adapters/conventions_file.py`, `adapters/checkpoint_version.py` | 로컬 경로와 실행 버킷의 `s3://` 경로 입출력(`Files` 포트), 블로그 규칙 사본(`assets/post_conventions.yml`) 읽기, 단계 중간 저장점을 만든 코드의 해시 |
 | `sections_engine/` | sections 엔진(리뷰·요약의 두 엔진 중 하나, 4.4절의 근거 장부 엔진과 같은 포트 뒤): 리뷰(`explainer.py`), 요약(`summarizer.py`), 표적 수정 검사(`section_loop.py`), 인용 요약, 메모리 안 코드 색인(`code_index.py`, `InMemoryVectorStore`), 임베딩, 배치 처리, 프롬프트, 포트 구현(`writers.py`) |
 | `scripts/` | CDK 스택, CI synth 검사, 비밀값 기록, 블로그 규칙 불일치 검사 |
 
@@ -558,9 +560,11 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
   - SNS 게시와 토픽 KMS 키 사용
   - `cloudwatch:PutMetricData`(`ScholarLens` 네임스페이스 조건)
   - SSM 비밀값 8개 읽기(`RUN_SECRETS`)
+  - 스택의 AgentCore Code Interpreter 세션 시작·호출·종료(그 인터프리터 하나)
+  - AgentCore Web Search 호출(`InvokeWebSearch`). 대상은 `tech_guide.web_search_region`의 관리형 도구 `web-search.v1` 하나이고, `tech_guide.web_search`에 `agentcore`가 없으면 붙지 않음
 - **SSM**: 스택은 `batch-job-queue`, `batch-job-definition`(String)을 씁니다. 비밀값(SecureString)은 CloudFormation이 만들 수 없으므로 `scripts/put_secrets.py`로 따로 기록합니다(이름을 주면 그 비밀값만). `cdk synth`/`diff`는 비밀값을 건드리지 않습니다. 실행 시 기록되지 않은 비밀값(`ParameterNotFound`)은 조용히 건너뜁니다. 권한·KMS 오류나 SDK 재시도 뒤에도 남은 스로틀처럼 다른 이유로 읽지 못하면, 비용이 들기 전에 실행을 실패시킵니다. 그대로 진행하면 검색 공급자나 API 키가 빠진 채 글이 조용히 나빠지기 때문입니다.
 - **비용 할당**: 모든 리소스에 `ProjectName`, `Stage`, `CostCenter`, `ManagedBy` 태그를 붙이고 Batch 인스턴스·볼륨에도 실행 템플릿으로 전파합니다. `BedrockProfilesStack`은 산출물 종류(`domain/cost_allocation.py::ARTIFACT_KINDS`)와 설정이 쓰는 모델(global 교차 리전 프로필)의 조합마다 응용 추론 프로필(`<project>-<stage>-<kind>-<model>`, `application_profile_name`)을 만들고 `Kind` 태그를 더합니다. `runtime.run_job`이 실행의 종류를 `cost_allocation`으로 정하고, 모델 팩토리가 그 이름의 프로필 ARN으로 호출합니다(`adapters/bedrock/chat_models.py::_allocated_profile`, 목록 조회는 프로세스마다 한 번). 프로필이 없거나 조회가 실패하면 시스템 프로필로 호출하므로 실행은 막히지 않고 태그만 빠집니다. 사용량 기록과 가격은 ARN이 아니라 원래 모델로 남깁니다(`domain/model_registry.py::profile_source`). 작업 역할은 계정의 `application-inference-profile/*` 호출도 허용합니다.
-- **설정 파일**: 이미지에는 배포하는 체크아웃의 `scholar_lens/configs/config.yaml`이 들어갑니다. 설정을 고치면 `cdk deploy --all`를 다시 해야 Batch에 반영됩니다. `scripts/deploy_infra.py::check_deployable`은 이 파일이나 `s3_bucket_name`이 없으면 배포를 멈춥니다. `cdk` 명령에는 `resources.profile_name`과 같은 `--profile`을 넘깁니다.
+- **설정 파일**: 이미지에는 배포하는 체크아웃의 `scholar_lens/configs/config.yaml`이 들어갑니다. 설정을 고치면 `cdk deploy --all`를 다시 해야 Batch에 반영됩니다. `scripts/deploy_infra.py::check_deployable`은 이 파일이나 `s3_bucket_name`이 없으면 배포를 멈춥니다. `source_revision`은 이미지에 들어갈 파일(`IMAGE_SOURCES`, `.dockerignore` 허용 목록을 포함함을 테스트가 확인)에 커밋하지 않은 변경이 있으면 모든 `cdk` 명령(`cdk diff` 포함)을 멈추고(`SCHOLAR_LENS_ALLOW_DIRTY_DEPLOY=1`이면 리비전 끝에 `+dirty`를 붙여 진행), prod 배포는 HEAD가 원격의 `main`(`git ls-remote`)일 때만 진행합니다. 리비전은 이미지 파일을 마지막으로 바꾼 커밋이라 그 밖의 파일만 바꾼 커밋(README.md는 이미지 파일)은 이미지를 다시 만들지 않습니다. 얕은 복제에서는 배포를 멈춥니다. 모든 `RUN` 뒤의 메타데이터로 `SCHOLAR_LENS_REVISION`과 OCI 리비전 라벨로 들어가고, 작업 결과의 `revision`에 남습니다. `cdk` 명령에는 `resources.profile_name`과 같은 `--profile`을 넘깁니다.
 - **알림**: KMS 암호화 SNS 토픽(SSL 강제)에 이메일을 구독합니다. 토픽 정책은 이 계정의 CloudWatch 경보(`aws:SourceAccount`·`aws:SourceArn` 조건)와 실패 규칙 하나의 EventBridge 게시만 허용합니다. EventBridge 대상이 자동으로 만드는 허용은 조건이 없으므로, 그 규칙이 아닌 게시를 막는 Deny 문을 따로 둡니다. 토픽 KMS 키의 EventBridge 허용은 CDK가 만든 그대로입니다.
 
 ## 11. 관측성
@@ -576,15 +580,15 @@ PR 본문(`build_pr_body`)에는 논문 ID, PDF URL, 파싱 방식, 글자 수, 
 
 ## 12. 테스트와 CI
 
-테스트는 `tests/unit/`(domain과 가짜 포트를 쓰는 application)과 `tests/integration/`(어댑터의 스텁·녹화 응답·moto, 엔트리포인트, 조립 지점, 끝에서 끝까지 실행)으로 나뉘고 모두 AWS·네트워크 없이 돕니다. 공용 `tests/conftest.py`가 루프백이 아닌 소켓 연결과 arXiv 속도 제한 대기를 막고, AWS는 moto, HTTP는 `responses`·httpx MockTransport, GitHub는 가짜 저장소 객체로 대신합니다. 파일 이름은 대체로 대상 모듈을 따릅니다(`test_<module>.py`). `tests/integration/test_e2e_pipeline.py`는 실제 모델이 내는 결함을 섞은 가짜 출력이 블로그 규칙을 통과하는 글이 되는지, 고칠 수 없는 글은 막히는지 봅니다. `tests/fixtures/blog_defects/`의 블로그 결함 원본은 error, 수정본은 통과해야 합니다. `tests/integration/test_infra_contract.py`는 가짜 계정으로 CDK를 synth해 작업 명령, 재시도 규칙, 실패 알림 규칙, IAM 범위, 실행 템플릿 루트 볼륨 암호화를 CLI·지표 이름과 대조합니다.
+테스트는 `tests/unit/`(domain과 가짜 포트를 쓰는 application)과 `tests/integration/`(어댑터의 스텁·녹화 응답·moto, 엔트리포인트, 조립 지점, 끝에서 끝까지 실행)으로 나뉘고 모두 AWS·네트워크 없이 돕니다. 공용 `tests/conftest.py`가 루프백이 아닌 소켓 연결과 arXiv 속도 제한 대기를 막고(코드가 막힌 연결의 오류를 삼켜도 그 테스트는 실패하며, 막힌 연결의 처리를 확인하는 테스트만 `blocked_network` 표시로 예외), 테스트용 AWS 키를 강제로 씁니다. AWS는 moto, HTTP는 `responses`·httpx MockTransport, GitHub는 가짜 저장소 객체로 대신합니다. 파일 이름은 대체로 대상 모듈을 따릅니다(`test_<module>.py`). `tests/integration/test_e2e_pipeline.py`는 실제 모델이 내는 결함을 섞은 가짜 출력이 블로그 규칙을 통과하는 글이 되는지, 고칠 수 없는 글은 막히는지 봅니다. `tests/fixtures/blog_defects/`의 블로그 결함 원본은 error, 수정본은 통과해야 합니다. `tests/integration/test_infra_contract.py`는 가짜 계정으로 CDK를 synth해 작업 명령, 재시도 규칙, 실패 알림 규칙, IAM 범위, 실행 템플릿 루트 볼륨 암호화를 CLI·지표 이름과 대조합니다.
 
-CI는 Action을 커밋 SHA로 고정합니다. `ci.yml`(`main` push, 모든 PR)은 lint(ruff, black `--check`, mypy, domain·application의 mypy `--strict`, 계층 계약 `lint-imports`: 1.1절), Python 3.12·3.13 테스트(커버리지 93% 이상), 설치한 의존성의 취약점 검사(`pip-audit`), Batch 이미지 빌드와 이미지 안 import 확인(PyMuPDF(`pymupdf`), 조립 지점과 모든 유스케이스), 잘못된 워커 요청이 JSON과 종료 코드 11로 끝나는지 확인, 브랜치 보호가 요구하는 CDK synth(`scripts/ci_synth_check.py`)를 실행합니다. `post-conventions.yml`은 사본과 블로그 정본을 비교합니다(`scripts/check_post_conventions.py`). 변경 때와 매주 월요일에 돌고, 저장소 변수 `BLOG_REPO`가 없으면 변경 때는 건너뛰지만 일정 실행은 실패합니다. 토큰이 있는데 정본이 없으면(404) 실패하고, 토큰이 없으면 비공개 저장소와 구분할 수 없어 건너뜁니다. `workflow-lint.yml`은 체크섬을 검증한 actionlint로 워크플로를 검사하고, Dependabot은 GitHub Actions, pip, Docker를 매주 확인합니다.
+CI는 Action을 커밋 SHA로 고정하고, 새 PR 실행이 같은 PR의 이전 실행을 취소합니다(`main` push는 취소하지 않음). `ci.yml`(`main` push, 모든 PR)은 `scripts/check.sh`로 lint(ruff, black `--check`, `scholar_lens`·`scripts`·`eval`의 mypy, domain·application의 mypy `--strict`, 계층 계약 `lint-imports`: 1.1절)와 Python 3.12·3.13 테스트(커버리지 93% 이상)를 돌리고, 설치한 의존성의 취약점 검사(`pip-audit`), Batch 이미지 빌드와 이미지 안 import 확인(PyMuPDF(`pymupdf`), 조립 지점과 모든 유스케이스), 잘못된 워커 요청이 JSON과 종료 코드 11로 끝나는지 확인, 브랜치 보호가 요구하는 CDK synth(`scripts/ci_synth_check.py`)를 실행합니다. `post-conventions.yml`은 사본과 블로그 정본을 비교합니다(`scripts/check_post_conventions.py`). 변경 때와 매주 월요일에 돌고, 저장소 변수 `BLOG_REPO`가 없으면 변경 때는 건너뛰지만 일정 실행은 실패합니다. 토큰이 있는데 정본이 없으면(404) 실패하고, 토큰이 없으면 비공개 저장소와 구분할 수 없어 건너뜁니다. `workflow-lint.yml`은 체크섬을 검증한 actionlint로 워크플로를 검사하고, Dependabot은 GitHub Actions, pip, Docker를 매주 확인합니다.
 
 Docker 이미지(`Dockerfile`)는 `python:3.12-slim` 기반 2단계 빌드입니다. 의존성은 `poetry.lock`에서 `--only main`으로 설치하고, 런타임에는 `git`, `tzdata`, `fonts-dejavu-core`(SVG 그림 래스터화용 글꼴)를 더하며, NLTK `punkt_tab`을 빌드 때 받아 `NLTK_DATA`로 지정하고 non-root로 실행합니다. `.dockerignore`는 허용 목록 방식이라 `pyproject.toml`, `poetry.lock`, `README.md`, `assets/post_conventions.yml`, `scholar_lens/`만 빌드 컨텍스트에 들어갑니다.
 
 ## 13. 확장 지점
 
-- **새 산출물 종류**: `domain/jobs.py::ArtifactKind`, `domain/validation.py::ArtifactKind`(글을 발행하는 종류만), `cli.py::_raw_kind`, `entrypoints/runtime.py::_KIND_LABELS`에 값을 더하고, 파이프라인 모듈을 만들어 `bootstrap.py::run_use_case`에서 분기하며, `domain/validation.py`에 그 종류의 규칙을 정합니다.
+- **새 산출물 종류**: `domain/jobs.py::ArtifactKind`, `domain/validation.py::ArtifactKind`(글을 발행하는 종류만), `entrypoints/runtime.py::_KIND_LABELS`에 값을 더하고(`cli.py::_raw_kind`는 `ArtifactKind`에서 읽음), 파이프라인 모듈을 만들어 `bootstrap.py::run_use_case`에서 분기하며, `domain/validation.py`에 그 종류의 규칙을 정합니다.
 - **새 모델**: `domain/constants.py::LanguageModelId`와 `domain/model_registry.py`의 레지스트리(컨텍스트, 출력 상한, thinking 방식, 단가)에 추가합니다.
 - **새 검색 제공자**: `adapters/web/research.py::WebSearchProvider`를 구현하고 `bootstrap.py::build_search_provider`에 연결합니다.
 - **블로그 규칙 변경**: 블로그의 `_data/post_conventions.yml`을 고치고 `assets/post_conventions.yml`에 같은 내용을 복사합니다. 새 규칙 종류가 필요하면 `domain/conventions.py`의 모델과 `domain/validation.py`에 함께 추가합니다.

@@ -354,3 +354,141 @@ def test_the_cost_alarm_follows_the_run_ceilings() -> None:
     config = Config()
     config.tech_guide.max_cost_usd = 90.0
     assert cost_alarm_usd(config) == 180.0
+
+
+class TestSourceRevision:
+    @staticmethod
+    def _repo(tmp_path: Path) -> Path:
+        import subprocess
+
+        def git(*args: str) -> None:
+            subprocess.run(
+                ["git", *args], cwd=tmp_path, check=True, capture_output=True
+            )
+
+        tmp_path.mkdir(parents=True, exist_ok=True)
+        git("init", "-q", "-b", "main")
+        git("config", "user.email", "t@example.com")
+        git("config", "user.name", "t")
+        (tmp_path / "scholar_lens").mkdir()
+        (tmp_path / "scholar_lens" / "a.py").write_text("x = 1\n")
+        (tmp_path / "notes.txt").write_text("not shipped\n")
+        git("add", "scholar_lens")
+        git("commit", "-q", "-m", "init")
+        return tmp_path
+
+    def test_a_clean_checkout_gives_its_commit(self, tmp_path: Path) -> None:
+        from scripts.deploy_infra import source_revision
+
+        repo = self._repo(tmp_path)
+        # An untracked file outside the image sources does not count.
+        revision = source_revision(repo, "dev")
+        assert len(revision) == 12 and "+" not in revision
+
+    @pytest.mark.parametrize("change", ["edit", "new_file"])
+    def test_uncommitted_image_sources_are_refused(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str
+    ) -> None:
+        from scripts.deploy_infra import ALLOW_DIRTY_ENV, source_revision
+
+        repo = self._repo(tmp_path)
+        target = repo / "scholar_lens" / ("a.py" if change == "edit" else "b.py")
+        target.write_text("x = 2\n")
+        monkeypatch.delenv(ALLOW_DIRTY_ENV, raising=False)
+        with pytest.raises(SystemExit, match="Uncommitted changes"):
+            source_revision(repo, "dev")
+        monkeypatch.setenv(ALLOW_DIRTY_ENV, "1")
+        assert source_revision(repo, "dev").endswith("+dirty")
+        # Never for prod, even when allowed.
+        with pytest.raises(SystemExit):
+            source_revision(repo, "prod")
+
+    def test_a_commit_outside_the_image_keeps_the_revision(
+        self, tmp_path: Path
+    ) -> None:
+        import subprocess
+
+        from scripts.deploy_infra import source_revision
+
+        repo = self._repo(tmp_path)
+        before = source_revision(repo, "dev")
+        (repo / "notes.txt").write_text("docs only\n")
+        subprocess.run(["git", "add", "notes.txt"], cwd=repo, check=True)
+        subprocess.run(
+            ["git", "commit", "-q", "-m", "docs"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+        # No image source changed: the same image, no new job definition.
+        assert source_revision(repo, "dev") == before
+
+    def test_a_shallow_clone_is_refused(self, tmp_path: Path) -> None:
+        import subprocess
+
+        from scripts.deploy_infra import source_revision
+
+        repo = self._repo(tmp_path / "full")
+        (repo / "scholar_lens" / "a.py").write_text("x = 4\n")
+        subprocess.run(
+            ["git", "commit", "-qam", "two"], cwd=repo, check=True, capture_output=True
+        )
+        shallow = tmp_path / "shallow"
+        subprocess.run(
+            ["git", "clone", "-q", "--depth", "1", f"file://{repo}", str(shallow)],
+            check=True,
+            capture_output=True,
+        )
+        with pytest.raises(SystemExit, match="full clone"):
+            source_revision(shallow, "dev")
+
+    def test_prod_ships_only_the_remotes_main(self, tmp_path: Path) -> None:
+        import subprocess
+
+        from scripts.deploy_infra import source_revision
+
+        repo = self._repo(tmp_path / "work")
+        remote = tmp_path / "origin.git"
+        subprocess.run(["git", "init", "-q", "--bare", str(remote)], check=True)
+        for args in (
+            ["remote", "add", "origin", str(remote)],
+            ["push", "-q", "origin", "main"],
+        ):
+            subprocess.run(["git", *args], cwd=repo, check=True, capture_output=True)
+        assert source_revision(repo, "prod")
+        # A local commit main does not have yet is refused.
+        (repo / "scholar_lens" / "a.py").write_text("x = 3\n")
+        subprocess.run(
+            ["git", "commit", "-qam", "ahead"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+        with pytest.raises(SystemExit, match="remote's main"):
+            source_revision(repo, "prod")
+
+    def test_the_guard_watches_everything_the_image_ships(self) -> None:
+        from scripts.deploy_infra import IMAGE_SOURCES
+
+        root = Path(__file__).parents[2]
+        shipped = [
+            line[1:].strip().strip("/")
+            for line in (root / ".dockerignore").read_text().splitlines()
+            if line.startswith("!")
+        ]
+        assert shipped and all(
+            any(path == src or path.startswith(src + "/") for src in IMAGE_SOURCES)
+            for path in shipped
+        ), shipped
+
+    def test_the_image_carries_the_revision_in_its_last_layers(self) -> None:
+        dockerfile = (Path(__file__).parents[2] / "Dockerfile").read_text()
+        # After every RUN: a new revision rebuilds no layer.
+        last_run = dockerfile.rindex("\nRUN ")
+        for line in (
+            "ARG SOURCE_REVISION",
+            "LABEL org.opencontainers",
+            "ENV SCHOLAR_LENS_REVISION",
+        ):
+            assert dockerfile.index(line) > last_run, line
+        assert "ENV SCHOLAR_LENS_REVISION=${SOURCE_REVISION}" in dockerfile

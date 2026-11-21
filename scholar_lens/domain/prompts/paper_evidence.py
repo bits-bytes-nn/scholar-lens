@@ -1,5 +1,5 @@
-"""Prompts of the evidence-based paper review and summary (docs/redesign.md,
-3.2, 5.1-5.2). Deterministic checks in ``scholar_lens.domain`` enforce what
+"""Prompts of the evidence-based paper review and summary (docs/design.md
+4.4, docs/writing-principles.md). Deterministic checks in ``scholar_lens.domain`` enforce what
 code can check."""
 
 from __future__ import annotations

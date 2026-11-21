@@ -198,7 +198,7 @@ PostSpec ──┐            SourceSet ──┐
 
 | 계층 | 위치 | 담는 것 | 의존 가능 대상 |
 | --- | --- | --- | --- |
-| domain | `scholar_lens/domain` | 근거·개요·명세, 검증기 중 코드 판정, 편집 트랜잭션, Markdown, 블로그 규칙 | 표준 라이브러리, pydantic |
+| domain | `scholar_lens/domain` | 근거·개요·명세, 검증기 중 코드 판정, 편집 트랜잭션, Markdown, 블로그 규칙 | 표준 라이브러리, pydantic, PyYAML |
 | application | `scholar_lens/application` | `PostEngine`, 유스케이스(생성, 발행, 재개, 상태, 비용), 포트 | domain |
 | adapters | `scholar_lens/adapters` | Bedrock·Strands, 웹 수집·검색, 학술 색인·문서, 패키지 색인, S3, GitHub, Batch | domain, application의 포트 |
 | sections_engine | `scholar_lens/sections_engine` | 리뷰·요약의 sections 엔진(계획, 절 집필·검수, 편집, 마무리), `SectionsWriter` 포트 구현 | domain, application의 포트, adapters |
@@ -242,7 +242,7 @@ PostSpec ──┐            SourceSet ──┐
 
 ## 7. 과적합 방지와 평가
 
-- **평가셋 분리**: 개발용(Strands, vLLM, Zep, LoRA, RLHF 서베이)과 확인용(Ray Serve, DPO, Kimi, ToolOrchestra, 보안 서베이)으로 나눕니다. 기본값 변경은 확인용으로 판단합니다.
+- **평가셋 분리**: 프롬프트와 검사를 맞춘 항목은 개발용, 그렇지 않은 항목은 확인용입니다(`eval/sets/baseline.yaml`의 `split`). 지금 확인용은 리뷰 3건(Mamba, FlashAttention-2, KAN)뿐이라, 요약·가이드·서베이의 기본값 변경은 확인용 항목을 먼저 정해야 판단할 수 있습니다.
 - **판정 절차**: 판정마다 새 세션을 쓰고 X·Y로 가립니다. 수집 자료를 고정하고, 설정마다 생성을 2회 합니다. F는 주장 오류율로 봅니다. 차이가 잡음의 2배 이상일 때만 채택합니다.
 - **결정 지표**: 결정적 지표(반복률, 규칙 위반, 근거 없는 문장 수, 단계별 토큰·비용)와 A·C·T1을 우선합니다.
 

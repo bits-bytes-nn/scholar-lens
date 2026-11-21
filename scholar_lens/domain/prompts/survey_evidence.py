@@ -1,4 +1,4 @@
-"""Prompts of the evidence-based survey engine (docs/redesign.md, 3.2-3.4, 5.1).
+"""Prompts of the evidence-based survey engine (docs/design.md 4.3, docs/writing-principles.md).
 
 Each stage gets the rules it acts on; deterministic checks in
 ``scholar_lens.domain`` enforce what code can check, and their messages come

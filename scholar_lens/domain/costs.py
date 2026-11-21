@@ -1,5 +1,5 @@
 """Cost reporting over finished runs: totals grouped by kind, stage, model or
-day, with what failed and rejected runs spent (docs/redesign.md, 4.4)."""
+day, with what failed and rejected runs spent (docs/design.md, 11)."""
 
 from __future__ import annotations
 

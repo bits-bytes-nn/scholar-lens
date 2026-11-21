@@ -1,4 +1,4 @@
-"""The evidence-based paper review and summary (docs/redesign.md, 3.2 and 5.2):
+"""The evidence-based paper review and summary (docs/design.md, 4.4):
 an outline that gives each piece of the paper's evidence to one section, in
 the post's order, and the fixed parts of each kind.
 

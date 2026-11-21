@@ -233,9 +233,11 @@ class JobResult(BaseModel):
     # caller decides on this list.
     blocking: list[str] = Field(default_factory=list)
     error: str | None = None
-    # Blog-convention violations that blocked publishing (see post_validator).
+    # Blog-convention violations that blocked publishing (see domain.validation).
     violations: list[str] = Field(default_factory=list)
     job_id: str | None = None
+    # The commit the running code was built from (a Batch image's), when known.
+    revision: str | None = None
     duration_seconds: float = 0.0
     # Every token the models read (cache reads and writes included, as the
     # run's budget counts them) and wrote; ``usage`` splits them.

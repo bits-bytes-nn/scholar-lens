@@ -1,4 +1,4 @@
-"""The evidence-based survey (docs/redesign.md, 3.2): an outline that gives
+"""The evidence-based survey (docs/design.md, 4.3): an outline that gives
 each piece of evidence to one section, the code-built tables, and the
 deterministic checks of a section draft whose sentences cite evidence as
 ``[[E12]]``."""

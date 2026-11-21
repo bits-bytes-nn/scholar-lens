@@ -1,4 +1,4 @@
-"""Source documents and the evidence ledger (docs/redesign.md, 3.3).
+"""Source documents and the evidence ledger (docs/design.md, 4.5).
 
 A reading agent records what a post may say about a source (a paper, a
 documentation page, a design post) as evidence: a claim with the verbatim

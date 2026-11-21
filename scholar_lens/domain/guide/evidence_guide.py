@@ -1,4 +1,4 @@
-"""The evidence-based guide (docs/redesign.md, 3.2 and 5.1): an outline that
+"""The evidence-based guide (docs/design.md 4.2, docs/writing-principles.md): an outline that
 gives each piece of evidence to one section in the guide's order (TL;DR, the
 problem, concepts and architecture before usage and operations, a closing on
 when to choose it and how it fails), and the guide-only checks of a section

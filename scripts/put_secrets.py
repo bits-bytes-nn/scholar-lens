@@ -18,11 +18,10 @@ from pathlib import Path
 import boto3
 
 sys.path.append(str(Path(__file__).parent.parent))
-from scholar_lens.configs import Config
 from scholar_lens.domain.constants import RUN_SECRETS, SSMParams
 from scholar_lens.domain.jobs import ssm_base
 from scholar_lens.entrypoints.logs import get_default_logger
-from scripts.deploy_infra import deploy_session
+from scripts.deploy_infra import deploy_config, deploy_session
 
 logger = get_default_logger()
 
@@ -60,7 +59,7 @@ def main(argv: list[str] | None = None) -> None:
     wanted = set(parser.parse_args(argv).params)
     if unknown := wanted - set(known):
         parser.error(f"unknown parameter(s): {', '.join(sorted(unknown))}")
-    config = Config.load()  # also loads .env
+    config = deploy_config()  # the deployed config; also loads .env
     secrets = {
         param: os.getenv(env.value)
         for param, env in RUN_SECRETS.items()

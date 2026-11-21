@@ -43,7 +43,7 @@
 
 ![AWS 아키텍처](./docs/diagrams/aws-architecture.png)
 
-단계와 규칙은 [docs/design.md](./docs/design.md), 엔진은 [docs/engine.md](./docs/engine.md)에 있습니다.
+단계와 규칙은 [docs/design.md](./docs/design.md), 엔진은 [docs/engine.md](./docs/engine.md), 모든 글이 따르는 글쓰기 원칙은 [docs/writing-principles.md](./docs/writing-principles.md), CLI 옵션 전체는 [docs/usage.md](./docs/usage.md)에 있습니다.
 
 ## 빠른 시작
 
@@ -84,7 +84,7 @@ poetry run python -m scholar_lens publish papers/<dir>/<post>.rejected.md   # �
 
 옵션 전체, 서베이 계획 형식, 재개와 재게시, 종료 코드, 설정 키는 [docs/usage.md](./docs/usage.md)(영문)에 있습니다.
 
-에이전트(OpenClaw, Claude Code, Codex)는 `~/Projects/agent-config/skills/scholar-lens/SKILL.md` 스킬을 통해 같은 CLI를 호출합니다.
+에이전트(OpenClaw, Claude Code, Codex)는 스킬을 통해 같은 CLI를 호출할 수 있습니다. 관리자가 쓰는 스킬은 별도의 비공개 설정 저장소에 있습니다.
 
 ## 설정
 
@@ -106,19 +106,17 @@ cdk deploy --all --profile <profile_name>
 poetry run python scripts/put_secrets.py     # .env 비밀값을 SSM에 저장
 ```
 
-Batch 작업은 마지막 배포 때 이미지에 넣은 `config.yaml`을 씁니다. 설정을 바꾸면 다시 배포합니다. 추적, 경보, 스택은 [docs/usage.md](./docs/usage.md#deploy-to-aws)를 봅니다.
+Batch 작업은 마지막 배포 때 이미지에 넣은 `config.yaml`을 씁니다. 설정을 바꾸면 다시 배포합니다. 배포는 이미지에 들어갈 코드·잠금 파일·Dockerfile에 커밋하지 않은 변경이 있으면 멈추고, 이미지에 들어가는 파일을 마지막으로 바꾼 커밋을 이미지에 남깁니다(작업 결과의 `revision`). 추적, 경보, 스택은 [docs/usage.md](./docs/usage.md#deploy-to-aws)를 봅니다.
 
 ## 개발
 
 ```bash
-poetry run pytest tests/          # AWS나 네트워크 없이 실행
-poetry run ruff check scholar_lens scripts tests
-poetry run black --check scholar_lens scripts tests
-poetry run mypy scholar_lens scripts
-poetry run lint-imports           # 계층 계약
+scripts/check.sh                  # CI와 같은 검사: lint, 형식, 계층 계약, 테스트(AWS·네트워크 없이)
+scripts/check.sh lint             # ruff, black, mypy(domain·application은 strict), lint-imports
+scripts/check.sh test -x          # 커버리지 기준이 있는 pytest. 뒤의 인수는 pytest에 넘김
 ```
 
-CI는 이 검사에 더해 커버리지, pip-audit, CDK synth 검사, Docker 빌드를 실행합니다. 변경 내역은 [CHANGELOG.md](./CHANGELOG.md)에 있습니다.
+CI도 같은 스크립트를 실행하고, 여기에 pip-audit, CDK synth 검사, Docker 빌드를 더합니다. 변경 내역은 [CHANGELOG.md](./CHANGELOG.md)에 있습니다.
 
 ## 라이선스
 

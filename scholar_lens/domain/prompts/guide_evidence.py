@@ -1,4 +1,4 @@
-"""Prompts of the evidence-based guide engine (docs/redesign.md, 3.2, 5.1).
+"""Prompts of the evidence-based guide engine (docs/design.md 4.2, docs/writing-principles.md).
 
 A guide teaches a tool or technique from its documentation and the design
 material around it: what it is and the problem it solves, how it works

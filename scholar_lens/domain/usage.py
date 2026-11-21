@@ -1,6 +1,6 @@
 """Model-call usage: one record per call and the run's breakdown.
 
-The record is the unit of cost tracking (docs/redesign.md, section 4.4): every
+The record is the unit of cost tracking (docs/design.md, section 8.3): every
 model call yields one, the run's ``JobResult.usage`` sums them by stage and
 model, and the structured log keeps each one for later reporting.
 """

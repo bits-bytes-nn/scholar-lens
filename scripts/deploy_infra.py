@@ -7,6 +7,7 @@ the CloudFormation template; secrets are written to SSM separately by
 
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 from typing import Any
@@ -126,6 +127,7 @@ class PaperReviewStack(Stack):
         environment_vars: dict[str, str] | None = None,
         cost_alarm_usd: float,
         web_search_region: str | None = None,
+        source_revision: str = "unknown",
         **kwargs: Any,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -137,6 +139,7 @@ class PaperReviewStack(Stack):
         self.bedrock_region_name = bedrock_region_name
         self.cost_alarm_usd = cost_alarm_usd
         self.web_search_region = web_search_region
+        self.source_revision = source_revision
         # Keep encryption keys and logs when a prod stack is deleted.
         self.removal_policy = (
             RemovalPolicy.RETAIN if stage == "prod" else RemovalPolicy.DESTROY
@@ -474,6 +477,7 @@ class PaperReviewStack(Stack):
             platform=Platform.LINUX_AMD64,
             # .dockerignore is an allowlist: only the files the build needs.
             ignore_mode=core.IgnoreMode.DOCKER,
+            build_args={"SOURCE_REVISION": self.source_revision},
         )
         self.log_group = logs.LogGroup(
             self,
@@ -837,6 +841,14 @@ def deploy_session(config: Config) -> boto3.Session:
     )
 
 
+def deploy_config() -> Config:
+    """The config the image bakes in (``CONFIG_PATH``), never an evaluation
+    run's override (``SCHOLAR_LENS_CONFIG``): the stack's IAM scope and the
+    secrets' SSM path must be the jobs'. Loads ``.env`` first."""
+    load_dotenv()
+    return Config.from_yaml(CONFIG_PATH) if CONFIG_PATH.exists() else Config()
+
+
 def check_deployable(config_path: Path, config: Config) -> None:
     """The image bakes in ``config.yaml`` and every job needs the bucket, so a
     deploy without either would yield jobs that all fail."""
@@ -848,12 +860,88 @@ def check_deployable(config_path: Path, config: Config) -> None:
         raise SystemExit("resources.s3_bucket_name must name an existing S3 bucket.")
 
 
+# What the image is built from (the .dockerignore allowlist): a change here
+# that is not committed would ship without review.
+IMAGE_SOURCES = (
+    "Dockerfile",
+    ".dockerignore",
+    "pyproject.toml",
+    "poetry.lock",
+    "README.md",
+    "assets/post_conventions.yml",
+    "scholar_lens",
+)
+# Set to deploy a checkout with uncommitted image sources anyway (the image
+# then says so in its revision).
+ALLOW_DIRTY_ENV = "SCHOLAR_LENS_ALLOW_DIRTY_DEPLOY"
+
+
+def _git(repo: Path, *args: str, timeout: float = 30) -> str:
+    try:
+        done = subprocess.run(
+            ["git", *args],
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+            # Never wait at a credential or passphrase prompt.
+            env={**os.environ, "GIT_TERMINAL_PROMPT": "0"},
+        )
+    except subprocess.TimeoutExpired as e:
+        raise SystemExit(f"git {' '.join(args)} timed out after {timeout:g} s") from e
+    if done.returncode != 0:
+        raise SystemExit(f"git {' '.join(args)} failed: {done.stderr.strip()}")
+    return done.stdout.strip()
+
+
+def source_revision(repo: Path, stage: str) -> str:
+    """The last commit that changed the image sources (a commit outside them
+    keeps the image, so no rebuild and no new job definition; README.md is
+    one of them). A shallow clone is refused (its boundary commit would be
+    the label). A
+    checkout whose image sources differ from HEAD (tracked changes or new
+    files; the gitignored config.yaml is not one) is refused unless
+    ``ALLOW_DIRTY_ENV`` is set, and then the revision ends in "+dirty". Every
+    cdk command runs this, ``cdk diff`` included. A prod deploy also needs
+    HEAD to be the remote's main (read with ``git ls-remote``, not a local
+    ref that may lag)."""
+    if _git(repo, "rev-parse", "--is-shallow-repository") == "true":
+        # The shallow boundary looks like it added every file: a wrong label.
+        raise SystemExit("Deploy from a full clone (`git fetch --unshallow`).")
+    revision = _git(
+        repo, "log", "-1", "--format=%h", "--abbrev=12", "--", *IMAGE_SOURCES
+    )
+    if not revision:
+        raise SystemExit("No commit holds the image sources; commit them first.")
+    changed = _git(repo, "status", "--porcelain", "--", *IMAGE_SOURCES)
+    if changed:
+        if os.getenv(ALLOW_DIRTY_ENV) != "1":
+            raise SystemExit(
+                "Uncommitted changes would ship in the image:\n"
+                f"{changed}\nCommit them, or set {ALLOW_DIRTY_ENV}=1 to deploy "
+                "them anyway."
+            )
+        logger.warning("Deploying uncommitted image sources:\n%s", changed)
+        revision += "+dirty"
+    if stage == "prod":
+        head = _git(repo, "rev-parse", "HEAD")
+        # Needs network access to origin: a local ref may lag the remote.
+        main_line = _git(repo, "ls-remote", "origin", "refs/heads/main")
+        main_head = main_line.split()[0] if main_line else ""
+        dirty = revision.endswith("+dirty")
+        if head != main_head or dirty:
+            state = " with uncommitted changes" if dirty else ""
+            raise SystemExit(
+                "A prod deploy ships the remote's main "
+                f"({main_head[:12] or 'none'}); HEAD is {head[:12]}{state}."
+            )
+    return revision
+
+
 def main() -> None:
     try:
-        # The file the image bakes, never an evaluation run's override
-        # (SCHOLAR_LENS_CONFIG): the stack's IAM scope must match the jobs'.
-        load_dotenv()
-        config = Config.from_yaml(CONFIG_PATH) if CONFIG_PATH.exists() else Config()
+        config = deploy_config()
         check_deployable(CONFIG_PATH, config)
         resources = config.resources
         logger.info(
@@ -891,6 +979,9 @@ def main() -> None:
             environment_vars=env_vars,
             cost_alarm_usd=cost_alarm_usd(config),
             web_search_region=web_search_region(config),
+            source_revision=source_revision(
+                Path(__file__).parent.parent, resources.stage
+            ),
             env=core.Environment(
                 account=account_id, region=resources.default_region_name
             ),

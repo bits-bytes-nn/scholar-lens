@@ -38,5 +38,11 @@ COPY assets/post_conventions.yml ./assets/post_conventions.yml
 # checkout: Batch jobs run with the config as of the last `cdk deploy`.
 COPY scholar_lens ./scholar_lens
 RUN useradd --create-home --uid 10001 appuser && chown -R appuser:appuser /app
+# The last commit that changed what the image ships (scripts/deploy_infra.py):
+# job results and logs carry it. After every RUN, so a new revision rebuilds
+# no layer.
+ARG SOURCE_REVISION=unknown
+LABEL org.opencontainers.image.revision=${SOURCE_REVISION}
+ENV SCHOLAR_LENS_REVISION=${SOURCE_REVISION}
 USER appuser
 CMD ["python3", "-m", "scholar_lens", "--help"]

@@ -273,6 +273,9 @@ async def test_blocking_problems_lead_the_warnings_and_the_pr_body(
         ),
     )
     context.conventions, context.blog_posts, context.blog_tags = spec, [], {}
+    # The blog's conventions as the run started with them: publishing re-reads
+    # them, and the real BlogSource would call GitHub.
+    context.blog = _UnchangedBlog(spec)  # type: ignore[assignment]
     generator = FakeGuideGenerator(
         "vLLM Serving Guide",
         "Language-Models",
@@ -458,3 +461,13 @@ async def test_the_guide_publishes_only_links_to_its_gathered_pages(
         "Unlinked 1 link" in w and "blog.example.org/made-up" in w
         for w in outcome.warnings
     )
+
+
+class _UnchangedBlog:
+    """A blog whose conventions are the ones the run started with."""
+
+    def __init__(self, conventions: object) -> None:
+        self._conventions = conventions
+
+    def conventions(self, *, fallback: bool = True) -> object:
+        return self._conventions

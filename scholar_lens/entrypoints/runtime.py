@@ -209,7 +209,14 @@ def with_overrides(config: Config, request: JobRequest) -> Config:
 def run_job(request: JobRequest, *, job_id: str | None = None) -> JobResult:
     """Run ``request`` and return its result; never raises for pipeline errors
     (a ``SystemExit``/``KeyboardInterrupt`` still propagates after cleanup)."""
-    result = JobResult(kind=request.kind, input=request.describe(), job_id=job_id)
+    result = JobResult(
+        kind=request.kind,
+        input=request.describe(),
+        job_id=job_id,
+        revision=os.getenv(EnvVars.REVISION.value) or None,
+    )
+    if result.revision:
+        logger.info("Running %s at revision %s.", request.kind, result.revision)
     try:
         # Resolved before the run: an except clause that imports could raise.
         rejected_errors = _rejected_input_errors()

@@ -1,6 +1,6 @@
 # 평가 결과
 
-평가셋(`eval/sets/`)으로 잰 결과를 시간순으로 기록합니다. 판정 절차는 `eval/JUDGE.md`, 합격 기준은 `docs/redesign.md` 7장과 ADR 0002에 있습니다. 각 절의 원자료는 `eval/runs/` 아래 같은 이름의 폴더에 있습니다. 절 번호는 이전 `docs/redesign.md`의 7.x절 번호와 같습니다.
+평가셋(`eval/sets/`)으로 잰 결과를 시간순으로 기록합니다. 판정 절차는 `eval/JUDGE.md`, 채택 기준은 ADR 0002에 있습니다(1–2절의 기준선과 근거 장부 엔진 채택은 당시 기준인 `docs/redesign.md` 7장으로 판단했습니다). 각 절의 원자료는 대체로 `eval/runs/` 아래 같은 이름의 폴더에 있습니다. 예외: 7절은 `guide-compare-v1`, 13·14절(claim-replay, claim-replay-2)은 임시 스크립트로 돌려 원자료를 남기지 않았고, 반복 개선 중의 중간 판(`*-v<N>`)은 최종 판만 본문에서 다룹니다. 절 번호는 이전 `docs/redesign.md`의 7.x절 번호와 같습니다.
 
 ## 1. 기준선(2026-11-03, main `4cae3d3`, Batch rev 18)
 

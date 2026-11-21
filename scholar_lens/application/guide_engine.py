@@ -1,4 +1,4 @@
-"""The evidence-based guide writer (docs/redesign.md, 3.2 and 5.1): the
+"""The evidence-based guide writer (docs/design.md 4.2 and 4.5, docs/writing-principles.md): the
 guide's spec and hooks bound to the post engine.
 
 Read (a bounded agent per source page, records checked against the page and
