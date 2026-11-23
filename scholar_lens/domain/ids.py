@@ -42,8 +42,8 @@ def arxiv_paper_key(url: str | None) -> str | None:
     return re.sub(r"v\d+$", "", arxiv_id) if arxiv_id else None
 
 
-# The blog lint's paper_doi rule (tech-blog script/lint-posts.rb lines
-# 134-139): a bare DOI, no URL, query or fragment (js/citations.js puts it in a
+# The blog lint's paper_doi rule (tech-blog script/lint-posts.rb): a
+# bare DOI, no URL, query or fragment (js/citations.js puts it in a
 # request path as is), and an arXiv DOI without the paper's version ("v2"):
 # arXiv registers one DOI per paper. Ruby's \s is ASCII whitespace.
 BARE_DOI = re.compile(r"10\.\d{4,9}/[^ \t\r\n\f\v?#]+")

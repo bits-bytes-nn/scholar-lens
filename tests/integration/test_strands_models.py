@@ -504,3 +504,42 @@ def test_an_invocations_latency_goes_on_its_last_cycle_only() -> None:
     )
     model._usage("write", metrics, latency_ms=1234)  # type: ignore[arg-type]
     assert [e.latency_ms for e in events] == [None, None, 1234]
+
+
+def test_an_answer_the_filter_stopped_on_every_try_comes_back_cut(monkeypatch) -> None:
+    """A content-filtered last try is incomplete whatever its last line looks
+    like (here a list item, which reads as finished)."""
+    partial = "## 공격\n\n- 직접 주입은 시스템 프롬프트를 덮어씁니다.\n- 간접 주입"
+    model, _ = _model(monkeypatch, [FakeResult("content_filtered", partial)] * 4)
+    text = asyncio.run(model.text(role="write", system="s", prompt="p"))
+    assert text == partial and text.cut  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("stop", ["end_turn", "stop_sequence"])
+def test_a_finished_answer_is_not_cut(monkeypatch, stop: str) -> None:
+    model, _ = _model(monkeypatch, [FakeResult(stop, "답입니다.")])
+    text = asyncio.run(model.text(role="write", system="s", prompt="p"))
+    assert not text.cut  # type: ignore[attr-defined]
+
+
+def test_the_cost_ceiling_records_the_whole_invocation_before_stopping() -> None:
+    """An invocation is billed whole: every cycle is recorded, then the passed
+    ceiling stops the run."""
+    from scholar_lens.adapters.bedrock.role_models import budgeted
+    from scholar_lens.adapters.bedrock.usage import TokenUsageTracker
+    from scholar_lens.domain.usage import TokenBudgetExceeded
+
+    tracker = TokenUsageTracker()
+    model = StrandsLanguageModel(
+        None,  # type: ignore[arg-type]
+        {"write": RoleModel("arn", "global.anthropic.claude-opus-5-5")},
+        budgeted(tracker, 0.50),
+    )
+    usage = {"inputTokens": 100_000, "outputTokens": 10_000}
+    metrics = SimpleNamespace(
+        agent_invocations=[SimpleNamespace(cycles=[SimpleNamespace(usage=usage)] * 10)],
+        accumulated_usage=usage,
+    )
+    with pytest.raises(TokenBudgetExceeded):
+        model._usage("write", metrics, latency_ms=99)  # type: ignore[arg-type]
+    assert tracker.call_count == 10

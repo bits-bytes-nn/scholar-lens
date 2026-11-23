@@ -124,6 +124,14 @@ class Resources(_Section):
     email_address: EmailStr | None = Field(default=None)
     github: Github = Field(default_factory=Github)
 
+    @model_validator(mode="after")
+    def _check_network(self) -> "Resources":
+        # The stack uses an existing VPC only with its subnets; either alone
+        # would build a new VPC with a NAT gateway instead.
+        if bool(self.vpc_id) != bool(self.subnet_ids):
+            raise ValueError("resources.vpc_id and subnet_ids go together.")
+        return self
+
 
 class Paper(_Section):
     figure_analysis_model_id: LanguageModelId = Field(

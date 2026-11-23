@@ -72,8 +72,8 @@ class Add(Protocol):
 _HEADING = re.compile(r"^(#{1,6})\s+(.*\S)\s*$")
 _INLINE_MATH = re.compile(r"\$\$(.+?)\$\$")
 # A cell holding a number ("63.6", "1,820", "37.4%"), not a label that
-# merely contains a digit ("pass@1"): the blog lint's test (lint-posts.rb
-# line 428) for a data row under the header with a blank first cell.
+# merely contains a digit ("pass@1"): the blog lint's test (lint-posts.rb)
+# for a data row under the header with a blank first cell.
 _NUMERIC_CELL = re.compile(r"[-+]?[\d.,]+%?")
 
 
@@ -118,8 +118,8 @@ def _prose_lines(body: str) -> Lines:
 
 
 def _blog_lines(body: str) -> Lines:
-    """Body lines outside the blog lint's fences (lint-posts.rb ``fences``,
-    lines 192-218, skipped at line 285), as (offset, text): what its math
+    """Body lines outside the blog lint's fences (lint-posts.rb ``fences``),
+    as (offset, text): what its math
     checks read, an indented code block included (a fence inside a
     blockquote is code there too)."""
     lines = body.split("\n")
@@ -326,8 +326,7 @@ def _check_lightbox(lines: list[str], roles: list[str], offset: int, add: Add) -
     """A lightbox opens its href: a page there (the figure's source) loads
     in an iframe the site refuses, an empty box. The href must be the image."""
     # A fence's lines (one inside a blockquote too) go blank, so an example
-    # there is not read and line numbers after it hold (lint-posts.rb
-    # lines 53-54).
+    # there is not read and line numbers after it hold (lint-posts.rb).
     text = "\n".join(
         "" if role in BLOG_FENCE_ROLES else line
         for line, role in zip(lines, roles, strict=True)
@@ -388,6 +387,15 @@ def validate_post(
     if kind == "survey":
         _check_survey_citations(body, lines, offset, add)
     return found
+
+
+def _cut_mid_title(seo_title: str, title: str) -> bool:
+    """Whether ``seo_title`` is the start of ``title`` cut anywhere but
+    before its subtitle (``": "``): what a cut at the length limit gives,
+    which may end mid-phrase."""
+    seo, whole = " ".join(seo_title.split()), " ".join(title.split())
+    rest = whole[len(seo) :]
+    return bool(rest) and whole.startswith(seo) and not rest.startswith(":")
 
 
 def body_errors(markdown: str) -> list[str]:
@@ -472,6 +480,13 @@ def _check_front_matter(
         add("error", "seo-title", 1, f"title is over {limit} characters; add seo_title")
     if seo_title and len(str(seo_title)) > limit:
         add("error", "seo-title", 1, f"seo_title is over {limit} characters")
+    if seo_title and _cut_mid_title(str(seo_title), title):
+        add(
+            "warning",
+            "seo-title",
+            1,
+            "seo_title is the title cut short; check it still names the post",
+        )
 
     _check_tags(front.get("tags"), spec, add)
 
@@ -668,7 +683,7 @@ def paper_metadata_errors(
 
 
 def _check_paper_author(value: Any, add: Add) -> None:
-    """The blog lint's rule (lint-posts.rb line 128): one non-blank string
+    """The blog lint's rule (lint-posts.rb): one non-blank string
     without "et al" (any case, anywhere)."""
     if not isinstance(value, str) or not value.strip():
         add(
@@ -684,7 +699,7 @@ def _check_paper_author(value: Any, add: Add) -> None:
 
 
 def _check_paper_doi(front: dict[str, Any], add: Add) -> None:
-    """lint-posts.rb lines 134-139: a set ``paper_doi`` (even empty) is a bare
+    """lint-posts.rb: a set ``paper_doi`` (even empty) is a bare
     DOI, and an arXiv one carries no version."""
     if "paper_doi" not in front:
         return
@@ -712,7 +727,7 @@ def _check_tags(tags: Any, spec: PostConventions, add: Add) -> None:
         return
     controlled = set(spec.tags.controlled)
     for tag in map(str, tags):
-        # lint-posts.rb lines 162-171: a retired name, else the format.
+        # lint-posts.rb: a retired name, else the format.
         if (replacement := spec.tags.aliases.get(tag)) is not None:
             add("error", "tags", 1, f"tag '{tag}' is retired; use '{replacement}'")
         elif problem := tag_problem(tag, spec.tags.lowercase_words):
@@ -896,7 +911,7 @@ def _check_math(front: dict[str, Any], body: str, offset: int, add: Add) -> None
                 )
             )
         ):
-            # A blank line ends the paragraph (lint-posts.rb line 296); in
+            # A blank line ends the paragraph (lint-posts.rb); in
             # rendered text a sibling list item, a heading or a table row
             # ends the block too: the open $$ never closes there.
             add("error", "math", offset + span, "unbalanced $$ in the paragraph")
@@ -1161,7 +1176,7 @@ def _check_tables(lines: Lines, offset: int, add: Add) -> None:
     while index < len(lines):
         i, line = lines[index]
         nxt = lines[index + 1][1] if index + 1 < len(lines) else ""
-        # The blog lint's separator row (lint-posts.rb line 405): one dash a
+        # The blog lint's separator row (lint-posts.rb): one dash a
         # cell is enough, as kramdown reads it ("|--|" under a header).
         if line.lstrip().startswith("|") and _LINT_TABLE_RULE.match(nxt.strip()):
             header = _split_cells(line)
@@ -1178,9 +1193,9 @@ def _check_tables(lines: Lines, offset: int, add: Add) -> None:
                     offset + i + 1,
                     "separator cell count differs from header",
                 )
-            # lint-posts.rb lines 421-426: no empty header cell, the first
+            # lint-posts.rb: no empty header cell, the first
             # included (it names the row labels: "구분", "모델"). A cell
-            # holding only "\|" is not empty (line 411).
+            # holding only "\|" is not empty.
             for col, label in enumerate(header):
                 if col and not label:
                     add(
@@ -1536,6 +1551,7 @@ _IMAGE_ALT = re.compile(r"!\[([^\]]*)\]\(")
 
 
 def _check_images(lines: Lines, offset: int, add: Add, *, korean: bool) -> None:
+    first_line: dict[str, int] = {}
     for i, line in lines:
         if korean:
             for alt in _IMAGE_ALT.findall(BLOG_CODE_SPAN.sub("", line)):
@@ -1547,6 +1563,15 @@ def _check_images(lines: Lines, offset: int, add: Add, *, korean: bool) -> None:
                         f"image alt text is not Korean: '{alt[:60]}'",
                     )
         for src in image_sources(line):
+            if src in first_line:
+                add(
+                    "warning",
+                    "image-repeat",
+                    offset + i,
+                    f"image already shown at line {first_line[src]}: {src}",
+                )
+            else:
+                first_line[src] = offset + i
             if src.startswith(("http://", "https://")):
                 if is_arxiv_host(src):
                     add(
@@ -1642,7 +1667,7 @@ def _check_links(lines: Lines, offset: int, add: Add) -> None:
 
 
 def _check_style(body: str, offset: int, add: Add) -> None:
-    """The blog lint's prose rules (lint-posts.rb lines 241-259): no
+    """The blog lint's prose rules (lint-posts.rb): no
     translationese and no sentence ending glued to a colon, where it looks
     (:func:`markdown_lint.style_hits`)."""
     for hit in style_hits(body):

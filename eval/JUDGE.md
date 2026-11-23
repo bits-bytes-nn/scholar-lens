@@ -7,7 +7,7 @@ The same instructions score the current generator (baseline) and a changed one, 
 A change of a default (an engine, a prompt rule, a check) is decided this way (ADR 0002):
 
 1. Items: the `confirm` items of `eval/sets/baseline.yaml` (never generated before they joined the set). `dev` items may guide work but do not decide.
-2. Generation: each version writes every item; both versions share the reading cache, so they differ in what they write, not in what they read.
+2. Generation: each version writes every item twice (ADR 0002, generation pairs), so a difference can be told from the run-to-run spread; both versions share the reading cache, so they differ in what they write, not in what they read. A comparison with one generation per version is inconclusive unless the difference is large and one-sided.
 3. Blinding: for each item the two posts are copied to `X.md` and `Y.md` in a random order recorded in `blind-mapping.json`, kept from the judges.
 4. Judging: three independent judge sessions per pair (separate agents, no shared context, none sees the mapping or the other judgments). Each writes the result JSON below plus a pairwise `preference`.
 5. Decision: `python -m eval.compare <run dir>` unblinds and counts. A version wins an item when at least two of its three sessions prefer it; it wins the comparison when it wins more items than it loses and no item is lost on criterion F (no hallucination). Anything else is "no measurable difference": the default stays.

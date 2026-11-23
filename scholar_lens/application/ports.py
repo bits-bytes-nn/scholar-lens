@@ -65,8 +65,9 @@ SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
 
 class ModelText(str):
-    """A text answer that knows whether the model stopped at its output
-    limit (``cut``): a cut answer is incomplete however it ends."""
+    """A text answer that knows whether the model stopped before finishing
+    it (``cut``: the output limit, the content filter): a cut answer is
+    incomplete however it ends."""
 
     cut: bool
 

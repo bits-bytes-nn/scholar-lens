@@ -29,7 +29,7 @@ def messages(body: str, **kwargs) -> list[str]:  # type: ignore[no-untyped-def]
         ("| a | b |\n|---|---|\n| $$p(y|x)$$ | 2 |", "inside $$ in a table"),
         ("| a | b |\n|---|---|\n| $$\\|\\theta\\|$$ | 2 |", "inside $$ in a table"),
         ("```text\nQuestion: {{ question }}\n```", "Liquid tag"),
-        # One dash a separator cell starts a table (lint-posts.rb line 405).
+        # One dash a separator cell starts a table (as lint-posts.rb).
         ("| 언어 | A |  |\n|--|--|--|\n| 영어 | 1 | 2 |", "empty header cell"),
         ("`{% raw %}{{ q }}{% endraw %}`와 `{{ context }}`", "Liquid tag"),
     ],
@@ -184,7 +184,7 @@ class TestLightbox:
 
     def test_src_is_read_inside_the_img_tag(self) -> None:
         # An alt holding ">" ("A -> B") before src must not hide the mismatch
-        # (lint-posts.rb line 57 reads src in the matched <img>).
+        # (lint-posts.rb reads src in the matched <img>).
         body = (
             '<a href="/assets/images/g-1.png" class="glightbox">'
             '<img alt="구조 -> 흐름" src="/assets/images/g-2.png"></a>'

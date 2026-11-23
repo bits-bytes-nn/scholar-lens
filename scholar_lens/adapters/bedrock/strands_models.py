@@ -47,7 +47,7 @@ from scholar_lens.application.ports import (
     ModelText,
     SchemaT,
 )
-from scholar_lens.domain.usage import UsageEvent
+from scholar_lens.domain.usage import TokenBudgetExceeded, UsageEvent
 from scholar_lens.domain.usage_context import current_stage
 
 logger = logging.getLogger(__name__)
@@ -61,6 +61,9 @@ _CLIENT_CONFIG = Config(
 _STRUCTURED_ATTEMPTS = 3
 # Repeats of a text call Bedrock's content filter stopped.
 _FILTERED_RETRIES = 2
+# The stop reasons of a text answer the model finished; any other (the
+# output limit, the content filter, a guardrail) leaves it cut.
+_FINISHED = frozenset({"end_turn", "stop_sequence"})
 
 
 @dataclass(frozen=True)
@@ -178,24 +181,32 @@ class StrandsLanguageModel:
         latency_ms: int | None = None,
     ) -> None:
         """One usage record per model cycle of the last invocation; the
-        invocation's wall time (``latency_ms``) goes on its last cycle."""
+        invocation's wall time (``latency_ms``) goes on its last cycle. Every
+        cycle is recorded before a passed cost ceiling stops the run: the
+        invocation is billed whole."""
         label = label or self._roles[role].model_label
         stage = current_stage()
         invocations = metrics.agent_invocations
         cycles = invocations[-1].cycles if invocations else []
         usages = [c.usage for c in cycles] or [metrics.accumulated_usage]
+        stopped: TokenBudgetExceeded | None = None
         for k, usage in enumerate(usages):
-            self._record(
-                UsageEvent(
-                    stage=stage,
-                    model_id=label,
-                    input_tokens=int(usage.get("inputTokens", 0)),
-                    output_tokens=int(usage.get("outputTokens", 0)),
-                    cache_read_tokens=int(usage.get("cacheReadInputTokens", 0)),
-                    cache_write_tokens=int(usage.get("cacheWriteInputTokens", 0)),
-                    latency_ms=latency_ms if k == len(usages) - 1 else None,
+            try:
+                self._record(
+                    UsageEvent(
+                        stage=stage,
+                        model_id=label,
+                        input_tokens=int(usage.get("inputTokens", 0)),
+                        output_tokens=int(usage.get("outputTokens", 0)),
+                        cache_read_tokens=int(usage.get("cacheReadInputTokens", 0)),
+                        cache_write_tokens=int(usage.get("cacheWriteInputTokens", 0)),
+                        latency_ms=latency_ms if k == len(usages) - 1 else None,
+                    )
                 )
-            )
+            except TokenBudgetExceeded as e:
+                stopped = e
+        if stopped is not None:
+            raise stopped
 
     async def _invoke(
         self, agent: Agent, role: ModelRole, label: str, content: Any, **kwargs: Any
@@ -290,14 +301,14 @@ class StrandsLanguageModel:
                 model.model_label,
                 n + 2,
             )
-        if stop != "end_turn" or len(text.strip()) < 200:
+        if stop not in _FINISHED or len(text.strip()) < 200:
             logger.warning(
                 "%s call ended with %s and %d characters of text.",
                 role,
                 stop,
                 len(text.strip()),
             )
-        return ModelText(text, cut=stop == "max_tokens")
+        return ModelText(text, cut=stop not in _FINISHED)
 
     async def run_agent(
         self,

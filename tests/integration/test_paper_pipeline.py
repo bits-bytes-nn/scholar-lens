@@ -123,9 +123,16 @@ async def test_html_parse_failure_falls_back_to_the_pdf(monkeypatch) -> None:  #
 
     from scholar_lens.domain.paper.models import Content
 
+    handled: list[object] = []
+
     async def fake_pdf(
         source: object, papers_dir: Path, kwargs: dict
     ) -> tuple[list, Content]:
+        import sys
+
+        # Run outside the except: an error raised here must not carry the
+        # HTML failure as its context, which the retry policy reads.
+        handled.append(sys.exc_info()[1])
         return [], Content(text="pdf content")
 
     monkeypatch.setattr(paper_pipeline, "LanguageModelId", lambda value: value)
@@ -136,6 +143,7 @@ async def test_html_parse_failure_falls_back_to_the_pdf(monkeypatch) -> None:  #
         _context(), source, parse_pdf=False, callbacks=[]  # type: ignore[arg-type]
     )
     assert (figures, content.text, is_pdf) == ([], "pdf content", True)
+    assert handled == [None]
     # The downgrade is a run note with its reason.
     assert content.notes == [
         "Read from the PDF: the arXiv HTML rendering could not be used "

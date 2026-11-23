@@ -40,6 +40,37 @@ class TestJobCommandContract:
     ) -> None:
         check_template(template)
 
+    @pytest.mark.parametrize(
+        "break_it",
+        ["command", "retry", "lambda", "skipped_exits", "cost_alarm"],
+    )
+    def test_the_checker_rejects_each_broken_contract(
+        self, template: dict[str, Any], break_it: str
+    ) -> None:
+        """Each guard of ``check_template`` fails on the template it guards."""
+        import copy
+
+        broken = copy.deepcopy(template)
+        resources = broken["Resources"]
+        (job_def,) = resources_of_type(broken, "AWS::Batch::JobDefinition")
+        if break_it == "command":
+            job_def["Properties"]["ContainerProperties"]["Command"] = ["true"]
+        elif break_it == "retry":
+            job_def["Properties"]["RetryStrategy"].pop("EvaluateOnExit")
+        elif break_it == "lambda":
+            resources["Extra"] = {"Type": "AWS::Lambda::Function", "Properties": {}}
+        elif break_it == "skipped_exits":
+            for rule in resources_of_type(broken, "AWS::Events::Rule"):
+                for clause in rule["Properties"]["EventPattern"]["detail"].get(
+                    "$or", []
+                ):
+                    clause["container"]["exitCode"][0]["anything-but"] = [10]
+        else:
+            for alarm in resources_of_type(broken, "AWS::CloudWatch::Alarm"):
+                alarm["Properties"]["MetricName"] = "Other"
+        with pytest.raises(SystemExit):
+            check_template(broken)
+
     def test_retry_only_on_infrastructure_failures(
         self, template: dict[str, Any]
     ) -> None:
@@ -586,3 +617,16 @@ class TestSourceRevision:
         ):
             assert dockerfile.index(line) > last_run, line
         assert "ENV SCHOLAR_LENS_REVISION=${SOURCE_REVISION}" in dockerfile
+
+
+def test_ci_and_the_image_install_the_same_poetry() -> None:
+    """The lock is resolved by one Poetry: CI's and the image's are pinned
+    apart, so a bump of one alone is caught here."""
+    import re
+
+    root = Path(__file__).parents[2]
+    ci = re.search(
+        r'POETRY_VERSION: "([^"]+)"', (root / ".github/workflows/ci.yml").read_text()
+    )
+    image = re.search(r'"poetry==([^"]+)"', (root / "Dockerfile").read_text())
+    assert ci and image and ci.group(1) == image.group(1)

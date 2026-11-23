@@ -16,9 +16,9 @@ and scripts can parse the outcome directly::
 
 Exit codes: 0 succeeded (or submitted), 1 failed, 2 rejected input,
 3 still running (``status``), 4 a remote command itself failed (``--remote``,
-``status`` or ``cancel``: ``"status": "error"`` for AWS credentials, config, Batch/S3 API
-errors), so the job's state is unknown, 5 the artifact was saved but the
-requested blog PR failed (a ``failed`` result with ``pr_error``, its
+``status``, ``cancel`` or ``costs``: ``"status": "error"`` for AWS credentials,
+config, Batch/S3/Cost Explorer API errors), so the job's state is unknown,
+5 the artifact was saved but the requested blog PR failed (a ``failed`` result with ``pr_error``, its
 ``markdown_path`` and ``s3_uri`` kept; also from ``status`` and ``publish``).
 ``publish`` exits like a run: 0, 1 (the post still breaks a blog rule, its
 rejected copy kept), 2 (no such post or no publish request next to it), 5. A

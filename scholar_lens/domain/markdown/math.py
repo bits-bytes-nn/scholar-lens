@@ -1373,16 +1373,16 @@ def normalize_math(markdown: str) -> str:
 
 
 # The blog lint's own reading of a body (script/lint-posts.rb), ported so the
-# checks that mirror it see the same lines. Its fence (line 190) opens on a
+# checks that mirror it see the same lines. Its fence opens on a
 # line starting with 3+ backticks or tildes after any whitespace, blockquote
-# markers removed first (``fences``, lines 192-218): a fence inside a
+# markers removed first (``fences``): a fence inside a
 # blockquote ("> ```") is code too. An indented code block is prose, so math
 # in it is checked like any other line.
 BLOG_FENCE = re.compile(r"\A\s*(`{3,}|~{3,})")
-# A code span, opened and closed by the same run of backticks (line 220).
+# A code span, opened and closed by the same run of backticks.
 BLOG_CODE_SPAN = re.compile(r"(`+).*?\1")
-_BLOG_QUOTE = re.compile(r"\A\s*(?:>\s?)+")  # unquote (line 378)
-_BLOG_QUOTED = re.compile(r"\A\s*>")  # a quoted fence (line 206)
+_BLOG_QUOTE = re.compile(r"\A\s*(?:>\s?)+")  # unquote
+_BLOG_QUOTED = re.compile(r"\A\s*>")  # a quoted fence
 # The roles of a fence's lines: its opener, a line inside it, its closer, and
 # the blank line that ends the blockquote of a quoted fence left open.
 BLOG_FENCE_ROLES = frozenset({"open", "code", "close", "unclosed"})
@@ -1395,25 +1395,25 @@ def blog_unquote(line: str) -> str:
 
 def blog_bare(line: str) -> str:
     """A line as the blog lint reads its math: unquoted, code spans removed
-    (lint-posts.rb line 291)."""
+    (lint-posts.rb)."""
     return BLOG_CODE_SPAN.sub("", blog_unquote(line))
 
 
 def blog_fence_roles(lines: list[str]) -> list[str]:
-    """Each line's role as the blog lint assigns it (lint-posts.rb ``fences``,
-    lines 192-218, and the body loop, lines 270-310): ``"open"``, ``"code"``
-    or ``"close"`` (a fence's opener, a line inside it, its closer),
-    ``"unclosed"`` (the blank line that ends the blockquote of a quoted fence
-    left open), ``"display"`` (a line of a ``$$`` display block opened on a
-    line starting with ``$$``, delimiters included) or ``"prose"``.
+    """Each line's role as the blog lint assigns it (lint-posts.rb ``fences``
+    and the body loop): ``"open"``, ``"code"`` or ``"close"`` (a fence's
+    opener, a line inside it, its closer), ``"unclosed"`` (the blank line that
+    ends the blockquote of a quoted fence left open), ``"display"`` (a line of
+    a ``$$`` display block opened on a line starting with ``$$``, delimiters
+    included) or ``"prose"``.
 
     A fence marker starts its line once blockquote markers are removed, so a
     fence inside a blockquote ("> ```") is code too. A bare fence closes only
-    on a line of its own character, at least as long, with nothing else on it
-    (line 211): a "> ```" line inside a bare ```markdown block is part of its
-    example. A quoted fence closes on such a line after its quote markers, or
-    ends unclosed at the first blank line, where its blockquote ends
-    (line 208); a bare one left open runs to the end.
+    on a line of its own character, at least as long, with nothing else on
+    it: a "> ```" line inside a bare ```markdown block is part of its example.
+    A quoted fence closes on such a line after its quote markers, or ends
+    unclosed at the first blank line, where its blockquote ends; a bare one
+    left open runs to the end.
     """
     roles: list[str] = []
     fence: str | None = None
@@ -1468,7 +1468,7 @@ def blog_line_roles(lines: list[str]) -> list[str]:
 def blog_unclosed_fence_lines(lines: list[str]) -> list[int]:
     """Indexes of the openers of the fences the blog lint finds never closed
     (:func:`blog_fence_roles`): each quoted fence its blockquote ends
-    (lint-posts.rb lines 279-282) and one still open at the end (line 327)."""
+    (lint-posts.rb) and one still open at the end."""
     unclosed: list[int] = []
     opened: int | None = None
     for i, role in enumerate(blog_fence_roles(lines)):
@@ -1485,7 +1485,7 @@ def blog_unclosed_fence_lines(lines: list[str]) -> list[int]:
 
 def has_math(markdown: str) -> bool:
     """Whether the Markdown has ``$$`` outside code, as the blog lint decides
-    a post needs ``use_math: true`` (lint-posts.rb lines 292 and 330): on any
+    a post needs ``use_math: true`` (lint-posts.rb): on any
     line outside its fences, code spans removed. Math in an indented code
     block counts, as it does there; math in a fence inside a blockquote does
     not."""

@@ -137,6 +137,9 @@ def _cause_chain(exc: BaseException) -> list[BaseException]:
         current is not None and current not in chain and len(chain) < _MAX_CAUSE_DEPTH
     ):
         chain.append(current)
+        # The implicit context counts too: requests raises its SSLError
+        # without ``from``, over the certificate failure. A fallback that
+        # calls out runs outside the ``except`` of what it falls back from.
         current = current.__cause__ or current.__context__
     return chain
 
@@ -157,7 +160,7 @@ def is_transient_error(exc: BaseException) -> bool:
 
 # Credentials that are missing, expired or cannot be loaded (an SSO or login
 # session that ran out mid-run): botocore raises these before any request.
-_CREDENTIAL_ERRORS: tuple[type[Exception], ...] = (
+CREDENTIAL_ERRORS: tuple[type[Exception], ...] = (
     NoCredentialsError,
     PartialCredentialsError,
     CredentialRetrievalError,
@@ -173,7 +176,7 @@ def is_access_error(exc: BaseException) -> bool:
     (missing or expired credentials, permissions, a rejected request): a
     step that tolerates failures of optional work still raises it."""
     return any(
-        isinstance(link, _CREDENTIAL_ERRORS)
+        isinstance(link, CREDENTIAL_ERRORS)
         or (isinstance(link, ClientError) and _classify(link) is False)
         for link in _cause_chain(exc)
     )
@@ -202,7 +205,7 @@ def stops_the_run(exc: BaseException) -> bool:
     refusal of one item's content (a ``ValidationException`` for an image)
     does not: every item would fail alike only for the caller's access."""
     for link in _cause_chain(exc):
-        if isinstance(link, (*_CREDENTIAL_ERRORS, TokenBudgetExceeded)):
+        if isinstance(link, (*CREDENTIAL_ERRORS, TokenBudgetExceeded)):
             return True
         if isinstance(link, ClientError):
             if link.response.get("Error", {}).get("Code", "") in _DENIED_CODES:

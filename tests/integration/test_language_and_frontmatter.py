@@ -147,7 +147,7 @@ class TestBuildFrontMatter:
 
     @pytest.mark.parametrize(
         ("doi", "expected"),
-        [  # as the blog lint takes it (lint-posts.rb lines 133-138)
+        [  # as the blog lint takes it (lint-posts.rb)
             ("https://doi.org/10.1145/3292500.3330701", "10.1145/3292500.3330701"),
             ("doi:10.18653/v1/2024.acl-long.1", "10.18653/v1/2024.acl-long.1"),
             ("10.48550/arXiv.2401.06066v2", "10.48550/arXiv.2401.06066"),
