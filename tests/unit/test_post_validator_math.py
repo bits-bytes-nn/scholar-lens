@@ -205,8 +205,8 @@ def test_inline_math_starting_a_continuation_line_is_no_display() -> None:
 
 def test_code_the_blog_lint_reads_as_prose_is_checked_like_it() -> None:
     # lint-posts.rb has no indented code: a lone $$ there is unbalanced to
-    # its CI, so here too. A fence inside a quote is code there (``fences``,
-    # lines 192-218), and here.
+    # its CI, so here too. A fence inside a quote is code there (``fences``)
+    # and here.
     assert math_errors("앞 문단.\n\n    echo $$ > pid") == [
         "unbalanced $$ in the paragraph"
     ]

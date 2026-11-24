@@ -867,7 +867,6 @@ IMAGE_SOURCES = (
     ".dockerignore",
     "pyproject.toml",
     "poetry.lock",
-    "README.md",
     "assets/post_conventions.yml",
     "scholar_lens",
 )
@@ -897,11 +896,10 @@ def _git(repo: Path, *args: str, timeout: float = 30) -> str:
 
 def source_revision(repo: Path, stage: str) -> str:
     """The last commit that changed the image sources (a commit outside them
-    keeps the image, so no rebuild and no new job definition; README.md is
-    one of them). A shallow clone is refused (its boundary commit would be
-    the label). A
-    checkout whose image sources differ from HEAD (tracked changes or new
-    files; the gitignored config.yaml is not one) is refused unless
+    keeps the image, so no rebuild and no new job definition). A shallow
+    clone is refused (its boundary commit would be the label). A checkout
+    whose image sources differ from HEAD (tracked changes or new files; the
+    gitignored config.yaml is not one) is refused unless
     ``ALLOW_DIRTY_ENV`` is set, and then the revision ends in "+dirty". Every
     cdk command runs this, ``cdk diff`` included. A prod deploy also needs
     HEAD to be the remote's main (read with ``git ls-remote``, not a local

@@ -214,16 +214,19 @@ async def _parse_paper_content(
             return result.figures, result.content, False
     except ParserError as e:
         reason = failure_reason(e)
-        logger.warning(
-            "HTML parsing failed for '%s' (%s); falling back to PDF.",
-            source.source_id,
-            reason,
-        )
-        figures, content = await _parse_pdf(source, context.papers_dir, parser_kwargs)
-        content.notes.append(
-            f"Read from the PDF: the arXiv HTML rendering could not be used ({reason})."
-        )
-        return figures, content, True
+    # Outside the except: an error the PDF path raises directly (the arXiv
+    # download's transport error) must not carry the HTML failure as its
+    # context, which the retry policy reads.
+    logger.warning(
+        "HTML parsing failed for '%s' (%s); falling back to PDF.",
+        source.source_id,
+        reason,
+    )
+    figures, content = await _parse_pdf(source, context.papers_dir, parser_kwargs)
+    content.notes.append(
+        f"Read from the PDF: the arXiv HTML rendering could not be used ({reason})."
+    )
+    return figures, content, True
 
 
 async def _parse_pdf(

@@ -12,10 +12,6 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingModelInfo(BaseModel):
-    dimensions: int | list[int] | None = Field(
-        default=None,
-        description="The embedding dimensions. Can be a single value or list of supported dimensions.",
-    )
     max_sequence_length: int | None = Field(
         default=None,
         description="Maximum sequence length in characters that the model can process.",
@@ -74,17 +70,11 @@ class LanguageModelInfo(BaseModel):
 
 
 _EMBEDDING_MODEL_INFO: dict[EmbeddingModelId, EmbeddingModelInfo] = {
-    EmbeddingModelId.TITAN_EMBED_V1: EmbeddingModelInfo(
-        dimensions=1536, max_sequence_length=50000
-    ),
-    EmbeddingModelId.TITAN_EMBED_V2: EmbeddingModelInfo(
-        dimensions=[256, 512, 1024], max_sequence_length=50000
-    ),
-    EmbeddingModelId.EMBED_ENGLISH_V3: EmbeddingModelInfo(
-        dimensions=1024, max_sequence_length=2048
-    ),
+    EmbeddingModelId.TITAN_EMBED_V1: EmbeddingModelInfo(max_sequence_length=50000),
+    EmbeddingModelId.TITAN_EMBED_V2: EmbeddingModelInfo(max_sequence_length=50000),
+    EmbeddingModelId.EMBED_ENGLISH_V3: EmbeddingModelInfo(max_sequence_length=2048),
     EmbeddingModelId.EMBED_MULTILINGUAL_V3: EmbeddingModelInfo(
-        dimensions=1024, max_sequence_length=2048
+        max_sequence_length=2048
     ),
     # NOTE: add new models here
 }

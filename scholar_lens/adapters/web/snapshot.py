@@ -18,9 +18,10 @@ import logging
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Any, Protocol
+from typing import Any
 
 from scholar_lens.adapters.retry import is_access_error
+from scholar_lens.application.ports import TextStore
 from scholar_lens.domain.research import PageContent, ResearchCorpus, SearchResult
 from scholar_lens.domain.sources import (
     DomainClasses,
@@ -37,12 +38,6 @@ logger = logging.getLogger(__name__)
 SNAPSHOT_FORMAT = 2
 _PAGE_FIELDS = {f.name for f in dataclasses.fields(PageContent)}
 _RESULT_FIELDS = {f.name for f in dataclasses.fields(SearchResult)}
-
-
-class TextStore(Protocol):
-    def get(self, key: str) -> str | None: ...
-
-    def put(self, key: str, text: str) -> None: ...
 
 
 @dataclass(frozen=True)

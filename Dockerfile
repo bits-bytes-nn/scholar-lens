@@ -12,7 +12,7 @@ RUN python -m venv /opt/venv-poetry \
     && /opt/venv-poetry/bin/pip install "poetry==2.2.1" \
     && python -m venv /opt/venv
 WORKDIR /build
-COPY pyproject.toml poetry.lock README.md ./
+COPY pyproject.toml poetry.lock ./
 RUN /opt/venv-poetry/bin/poetry install --only main --no-root --no-interaction
 
 FROM ${PYTHON_IMAGE}

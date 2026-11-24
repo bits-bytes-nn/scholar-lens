@@ -258,6 +258,10 @@ class Enrichment:
 
 # Output ceiling for the planner and editor (whole-paper inputs, high effort).
 _WHOLE_PAPER_MAX_TOKENS = 128_000
+# The source passages the review body's claim check gets per number (the
+# other checks keep number_sources' default; eval/claim_replay.py replays
+# the same scope).
+BODY_NUMBER_SOURCE_CHARS = 32_000
 
 
 class PaperReviewer(RetryableBase, TokenBudgetGuard):
@@ -879,7 +883,9 @@ class PaperReviewer(RetryableBase, TokenBudgetGuard):
                         reserve_tokens=len(article) // 2 + 30_000,
                         label="review body claim check",
                     ),
-                    "number_sources": number_sources(article, paper, max_chars=32_000)
+                    "number_sources": number_sources(
+                        article, paper, max_chars=BODY_NUMBER_SOURCE_CHARS
+                    )
                     or "- none",
                     # The article may quote code or paper text: defanged too.
                     "text": neutralize_prompt_tags(article),

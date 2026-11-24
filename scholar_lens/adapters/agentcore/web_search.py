@@ -16,16 +16,10 @@ import logging
 from collections.abc import Collection
 
 from botocore.config import Config as BotoConfig
-from botocore.exceptions import (
-    BotoCoreError,
-    ClientError,
-    CredentialRetrievalError,
-    NoCredentialsError,
-    SSOError,
-    TokenRetrievalError,
-)
+from botocore.exceptions import BotoCoreError, ClientError
 
 from scholar_lens.adapters.aws.session import AwsSession
+from scholar_lens.adapters.retry import CREDENTIAL_ERRORS
 from scholar_lens.adapters.web.research import WebSearchProvider
 from scholar_lens.domain.research import SearchResult
 from scholar_lens.domain.sources import iso_date
@@ -122,12 +116,7 @@ class AgentCoreSearchProvider(WebSearchProvider):
                 self.exhausted = True
                 self.stop_reason = code
             return []
-        except (
-            NoCredentialsError,
-            TokenRetrievalError,
-            SSOError,
-            CredentialRetrievalError,
-        ) as e:
+        except CREDENTIAL_ERRORS as e:
             logger.warning("AgentCore web search has no credentials: %s", e)
             self.failed_searches += 1
             self.exhausted = True

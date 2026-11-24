@@ -461,8 +461,9 @@ def _kept(answer: str) -> str:
 
 
 def _incomplete(text: str) -> bool:
-    """Whether an answer is unfinished: stopped at the output limit, or its
-    last paragraph stops mid-sentence."""
+    """Whether an answer is unfinished: the model stopped before finishing it
+    (the output limit, the content filter), or its last paragraph stops
+    mid-sentence."""
     return was_cut(text) or ends_mid_sentence(text)
 
 

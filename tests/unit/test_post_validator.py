@@ -748,6 +748,13 @@ def test_a_thin_seo_title_falls_back_to_the_title_cut_at_a_word() -> None:
 
 
 @pytest.mark.parametrize("extra", [0, 1])
+def test_a_title_over_the_limit_needs_a_seo_title(extra: int) -> None:
+    title = "T" * (SPEC.seo_title_max_length + extra)
+    found = rules(make_post(front={"title": f'"{title}"'}, drop=("seo_title",)))
+    assert ("seo-title" in found) == bool(extra)
+
+
+@pytest.mark.parametrize("extra", [0, 1])
 def test_seo_title_limit_is_exact(extra: int) -> None:
     limit = SPEC.seo_title_max_length
     seo = "S" * (limit + extra)
@@ -823,3 +830,46 @@ def test_a_colon_inside_a_word_is_no_subtitle() -> None:
 
     title = "Deep Dive Into Amazon Bedrock Agents and Guardrails at AWS re:Invent 2026 Las Vegas"
     assert not shorten_title(title, 70).endswith(" re")  # type: ignore[union-attr]
+
+
+def test_an_image_shown_twice_is_flagged_for_the_pr() -> None:
+    figure = "![손실 곡선](/assets/images/post-1.png)"
+    other = "![다른 그림](/assets/images/post-2.png)"
+    twice = make_post(f"{figure}\n\n본문입니다.\n\n{other}\n\n{figure}")
+    assert "image-repeat" in rules(twice, level="warning")
+    assert "image-repeat" not in rules(twice)  # a warning, not a rejection
+    once = make_post(f"{figure}\n\n본문입니다.\n\n{other}")
+    assert "image-repeat" not in rules(once, level="warning")
+
+
+def test_a_title_at_the_limit_once_normalized_is_not_cut() -> None:
+    from scholar_lens.domain.post_format import cut_title
+
+    for title in ["Word " * 13 + "Tail", "A  B " * 14, "Name: " + "x" * 63 + " :"]:
+        whole = " ".join(title.split()).strip(" :")
+        assert cut_title(title, len(whole)) == whole
+        cut = cut_title(title, len(whole) - 1)
+        assert cut and len(cut) <= len(whole) - 1
+
+
+@pytest.mark.parametrize(
+    ("seo_title", "warned"),
+    [
+        ("Optimizing Instructions and Demonstrations for Multi-Stage Language", True),
+        ("Optimizing Instructions", False),  # the part before the colon
+        ("프롬프트 최적화로 다단계 LM 프로그램 개선", False),  # written, not cut
+    ],
+)
+def test_a_seo_title_cut_from_the_title_is_flagged(
+    seo_title: str, warned: bool
+) -> None:
+    title = (
+        "Optimizing Instructions: Demonstrations for Multi-Stage Language Model "
+        "Programs"
+        if not warned
+        else "Optimizing Instructions and Demonstrations for Multi-Stage Language "
+        "Model Programs"
+    )
+    post = make_post(front={"title": f'"{title}"', "seo_title": f'"{seo_title}"'})
+    assert ("seo-title" in rules(post, level="warning")) == warned
+    assert "seo-title" not in rules(post)

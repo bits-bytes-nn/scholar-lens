@@ -66,7 +66,7 @@ Every command prints one JSON object on stdout (a run's `JobResult`, the `job_id
 
 ## Deploy to AWS
 
-Needs Node.js, Docker and the AWS CDK CLI in addition to the above, and an existing S3 bucket named in `resources.s3_bucket_name` (the stack does not create it; use one dedicated to Scholar Lens, since the job role may list the whole bucket). Pass the same profile as `resources.profile_name`:
+Needs Node.js, Docker and the AWS CDK CLI in addition to the above, and an existing S3 bucket named in `resources.s3_bucket_name` (the stack does not create it). The job role may list the whole bucket and reads and writes only under `resources.s3_prefix`: a dedicated bucket keeps other projects' key names out of its reach; a shared one works, with that exposure accepted. Pass the same profile as `resources.profile_name`:
 
 ```bash
 cdk bootstrap --profile <profile_name>           # once per account/region
@@ -75,7 +75,9 @@ poetry run python scripts/put_secrets.py         # write .env secrets to SSM Sec
 poetry run python scripts/put_secrets.py github-token   # after rotating one secret
 ```
 
-Batch jobs use the `config.yaml` baked into the image at the last deploy, so re-run `cdk deploy --all` after editing it ([stack details](./design.md#10-인프라)). The deploy refuses uncommitted changes to the image's sources (`scholar_lens/`, `pyproject.toml`, `poetry.lock`, `Dockerfile`, `.dockerignore`, `README.md`, `assets/post_conventions.yml`; the gitignored `config.yaml` is not one). Every `cdk` command runs this check, `cdk diff` included; set `SCHOLAR_LENS_ALLOW_DIRTY_DEPLOY=1` to preview or deploy them anyway on dev (the image's revision then ends in `+dirty`); a prod deploy refuses them regardless, and every prod `cdk` command reads origin's `main` over the network. A prod deploy needs HEAD to be the remote's `main` (`git ls-remote`). The revision is the last commit that changed the image's sources, so a commit that touches none of them (docs/, tests/, scripts/, eval/) rebuilds nothing, while README.md is one of them; a shallow clone is refused; it is baked into the image (`SCHOLAR_LENS_REVISION`, the OCI revision label) and every job result records it as `revision`.
+Batch jobs use the `config.yaml` baked into the image at the last deploy, so re-run `cdk deploy --all` after editing it ([stack details](./design.md#10-인프라)). The deploy refuses uncommitted changes to the image's sources (`scholar_lens/`, `pyproject.toml`, `poetry.lock`, `Dockerfile`, `.dockerignore`, `assets/post_conventions.yml`; the gitignored `config.yaml` is not one). Every `cdk` command runs this check, `cdk diff` included; set `SCHOLAR_LENS_ALLOW_DIRTY_DEPLOY=1` to preview or deploy them anyway on dev (the image's revision then ends in `+dirty`); a prod deploy refuses them regardless, and every prod `cdk` command reads origin's `main` over the network. A prod deploy needs HEAD to be the remote's `main` (`git ls-remote`). The revision is the last commit that changed the image's sources, so a commit that touches none of them (docs/, tests/, scripts/, eval/, the READMEs) rebuilds nothing; a shallow clone is refused; it is baked into the image (`SCHOLAR_LENS_REVISION`, the OCI revision label) and every job result records it as `revision`.
+
+To roll back, revert the commit on `main` and run `cdk deploy --all` again; it builds the image of the reverted sources (stamped with the revert commit). A config change is rolled back the same way, by restoring `config.yaml` and deploying again. An older job definition revision cannot be resubmitted instead: CloudFormation deregisters each one when it registers the next.
 
 Batch jobs do not trace to LangSmith, even when tracing is on in the shell that deploys. To trace them, set `SCHOLAR_LENS_BATCH_TRACING=true` when running `cdk deploy --all`; the jobs then get `LANGCHAIN_TRACING_V2=true` and their prompts, which hold paper and blog text, go to LangSmith.
 

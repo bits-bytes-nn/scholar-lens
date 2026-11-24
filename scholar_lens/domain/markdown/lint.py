@@ -167,7 +167,7 @@ NUMBERED_REF = re.compile(
 # placeholder token (e.g. <none>, <server-host>, <your-namespace>) that kramdown
 # would otherwise parse as an HTML open tag, emitting a stray closing tag later.
 # The HTML a post writes, as the blog lint knows it (script/lint-posts.rb
-# ``HTML_ELEMENTS``, lines 231-237): any other ``<name>`` is passed through by kramdown and
+# ``HTML_ELEMENTS``): any other ``<name>`` is passed through by kramdown and
 # dropped by the browser, so a prompt token (<think>, <input>, <s>) would
 # vanish. The last row is an inline <svg>'s children.
 BLOG_HTML_ELEMENTS = frozenset(
@@ -428,12 +428,10 @@ def active_html(tag: str) -> bool:
 def _read_tags(
     text: str,
 ) -> list[tuple[str, list[tuple[str, str | None]], tuple[int, int], str]]:
+    # No except: a parser failure here must not read as "no active HTML".
     reader = _TagReader()
-    try:
-        reader.feed(text)
-        reader.close()
-    except Exception:  # noqa: BLE001 - what a parser cannot read is no tag
-        return []
+    reader.feed(text)
+    reader.close()
     return reader.tags
 
 
@@ -1026,25 +1024,25 @@ _VERIFICATION_HEDGE = re.compile(
 )
 
 
-# The blog lint's prose rules (script/lint-posts.rb lines 241-259), with its
+# The blog lint's prose rules (script/lint-posts.rb), with its
 # patterns and exemptions as they are, so a post passes here exactly when it
 # passes there. Translationese with no natural reading (prompts/base.py
 # KOREAN_STYLE): a double passive ("되어진", "보여지는") and the calque "에 있어"
 # where a particle or a nominalized verb shows it ("에 있어서는", "학습함에
 # 있어"). A bare "에 있어서" (also "in" in Korean) and patterns that are normal
 # Korean in moderation ("에 대한", "~라는 점") are left to the LLM checkers.
-TRANSLATIONESE = re.compile(  # lint-posts.rb line 245
+TRANSLATIONESE = re.compile(  # as lint-posts.rb
     r"되어[지진져집]|보여[지진져]|에 있어(?:서[는도의](?! 안)|[는의])|[음함]에 있어(?![야요])"
 )
 # A sentence ending glued to a colon ("다음과 같습니다:"): end the sentence.
-SENTENCE_COLON = re.compile(r"다:")  # line 247
-_QUOTED_SPAN = re.compile(r'"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」')  # line 248
-_REFERENCES_HEADING = re.compile(  # line 249
+SENTENCE_COLON = re.compile(r"다:")
+_QUOTED_SPAN = re.compile(r'"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|「[^」\n]*」')
+_REFERENCES_HEADING = re.compile(
     r"\A#{1,6}\s+(?:references|bibliography|참고 ?자료|참고 ?문헌)\b",
     re.IGNORECASE,
 )
-_ALT_IMAGE = re.compile(r"!\[[^\]\n]*\]\([^)\n]*\)")  # line 256
-_DOLLAR_SPAN = re.compile(r"\$\$.*?\$\$")  # line 317
+_ALT_IMAGE = re.compile(r"!\[[^\]\n]*\]\([^)\n]*\)")
+_DOLLAR_SPAN = re.compile(r"\$\$.*?\$\$")
 
 
 @dataclass(frozen=True)
@@ -1058,7 +1056,7 @@ class StyleHit:
 
 def style_hits(body: str) -> list[StyleHit]:
     """Translationese and colon-ended sentences where the blog lint looks for
-    them (lint-posts.rb ``prose``, lines 251-259, called from line 322): prose
+    them (lint-posts.rb ``prose``): prose
     lines outside its fences and display blocks, not a heading, a
     blockquote, a table row (indented under a list too) or a line of the
     reference list; quoted spans, image syntax (alt text), code spans and
@@ -1069,7 +1067,7 @@ def style_hits(body: str) -> list[StyleHit]:
     for i, (line, role) in enumerate(zip(lines, blog_line_roles(lines), strict=True)):
         if role != "prose":
             continue
-        if line.startswith("#"):  # line 312
+        if line.startswith("#"):
             in_references = bool(_REFERENCES_HEADING.match(line))
         if (
             in_references

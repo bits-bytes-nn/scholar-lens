@@ -48,6 +48,10 @@ class TestIsRetryable:
         assert is_transient_error(status_error(503)) is True
         assert is_transient_error(status_error(429)) is True
         assert is_transient_error(status_error(404)) is False
+        # The 5xx boundary, by status alone (no AWS code to go by).
+        assert is_transient_error(status_error(500)) is True
+        assert is_transient_error(status_error(599)) is True
+        assert is_transient_error(status_error(499)) is False
 
     def test_arxiv_errors_are_not_retried_again(self) -> None:
         from scholar_lens.adapters.scholarly.arxiv import ArxivPaperError
@@ -173,6 +177,14 @@ def test_a_certificate_failure_is_not_transient() -> None:
             raise requests.exceptions.SSLError("handshake") from e
     except requests.exceptions.SSLError as wrapped:
         assert not is_transient_error(wrapped)
+    # As requests raises it: over the certificate failure, without ``from``.
+    try:
+        try:
+            raise ssl.SSLCertVerificationError("certificate verify failed")
+        except ssl.SSLCertVerificationError as e:
+            raise requests.exceptions.SSLError(e)  # noqa: B904
+    except requests.exceptions.SSLError as implicit:
+        assert not is_transient_error(implicit)
     assert is_transient_error(requests.ConnectionError("reset"))
 
 
@@ -241,3 +253,24 @@ def test_the_backoff_spreads_concurrent_retries_also_at_the_cap() -> None:
     # Throttled together, they do not retry together.
     assert len({round(w, 3) for w in capped}) > 40
     assert backoff_wait(30, 0)(mock.Mock(attempt_number=3)) == 0
+
+
+def test_a_wrapper_raised_while_handling_a_throttle_is_retried() -> None:
+    """A wrapper that says nothing itself is classified by the error it was
+    raised over, chained or not."""
+    from botocore.exceptions import ClientError
+
+    throttle = ClientError(
+        {
+            "Error": {"Code": "ThrottlingException"},
+            "ResponseMetadata": {"HTTPStatusCode": 429},
+        },
+        "Converse",
+    )
+    try:
+        try:
+            raise throttle
+        except ClientError:
+            raise RuntimeError("wrapped")  # noqa: B904 - the implicit chain under test
+    except RuntimeError as wrapped:
+        assert is_transient_error(wrapped) is True

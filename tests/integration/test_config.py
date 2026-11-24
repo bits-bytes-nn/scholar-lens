@@ -246,6 +246,19 @@ def test_an_s3_prefix_outside_the_key_grammar_fails(prefix: str) -> None:
         Resources(project_name="p", s3_prefix=prefix)
 
 
+@pytest.mark.parametrize(
+    ("vpc_id", "subnet_ids"), [("vpc-0abc", None), ("vpc-0abc", []), (None, ["s-1"])]
+)
+def test_a_vpc_without_its_subnets_fails_at_load(vpc_id, subnet_ids) -> None:
+    """Either alone would make the stack build a new VPC with a NAT gateway."""
+    from scholar_lens.configs.config import Resources
+
+    with pytest.raises(ValidationError, match="go together"):
+        Resources(project_name="p", vpc_id=vpc_id, subnet_ids=subnet_ids)
+    Resources(project_name="p", vpc_id="vpc-0abc", subnet_ids=["s-1"])
+    Resources(project_name="p")
+
+
 def test_a_repo_name_needs_an_owner_and_a_name() -> None:
     from pydantic import ValidationError
 

@@ -10,6 +10,7 @@ from botocore.exceptions import (
     ClientError,
     EndpointConnectionError,
     NoCredentialsError,
+    PartialCredentialsError,
     SSOTokenLoadError,
 )
 
@@ -121,6 +122,10 @@ def test_a_transient_failure_counts_and_leaves_the_backend_on(error: Exception) 
         (_error("UnknownOperationException"), "UnknownOperationException"),
         (NoCredentialsError(), "no AWS credentials"),
         (SSOTokenLoadError(error_msg="expired"), "no AWS credentials"),
+        (
+            PartialCredentialsError(provider="env", cred_var="secret"),
+            "no AWS credentials",
+        ),
     ],
 )
 def test_a_denied_call_stops_the_backend(error: Exception, reason: str) -> None:

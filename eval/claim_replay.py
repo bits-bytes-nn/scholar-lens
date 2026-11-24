@@ -36,6 +36,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import inspect
 import json
 import subprocess
 import sys
@@ -60,12 +61,17 @@ from scholar_lens.domain.prompt_safety import neutralize_prompt_tags
 from scholar_lens.domain.quoted import disputed, reported_claims, squash
 from scholar_lens.domain.text import parse_lines
 from scholar_lens.domain.validation import number_sources
+from scholar_lens.sections_engine.explainer import BODY_NUMBER_SOURCE_CHARS
 from scholar_lens.sections_engine.prompts.review import PaperTextCheckPrompt
 
 TRUTH = Path(__file__).parent / "sets" / "claim_truth.yaml"
 REPO = Path(__file__).parent.parent
-# The engine's caps (sections_engine/explainer.py, summarizer.py).
-SOURCE_CAPS = {"review": 32_000, "summary": 16_000}
+# The engine's caps: the review body's, and number_sources' default the
+# summary check keeps.
+SOURCE_CAPS = {
+    "review": BODY_NUMBER_SOURCE_CHARS,
+    "summary": inspect.signature(number_sources).parameters["max_chars"].default,
+}
 TEXT_NAMES = {"review": "review body", "summary": "summary"}
 
 

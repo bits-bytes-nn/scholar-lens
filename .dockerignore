@@ -1,10 +1,9 @@
 # Build context = Dockerfile inputs only: pyproject.toml, poetry.lock,
-# README.md, the post-conventions spec and the scholar_lens package (including
+# the post-conventions spec and the scholar_lens package (including
 # the deployment's scholar_lens/configs/config.yaml, read by the job at runtime).
 *
 !pyproject.toml
 !poetry.lock
-!README.md
 !assets/post_conventions.yml
 !scholar_lens/
 scholar_lens/**/__pycache__

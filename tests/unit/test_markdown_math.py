@@ -102,7 +102,7 @@ def test_has_math_ignores_code() -> None:
 
 
 def test_has_math_reads_code_as_the_blog_lint_does() -> None:
-    # use_math follows lint-posts.rb (lines 292, 330): its fences only, a
+    # use_math follows lint-posts.rb: its fences only, a
     # fence inside a quote included, so $$ in an indented code block counts.
     assert not has_math("```bash\necho $$\n```")
     assert not has_math("> ```bash\n> echo $$\n> ```")

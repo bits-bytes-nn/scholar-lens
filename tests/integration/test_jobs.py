@@ -831,3 +831,25 @@ def test_paper_author_keeps_an_ampersand() -> None:
         JobRequest(kind="review", source="1", paper_author="AT&T Labs").paper_author
         == "AT&T Labs"
     )
+
+
+def test_a_result_manifest_of_an_older_run_still_reads() -> None:
+    """``status`` and ``costs`` read stored manifests: one written before
+    ``revision`` and ``usage`` existed still loads, and the keys the agent
+    skill reads stay in the result."""
+    from scholar_lens.domain.jobs import JobResult
+
+    old = (
+        '{"kind": "review", "status": "succeeded", "input": "2106.09685", '
+        '"title": "LoRA", "s3_uri": "s3://b/p/x.md", "pr_url": null, '
+        '"warnings": [], "duration_seconds": 1.5, "input_tokens": 10, '
+        '"output_tokens": 5, "estimated_cost_usd": 0.1}'
+    )
+    result = JobResult.model_validate_json(old)
+    assert result.revision is None and result.usage is None
+    read_by_consumers = {
+        "kind", "status", "input", "title", "s3_uri", "markdown_path", "pr_url",
+        "pr_error", "warnings", "error", "job_id", "revision", "estimated_cost_usd",
+        "usage",
+    }  # fmt: skip
+    assert read_by_consumers <= set(JobResult.model_fields)

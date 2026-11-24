@@ -1,7 +1,7 @@
 """Timing of the sections engine's stages."""
 
-import asyncio
 import functools
+import inspect
 import logging
 import time
 from collections.abc import Callable
@@ -36,7 +36,7 @@ def measure_execution_time(func: Callable) -> Callable:
         )
         return result
 
-    if asyncio.iscoroutinefunction(func):
+    if inspect.iscoroutinefunction(func):
         return async_wrapper
     else:
         return sync_wrapper
